@@ -62,12 +62,18 @@ final class VoiceSession: ObservableObject {
     /// not told yet. `held` is its record as last read.
     private var follower: Task<Void, Never>?
     private var cursor = 0, told = 0
+    /// Whether what was said before the call is known; not until the first read when the call was opened unread.
+    private var caughtUp = true
     private var untold: [Event] = []
     private var held: Session?
     /// A response is under way, or the user is speaking: news told now waits for the voice to be free.
     private var responding = false, userSpeaking = false
     /// News was told that no response has said yet.
     private var owed = false
+    /// A response was asked for and has not started or failed yet; tool calls whose outputs are still to be sent.
+    private var requested = false, answering = 0
+    /// The voice is free to say news now: nothing it says or hears would be cut, and no tool output is still owed.
+    private var free: Bool { !responding && !requested && !userSpeaking && calls.isEmpty && answering == 0 }
 
     private init() {}
 
@@ -94,8 +100,8 @@ final class VoiceSession: ObservableObject {
         repo = project.repo
         conversation = held
         lines = []; steps = []; heard = 0; calls = [:]; seenCalls = []; readBacks = [:]; merges = [:]; muted = false
-        cursor = held?.cursor ?? 0; told = cursor; untold = []; self.held = nil
-        responding = false; userSpeaking = false; owed = false
+        cursor = held?.cursor ?? 0; told = cursor; untold = []; self.held = nil; caughtUp = cursor > 0
+        responding = false; userSpeaking = false; owed = false; requested = false; answering = 0
         started = nil; finished = nil
         cost = VoiceCost()
         let call = LiveCall()
@@ -128,7 +134,7 @@ final class VoiceSession: ObservableObject {
         // Muted mid-sentence, the speech may never be heard to stop: news waiting on it is said now.
         if muted && userSpeaking {
             userSpeaking = false
-            if owed && !responding && calls.isEmpty { respond() }
+            if owed && free { respond() }
         }
     }
 
@@ -166,13 +172,15 @@ final class VoiceSession: ObservableObject {
             if conversation != nil { follow() }
         case "error":
             notice = event["error"]["message"].string ?? "GPT-Realtime reported an error."
+            // A response asked for and refused does not start.
+            requested = false
         case "input_audio_buffer.speech_started":
             userSpeaking = true
         case "input_audio_buffer.speech_stopped":
             userSpeaking = false
         case "response.created":
             // Any response made after the news was put in says it.
-            responding = true
+            responding = true; requested = false
             owed = false
         case "input_audio_buffer.committed":
             // A piece of the user's speech the model hears, transcribed or not.
@@ -195,7 +203,7 @@ final class VoiceSession: ObservableObject {
             let response = event["response"]
             responding = false
             let goingOn = answer(response["id"].string ?? "", goOn: response["status"].string == "completed" || response["id"].isNull)
-            if owed && !goingOn { respond() }
+            if owed && !goingOn && free { respond() }
         default:
             break
         }
@@ -257,15 +265,20 @@ final class VoiceSession: ObservableObject {
     private func answer(_ response: String, goOn: Bool) -> Bool {
         guard let pending = calls[response], !pending.isEmpty, let call else { return false }
         calls[response] = nil
+        answering += 1
         Task {
             var outputs: [(id: String, output: String)] = []
             for call in pending { outputs.append(await call.value) }
             guard self.call === call else { return }
+            answering -= 1
             for (id, output) in outputs {
                 call.send(["type": "conversation.item.create", "event_id": .string(nextID()),
                            "item": ["type": "function_call_output", "call_id": .string(id), "output": .string(output)]])
             }
-            if goOn { call.send(["type": "response.create", "event_id": .string(nextID())]) }
+            if goOn {
+                requested = true
+                call.send(["type": "response.create", "event_id": .string(nextID())])
+            } else if owed && free { respond() }
         }
         return goOn
     }
@@ -295,10 +308,15 @@ final class VoiceSession: ObservableObject {
             // A user waiting on a working agent is not silent: the call stays up while it works.
             if session.isActive { touch() }
         }
-        let events = answer["events"].items.compactMap(Event.init).filter { $0.seq > told }
+        var events = answer["events"].items.compactMap(Event.init).filter { $0.seq > told }
         if let last = events.map(\.seq).max(), last > cursor { cursor = last }
-        // Opened before its transcript was read, the first read is what was said before the call: none of it is news.
-        if told == 0 { told = cursor; return }
+        // Opened before its transcript was read, the turns the first read finished were said before the call; one still
+        // going on is news when it ends.
+        if !caughtUp {
+            caughtUp = true
+            told = events.filter { $0.kind == "result" || $0.kind == "ask" }.map(\.seq).max() ?? 0
+        }
+        events.removeAll { $0.seq <= told }
         untold += events
         if untold.count > 400 { untold.removeFirst(untold.count - 400) }
         guard let news = Voice.agentNews(untold, after: told) else { return }
@@ -314,12 +332,12 @@ final class VoiceSession: ObservableObject {
                    "item": ["type": "message", "role": "system", "content": [["type": "input_text", "text": .string(news)]]]])
         owed = true
         touch()
-        if !responding && !userSpeaking && calls.isEmpty { respond() }
+        if free { respond() }
     }
 
     private func respond() {
         guard let call, phase == .live else { return }
-        owed = false
+        owed = false; requested = true
         call.send(["type": "response.create", "event_id": .string(nextID())])
     }
 
