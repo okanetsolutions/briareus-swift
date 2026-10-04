@@ -3,13 +3,20 @@ import Foundation
 import Security
 
 enum Keychain {
+    /// The data protection keychain needs the keychain-access-groups entitlement, which only a build signed with the team's
+    /// profile carries. The ad-hoc signed release build has none, so it keeps the token in the login keychain instead.
+    private static let dataProtection: Bool = {
+        guard let task = SecTaskCreateFromSelf(nil) else { return false }
+        return SecTaskCopyValueForEntitlement(task, "keychain-access-groups" as CFString, nil) != nil
+    }()
+
     private static func query(_ origin: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: "com.okanetsolutions.briareus.client",
          kSecAttrAccount as String: origin,
          kSecAttrSynchronizable as String: false,
          // This Mac only: the data protection keychain, where device-only protection holds, not the login keychain.
-         kSecUseDataProtectionKeychain as String: true]
+         kSecUseDataProtectionKeychain as String: dataProtection]
     }
     static func read(_ origin: String) throws -> String? {
         var q = query(origin)

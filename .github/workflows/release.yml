@@ -1,0 +1,71 @@
+name: Release
+
+# Every push to main (each merged pull request) cuts a release, as Briareus for Windows does: the minor version of the
+# last v* tag is bumped and tagged vx.y.0 on the merged commit, then the Mac app and the iPhone Simulator app are built
+# with that version and published. main requires the "ios" check, so the version is not committed back: it is given to
+# xcodebuild as MARKETING_VERSION, with the commit count as the build number. Pushing a v* tag by hand still releases
+# that tag as it is, without a bump.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bump the version and tag
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag=$GITHUB_REF_NAME
+          else
+            last=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+            last=${last#v}; last=${last:-1.0.0}
+            IFS=. read -r major minor patch <<< "$last"
+            tag="v$major.$((minor + 1)).0"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "Briareus $tag"
+            git push origin "$tag"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+      # Without the team's certificate the Mac app is signed ad hoc, which cannot carry keychain-access-groups (the app
+      # then keeps its token in the login keychain).
+      - name: Build the Mac app
+        run: |
+          plutil -remove keychain-access-groups Mac/Briareus.entitlements
+          xcodebuild -project Briareus.xcodeproj -scheme "Briareus Mac" -configuration Release \
+            -destination 'generic/platform=macOS' -derivedDataPath MacBuild \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
+            MARKETING_VERSION=${{ steps.version.outputs.version }} CURRENT_PROJECT_VERSION=${{ steps.version.outputs.build }} build
+      - name: Build the iPhone Simulator app
+        run: |
+          xcodebuild -project Briareus.xcodeproj -scheme Briareus -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath SimBuild CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION=${{ steps.version.outputs.version }} CURRENT_PROJECT_VERSION=${{ steps.version.outputs.build }} build
+      - name: Package
+        run: |
+          mkdir -p release
+          ditto -c -k --sequesterRsrc --keepParent MacBuild/Build/Products/Release/Briareus.app release/Briareus-mac.zip
+          ditto -c -k --sequesterRsrc --keepParent SimBuild/Build/Products/Release-iphonesimulator/Briareus.app release/Briareus-iphone-simulator.zip
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$TAG" release/Briareus-mac.zip release/Briareus-iphone-simulator.zip --title "Briareus $TAG" --generate-notes --verify-tag
