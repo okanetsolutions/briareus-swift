@@ -3,6 +3,8 @@ import Foundation
 /// One spoken conversation with GPT-Realtime about one project: the WebRTC call, the captions, and the tools it calls,
 /// each held to that project. It outlives the screen that started it, so it goes on from any tab and with the phone
 /// locked, and ends when the user ends it or after a silence. What it cost and how long it ran are kept.
+/// Opened from one of the project's conversations, it is held to that one: a hands-free line to its agent, whose
+/// transcript it follows to tell the agent's replies and questions as they come.
 @MainActor
 final class VoiceSession: ObservableObject {
     static let shared = VoiceSession()
@@ -26,6 +28,8 @@ final class VoiceSession: ObservableObject {
     @Published private(set) var phase = Phase.off
     /// The project the conversation is about; nil before the first one.
     @Published private(set) var repo: String?
+    /// The one conversation of the project it is held to, hands-free; nil when it is about the whole project.
+    @Published private(set) var conversation: VoiceConversation?
     /// The voice is saying something, as its transcript arrives.
     @Published private(set) var speaking = false
     @Published private(set) var muted = false
@@ -54,6 +58,22 @@ final class VoiceSession: ObservableObject {
     /// The merges read back, by the same key: the call pinned to the head the user heard about, and its base.
     private var merges: [String: (arguments: JSON, base: String)] = [:]
     private var sequence = 0
+    /// A held conversation's transcript, followed: read through `cursor`, its news told through `told`, and the events
+    /// not told yet. `held` is its record as last read.
+    private var follower: Task<Void, Never>?
+    private var cursor = 0, told = 0
+    /// Whether what was said before the call is known; not until the first read when the call was opened unread.
+    private var caughtUp = true
+    private var untold: [Event] = []
+    private var held: Session?
+    /// A response is under way, or the user is speaking: news told now waits for the voice to be free.
+    private var responding = false, userSpeaking = false
+    /// News was told that no response has said yet.
+    private var owed = false
+    /// A response was asked for and has not started or failed yet; tool calls whose outputs are still to be sent.
+    private var requested = false, answering = 0
+    /// The voice is free to say news now: nothing it says or hears would be cut, and no tool output is still owed.
+    private var free: Bool { !responding && !requested && !userSpeaking && calls.isEmpty && answering == 0 }
 
     private init() {}
 
@@ -64,7 +84,10 @@ final class VoiceSession: ObservableObject {
         return (finished ?? now).timeIntervalSince(started)
     }
 
-    func start(_ project: Project) {
+    /// What this conversation is about, as a screen names it.
+    var about: String? { conversation?.title ?? repo }
+
+    func start(_ project: Project, conversation held: VoiceConversation? = nil) {
         guard phase == .off else { return }
         notice = nil
         let settings = VoiceSettings.shared
@@ -75,13 +98,16 @@ final class VoiceSession: ObservableObject {
         } catch { notice = error.localizedDescription; return }
         phase = .connecting
         repo = project.repo
+        conversation = held
         lines = []; steps = []; heard = 0; calls = [:]; seenCalls = []; readBacks = [:]; merges = [:]; muted = false
+        cursor = held?.cursor ?? 0; told = cursor; untold = []; self.held = nil; caughtUp = cursor > 0
+        responding = false; userSpeaking = false; owed = false; requested = false; answering = 0
         started = nil; finished = nil
         cost = VoiceCost()
         let call = LiveCall()
         self.call = call
         let named = project.title == project.repo ? project.repo : "\(project.title) (\(project.repo))"
-        let session = Voice.session(voice: settings.voice, project: named)
+        let session = Voice.session(voice: settings.voice, project: named, conversation: held?.title)
         reader = Task { [weak self] in
             do {
                 let events = try await call.open(key: key, session: session)
@@ -105,6 +131,11 @@ final class VoiceSession: ObservableObject {
     func toggleMute() {
         muted.toggle()
         call?.mute(muted)
+        // Muted mid-sentence, the speech may never be heard to stop: news waiting on it is said now.
+        if muted && userSpeaking {
+            userSpeaking = false
+            if owed && free { respond() }
+        }
     }
 
     private func ended(_ failure: String?) {
@@ -112,6 +143,7 @@ final class VoiceSession: ObservableObject {
         if let failure, phase != .closing { notice = failure }
         reader?.cancel(); reader = nil
         watchdog?.cancel(); watchdog = nil
+        follower?.cancel(); follower = nil
         calls.values.joined().forEach { $0.cancel() }; calls = [:]
         hush?.cancel(); hush = nil
         call?.close(); call = nil
@@ -137,8 +169,19 @@ final class VoiceSession: ObservableObject {
             started = Date()
             touch()
             watch()
+            if conversation != nil { follow() }
         case "error":
             notice = event["error"]["message"].string ?? "GPT-Realtime reported an error."
+            // A response asked for and refused does not start.
+            requested = false
+        case "input_audio_buffer.speech_started":
+            userSpeaking = true
+        case "input_audio_buffer.speech_stopped":
+            userSpeaking = false
+        case "response.created":
+            // Any response made after the news was put in says it.
+            responding = true; requested = false
+            owed = false
         case "input_audio_buffer.committed":
             // A piece of the user's speech the model hears, transcribed or not.
             heard += 1
@@ -158,7 +201,9 @@ final class VoiceSession: ObservableObject {
             cost.add(response: event["response"]["usage"])
             // A response cut off by the user does not go on by itself; what its calls did is still told.
             let response = event["response"]
-            answer(response["id"].string ?? "", goOn: response["status"].string == "completed" || response["id"].isNull)
+            responding = false
+            let goingOn = answer(response["id"].string ?? "", goOn: response["status"].string == "completed" || response["id"].isNull)
+            if owed && !goingOn && free { respond() }
         default:
             break
         }
@@ -205,27 +250,95 @@ final class VoiceSession: ObservableObject {
     private func called(_ item: JSON, in response: String) {
         guard item["type"].string == "function_call", let id = item["call_id"].string, let name = item["name"].string,
               seenCalls.insert(id).inserted else { return }
-        let args = item["arguments"].string.flatMap(JSON.parse) ?? [:]
-        let step = Step(tool: VoiceTool(rawValue: name), name: name, args: args, state: .running)
+        var args = item["arguments"].string.flatMap(JSON.parse) ?? [:]
+        let tool = VoiceTool(rawValue: name)
+        // A call held to one conversation acts on that one, and on its pull request.
+        if let held = conversation, let tool { args = Voice.holding(args, tool, to: held.id, pull: self.held?.pullNumber) }
+        let step = Step(tool: tool, name: name, args: args, state: .running)
         steps.append(step)
         touch()
         calls[response, default: []].append(Task { (id, await self.run(step)) })
     }
 
-    /// Once a response is done, answers every call it made and has the model go on.
-    private func answer(_ response: String, goOn: Bool) {
-        guard let pending = calls[response], !pending.isEmpty, let call else { return }
+    /// Once a response is done, answers every call it made and has the model go on; whether it will.
+    @discardableResult
+    private func answer(_ response: String, goOn: Bool) -> Bool {
+        guard let pending = calls[response], !pending.isEmpty, let call else { return false }
         calls[response] = nil
+        answering += 1
         Task {
             var outputs: [(id: String, output: String)] = []
             for call in pending { outputs.append(await call.value) }
             guard self.call === call else { return }
+            answering -= 1
             for (id, output) in outputs {
                 call.send(["type": "conversation.item.create", "event_id": .string(nextID()),
                            "item": ["type": "function_call_output", "call_id": .string(id), "output": .string(output)]])
             }
-            if goOn { call.send(["type": "response.create", "event_id": .string(nextID())]) }
+            if goOn {
+                requested = true
+                call.send(["type": "response.create", "event_id": .string(nextID())])
+            } else if owed && free { respond() }
         }
+        return goOn
+    }
+
+    // MARK: The held conversation
+
+    /// Reads the held conversation's transcript after what was read, as its screen does: often while the agent works,
+    /// less once it waits. It goes on with the phone locked, as the call keeps the app running.
+    private func follow() {
+        follower = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, let id = self.conversation?.id, self.phase == .live else { return }
+                var delay = 5.0
+                if let answer = try? await Store.shared.call("session", ["sessionId": .string(id), "since": JSON(self.cursor)]) {
+                    guard !Task.isCancelled, self.phase == .live else { return }
+                    self.followed(answer)
+                    delay = self.held.map(conversationPollInterval) ?? delay
+                }
+                try? await Task.sleep(for: .seconds(delay))
+            }
+        }
+    }
+
+    private func followed(_ answer: JSON) {
+        if let session = Session(answer["session"]) {
+            held = session
+            // A user waiting on a working agent is not silent: the call stays up while it works.
+            if session.isActive { touch() }
+        }
+        var events = answer["events"].items.compactMap(Event.init).filter { $0.seq > told }
+        if let last = events.map(\.seq).max(), last > cursor { cursor = last }
+        // Opened before its transcript was read, the turns the first read finished were said before the call; one still
+        // going on is news when it ends.
+        if !caughtUp {
+            caughtUp = true
+            told = events.filter { $0.kind == "result" || $0.kind == "ask" }.map(\.seq).max() ?? 0
+        }
+        events.removeAll { $0.seq <= told }
+        untold += events
+        if untold.count > 400 { untold.removeFirst(untold.count - 400) }
+        guard let news = Voice.agentNews(untold, after: told) else { return }
+        told = news.through
+        untold.removeAll { $0.seq <= told }
+        tell(news.said)
+    }
+
+    /// Puts the agent's news into the conversation and has the voice say it once it is free.
+    private func tell(_ news: String) {
+        guard let call, phase == .live else { return }
+        call.send(["type": "conversation.item.create", "event_id": .string(nextID()),
+                   "item": ["type": "message", "role": "system", "content": [["type": "input_text", "text": .string(news)]]]])
+        owed = true
+        touch()
+        if free { respond() }
+    }
+
+    private func respond() {
+        guard let call, phase == .live else { return }
+        owed = false; requested = true
+        call.send(["type": "response.create", "event_id": .string(nextID())])
     }
 
     /// Runs one tool call and answers with what the model should know, as JSON text.
@@ -237,6 +350,15 @@ final class VoiceSession: ObservableObject {
         }
         guard let tool = step.tool else { return finish(.failed("Unknown tool"), ["error": .string("There is no tool named \(step.name).")]) }
         guard let repo else { return finish(.failed("No project"), ["error": "The conversation has no project."]) }
+        if conversation != nil {
+            guard VoiceTool.conversationCases.contains(tool) else {
+                return finish(.failed("Not here"), ["error": "This call is held to one conversation and cannot do that."])
+            }
+            if tool == .readPullRequest, step.args["number"].int == nil {
+                let why = "This conversation has no pull request yet."
+                return finish(.failed(why), ["error": .string(why)])
+            }
+        }
         let key = Self.readBackKey(tool, step.args)
         var plan = tool.plan(step.args, repo: repo)
         // A merge goes through only on a yes the user said after hearing it read back; the model's word is not enough.

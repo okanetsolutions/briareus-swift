@@ -42,7 +42,12 @@ struct ConversationScreen: View {
         .toolbarBackground(Theme.background, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) { heading }
-            ToolbarItem(placement: .topBarTrailing) { actions }
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: 14) {
+                    handsFree
+                    actions
+                }
+            }
         }
         .task { await model.run() }
         .onDisappear { model.hidden() }
@@ -228,6 +233,19 @@ struct ConversationScreen: View {
     }
 
     // MARK: Actions
+
+    /// Opens a voice call held to this conversation: what the user says for the agent is sent, and what it answers is
+    /// read aloud. It needs a token that may write, as it messages and stops the agent.
+    @ViewBuilder private var handsFree: some View {
+        if store.canManage, model.canMessage, let repo = model.repo {
+            Button {
+                navigate(.voice(repo: repo, conversation: VoiceConversation(id: sessionID, title: session.displayTitle,
+                                                                            cursor: model.transcript.cursor)))
+            } label: { Image(systemName: "waveform") }
+            .accessibilityLabel("Talk hands-free")
+            .accessibilityIdentifier("handsFreeButton")
+        }
+    }
 
     private var actions: some View {
         let s = session

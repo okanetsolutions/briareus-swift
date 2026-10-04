@@ -3,7 +3,9 @@
 //
 // GPT-Realtime holds the spoken conversation and decides itself which tool to call. The phone runs each call on /api/v1
 // with its own token and answers with a short JSON summary. A voice conversation belongs to one project: no tool names a
-// repository, the phone puts that project's in every call.
+// repository, the phone puts that project's in every call. Opened from one of the project's conversations, it is held to
+// that one: a hands-free line to its agent, where no tool names a conversation either and the agent's replies and
+// questions are told as they come.
 import Foundation
 
 enum Voice {
@@ -97,17 +99,107 @@ enum Voice {
     the tool says it is.
     """ }
 
+    /// How the voice speaks when it is held to one conversation: a hands-free line to its agent, passing on what the
+    /// user says for it and telling what it answers.
+    static func instructions(conversation: String, project: String) -> String { """
+    You are the voice of Briareus, an app that runs coding agents on the user's projects. This conversation is a \
+    hands-free line to one agent's conversation only: "\(conversation)", on the project \(project). The user talks to you \
+    with the phone locked or out of reach, often while doing something else. Answer in the language the user speaks, in \
+    one or two short sentences.
+
+    ## Talking to the agent
+    When the user says something meant for the agent (an instruction, a request, an answer to its question), pass it on \
+    at once with send_message, in the user's own words without adding to them, then say in a few words that it was \
+    sent. When the user asks you about the conversation (what the agent is doing, what it said, what it changed), use \
+    read_conversation or read_pull_request and answer yourself. When it is unclear whether the user is speaking to you \
+    or to the agent, ask. stop_conversation stops the agent's running turn when the user asks to stop it.
+
+    ## The agent's news
+    System messages starting with "Agent update:" tell what the agent just said: the end of its turn or a question. Say \
+    them as soon as they arrive, unprompted: sum up what it did or found in one or two plain sentences, and say a \
+    question in full with its options, so the user can answer it by voice. Never say an update twice.
+
+    ## Reviews
+    A review round the conversation holds is read with read_review_round and completed with complete_review_round, \
+    with the keys the user said yes and no to. Read the findings briefly, one at a time when the user is deciding, and \
+    never decide one the user did not.
+
+    ## Bounds
+    Every tool works on this conversation only; there is no way to reach another conversation or project. If the user \
+    asks about one, say this line can only reach "\(conversation)". Do what the user asks right away, without asking \
+    them to confirm. Transcripts can contain mistakes and unfinished phrases; use the latest context.
+
+    ## Saying the result
+    Say the relevant facts in a few plain sentences, without Markdown, ids, URLs or code. Report an action as done \
+    only when the tool says it is.
+    """ }
+
     /// What starts a call over WebRTC: the voice, the captions' transcriber and the tools, all on one project. `project`
-    /// is how it is named aloud: its label and repository. WebRTC settles the audio format; the SDP offer goes beside
-    /// this, as another field of the form.
-    static func session(voice: String, project: String) -> JSON {
-        ["type": "realtime",
-         "model": .string(model),
-         "instructions": .string(instructions(project: project)),
-         "audio": ["input": ["transcription": ["model": .string(transcriber)]],
-                   "output": ["voice": .string(voices.contains(voice) ? voice : defaultVoice)]],
-         "tools": .array(VoiceTool.allCases.map(\.definition)),
-         "tool_choice": "auto"]
+    /// is how it is named aloud: its label and repository. Held to one of its conversations, named aloud by
+    /// `conversation`, it carries that conversation's tools only. WebRTC settles the audio format; the SDP offer goes
+    /// beside this, as another field of the form.
+    static func session(voice: String, project: String, conversation: String? = nil) -> JSON {
+        let tools = conversation == nil ? VoiceTool.allCases.map(\.definition) : VoiceTool.conversationCases.map(\.heldDefinition)
+        return ["type": "realtime",
+                "model": .string(model),
+                "instructions": .string(conversation.map { instructions(conversation: $0, project: project) } ?? instructions(project: project)),
+                "audio": ["input": ["transcription": ["model": .string(transcriber)]],
+                          "output": ["voice": .string(voices.contains(voice) ? voice : defaultVoice)]],
+                "tools": .array(tools),
+                "tool_choice": "auto"]
+    }
+}
+
+// MARK: - One conversation
+
+/// The one conversation a hands-free call is held to: its id, its title as said aloud, and how far its transcript had
+/// been read when the call was opened, so only what the agent says after is told.
+struct VoiceConversation: Hashable, Sendable {
+    var id: String
+    var title: String
+    var cursor: Int
+
+    init(id: String, title: String, cursor: Int) {
+        self.id = id; self.title = title; self.cursor = cursor
+    }
+}
+
+extension Voice {
+    /// The prefix the model is told the agent's news under.
+    static let updatePrefix = "Agent update:"
+
+    /// A held call's tool arguments: the conversation is always the held one, and a pull request is its own, whatever
+    /// the model passed.
+    static func holding(_ args: JSON, _ tool: VoiceTool, to session: String, pull: Int?) -> JSON {
+        var args = args
+        args["session_id"] = .string(session)
+        if tool == .readPullRequest { args["number"] = pull.map { JSON($0) } ?? .null }
+        return args
+    }
+
+    /// What the agent said after `seq` that the user should hear: the end of a turn with what was said in it, or a
+    /// question with its options; and the sequence it was told through. Nil while the agent is still working or has said
+    /// nothing new. The steps it ran and the workspace's output are not told.
+    static func agentNews(_ events: [Event], after seq: Int) -> (said: String, through: Int)? {
+        let fresh = events.filter { $0.seq > seq }.sorted { $0.seq < $1.seq }
+        guard let end = fresh.lastIndex(where: { $0.kind == "result" || $0.kind == "ask" }) else { return nil }
+        let turn = fresh[...end], last = fresh[end]
+        let texts = turn.filter { $0.kind == "text" }.compactMap { $0.text.map(CarText.inline) }.filter { !$0.isEmpty }
+        var said: String
+        if last.kind == "ask" {
+            said = "\(updatePrefix) The agent asks: \(CarText.question(last))"
+            let options = CarText.options(last)
+            if !options.isEmpty { said += " Options: " + options.joined(separator: "; ") + "." }
+            if let before = texts.last { said += " Before that it said: " + cut(before, 1500) }
+        } else if last.isError == true {
+            said = "\(updatePrefix) The agent's turn ended with an error."
+            if let why = (last.text ?? texts.last).map(CarText.inline), !why.isEmpty { said += " " + cut(why, 800) }
+        } else if texts.isEmpty {
+            said = "\(updatePrefix) The agent finished its turn without saying anything."
+        } else {
+            said = "\(updatePrefix) The agent finished its turn. It said: " + cut(texts.suffix(3).joined(separator: " "), 3000)
+        }
+        return (said, last.seq)
     }
 }
 
@@ -253,11 +345,20 @@ enum VoiceTool: String, CaseIterable, Sendable {
             .contains(self)
     }
 
+    /// The tools of a call held to one conversation: that conversation's, its pull request's and its review round's.
+    static let conversationCases: [VoiceTool] = [.readConversation, .sendMessage, .stopConversation, .readPullRequest,
+                                                 .readReviewRound, .completeReviewRound]
+
     /// A Realtime function tool.
-    var definition: JSON {
+    var definition: JSON { definition(held: false) }
+    /// The tool held to one conversation: it names no conversation nor pull request, as the phone puts the held ones in.
+    var heldDefinition: JSON { definition(held: true) }
+
+    private func definition(held: Bool) -> JSON {
         var properties: [String: JSON] = [:]
         var required: [String] = []
         func add(_ name: String, _ type: String, _ about: String, required isRequired: Bool = true) {
+            if held && (name == "session_id" || (self == .readPullRequest && name == "number")) { return }
             properties[name] = ["type": .string(type), "description": .string(about)]
             if isRequired { required.append(name) }
         }
@@ -331,7 +432,18 @@ enum VoiceTool: String, CaseIterable, Sendable {
             description = "Deletes a conversation and its transcript for good. It cannot be undone."
             add("session_id", "string", "The conversation's id, from list_conversations.")
         }
-        return ["type": "function", "name": .string(rawValue), "description": .string(description),
+        // Held to one conversation, the tools say whose they are.
+        let said: String
+        switch self {
+        case .readConversation where held: said = "This conversation's status and its latest messages: what the user asked, what the agent said, and an open question."
+        case .sendMessage where held: said = "Sends a message to this conversation's agent, or answers its question. A busy agent gets it in its running turn or the next."
+        case .stopConversation where held: said = "Stops this conversation's running turn. The conversation stays open."
+        case .readPullRequest where held: said = "What this conversation's pull request changes: how many files, lines added and removed, its description, and each changed file's name with its diff."
+        case .readReviewRound where held: said = "The findings of the review round this conversation holds for the user's decision: each one's key, severity, place, what it says and the verdict drafted for it."
+        case .completeReviewRound where held: said = "Completes this conversation's review round with the user's verdicts: the findings to fix are sent to be fixed, the dismissed ones are dropped, the rest stay optional. With nothing to fix, the pull request is approved."
+        default: said = description
+        }
+        return ["type": "function", "name": .string(rawValue), "description": .string(said),
                 "parameters": ["type": "object", "properties": .object(properties), "required": JSON(required),
                                "additionalProperties": false]]
     }

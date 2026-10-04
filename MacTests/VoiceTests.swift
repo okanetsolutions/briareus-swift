@@ -384,4 +384,55 @@ final class VoiceTests: XCTestCase {
         answer["timeline_cut"] = true
         XCTAssertNotNil(VoiceTool.readIssue.summary(answer, args: [:])["comments_note"].string)
     }
+
+    // MARK: One conversation, hands-free
+
+    func testACallHeldToOneConversationCarriesItsToolsOnlyAndNamesNoConversation() {
+        let session = Voice.session(voice: "marin", project: "HQ (o/hq)", conversation: "Fix the login")
+        let tools = session["tools"].items
+        XCTAssertEqual(tools.compactMap { $0["name"].string }, VoiceTool.conversationCases.map(\.rawValue))
+        for tool in tools {
+            XCTAssertTrue(tool["parameters"]["properties"]["session_id"].isNull, tool["name"].string ?? "")
+            XCTAssertFalse(tool["parameters"]["required"].strings.contains("session_id"))
+        }
+        let pull = tools.first { $0["name"] == "read_pull_request" }!
+        XCTAssertTrue(pull["parameters"]["properties"]["number"].isNull)
+        XCTAssertEqual(tools.first { $0["name"] == "send_message" }!["parameters"]["required"], ["text"])
+        let instructions = session["instructions"].string!
+        XCTAssertTrue(instructions.contains("\"Fix the login\""))
+        XCTAssertTrue(instructions.contains(Voice.updatePrefix))
+        // The project's call keeps every tool, each naming its conversation.
+        XCTAssertTrue(VoiceTool.sendMessage.definition["parameters"]["required"].strings.contains("session_id"))
+    }
+
+    func testAHeldCallActsOnTheHeldConversationAndItsPullRequestWhateverTheModelSays() {
+        let args = Voice.holding(["session_id": "other", "text": "Go on"], .sendMessage, to: "s1", pull: 7)
+        XCTAssertEqual(args, ["session_id": "s1", "text": "Go on"])
+        XCTAssertEqual(VoiceTool.sendMessage.plan(args, repo: "o/r"), .call(["sessionId": "s1", "text": "Go on"]))
+        XCTAssertEqual(Voice.holding(["number": 99], .readPullRequest, to: "s1", pull: 7), ["session_id": "s1", "number": 7])
+        XCTAssertTrue(Voice.holding(["number": 99], .readPullRequest, to: "s1", pull: nil)["number"].isNull)
+    }
+
+    func testTheAgentsNewsIsAFinishedTurnOrAQuestionAndNothingWhileItWorks() {
+        func e(_ seq: Int, _ kind: String, _ extra: String = "") -> Event {
+            Event(j(#"{"seq":\#(seq),"kind":"\#(kind)"\#(extra)}"#))!
+        }
+        let working = [e(1, "user", #","text":"Fix it""#), e(2, "text", #","text":"Looking.""#), e(3, "tool", #","name":"Read""#)]
+        XCTAssertNil(Voice.agentNews(working, after: 0))
+
+        let done = working + [e(4, "text", #","text":"Fixed **the** bug.""#), e(5, "result")]
+        let news = Voice.agentNews(done, after: 1)!
+        XCTAssertEqual(news.through, 5)
+        XCTAssertEqual(news.said, "Agent update: The agent finished its turn. It said: Looking. Fixed the bug.")
+        // Told once: nothing new after it.
+        XCTAssertNil(Voice.agentNews(done, after: 5))
+
+        let asking = done + [e(6, "ask", #","question":"Which branch?","options":[{"label":"main"},{"label":"dev"}]"#)]
+        XCTAssertEqual(Voice.agentNews(asking, after: 5)!.said, "Agent update: The agent asks: Which branch? Options: main; dev.")
+        XCTAssertEqual(Voice.agentNews(asking, after: 5)!.through, 6)
+
+        let failed = [e(7, "result", #","isError":true,"text":"Out of credits""#)]
+        XCTAssertEqual(Voice.agentNews(failed, after: 6)!.said, "Agent update: The agent's turn ended with an error. Out of credits")
+        XCTAssertEqual(Voice.agentNews([e(8, "result")], after: 7)!.said, "Agent update: The agent finished its turn without saying anything.")
+    }
 }

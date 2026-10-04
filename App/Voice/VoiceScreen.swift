@@ -1,20 +1,24 @@
 // A project's voice conversation, opened from its screen: GPT-Realtime about that project's agents, pull requests and
-// findings, and nothing else. What both sides said scrolls as captions; the actions it ran on the server are listed
-// under them.
+// findings, and nothing else. Opened from one of its conversations, it is a hands-free line to that conversation's agent
+// alone. What both sides said scrolls as captions; the actions it ran on the server are listed under them.
 import SwiftUI
 
 struct VoiceScreen: View {
     let repo: String
+    /// The conversation the call is held to; nil for the whole project.
+    var conversation: VoiceConversation? = nil
     @ObservedObject private var voice = VoiceSession.shared
     @ObservedObject private var projects = ProjectsModel.shared
     @ObservedObject private var settings = VoiceSettings.shared
     @Environment(\.navigate) private var navigate
 
     private var project: Project { projects.projects.first { $0.repo == repo } ?? Project(repo: repo, label: nil) }
-    /// A conversation is going on about another project; this screen can only end it.
-    private var elsewhere: Bool { voice.isOn && voice.repo != repo }
-    /// What this screen shows: its project's conversation, the last one included, and nothing of another's.
-    private var mine: Bool { voice.repo == repo }
+    /// A conversation is going on about another project or conversation; this screen can only end it.
+    private var elsewhere: Bool { voice.isOn && !mine }
+    /// What this screen shows: its own voice conversation, the last one included, and nothing of another's.
+    private var mine: Bool { voice.repo == repo && voice.conversation?.id == conversation?.id }
+    /// What the voice is about, said on the screen.
+    private var subject: String { conversation?.title ?? project.title }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,7 +27,7 @@ struct VoiceScreen: View {
             controls
         }
         .background(Theme.background)
-        .navigationTitle(project.title)
+        .navigationTitle(subject)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -60,11 +64,17 @@ struct VoiceScreen: View {
 
     @ViewBuilder private var intro: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Talk to \(project.title)'s agents").font(.system(.title2, design: .serif).weight(.semibold))
-            Text("Ask what a conversation is doing, answer an agent's question, start one, or stop one. Everything stays on this project, and is done as soon as you ask; only a merge waits for your yes.")
-                .foregroundStyle(.secondary)
-            if elsewhere, let other = voice.repo {
-                Text("A voice conversation is going on about \(other). End it to talk about this project.")
+            if conversation != nil {
+                Text("Hands-free with this agent").font(.system(.title2, design: .serif).weight(.semibold))
+                Text("What you say for the agent is sent to it, and what it answers or asks is read to you as it comes, with the phone locked too. Ask what it did or changed, answer its question, or tell it to stop. Nothing reaches another conversation.")
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Talk to \(project.title)'s agents").font(.system(.title2, design: .serif).weight(.semibold))
+                Text("Ask what a conversation is doing, answer an agent's question, start one, or stop one. Everything stays on this project, and is done as soon as you ask; only a merge waits for your yes.")
+                    .foregroundStyle(.secondary)
+            }
+            if elsewhere, let other = voice.about {
+                Text("A voice conversation is going on about \(other). End it to talk here.")
                     .foregroundStyle(Theme.warning)
             }
             if !settings.hasKey {
@@ -115,7 +125,7 @@ struct VoiceScreen: View {
                 .buttonStyle(.plain).disabled(voice.phase != .live || elsewhere)
                 .accessibilityLabel(voice.muted ? "Unmute" : "Mute")
 
-                Button { voice.isOn ? voice.stop() : voice.start(project) } label: {
+                Button { voice.isOn ? voice.stop() : voice.start(project, conversation: conversation) } label: {
                     ZStack {
                         Circle().fill(voice.isOn ? Theme.danger : Theme.accent)
                         if voice.phase == .connecting || voice.phase == .closing { ProgressView().tint(.white) }
@@ -153,8 +163,8 @@ struct VoiceScreen: View {
 
     @ViewBuilder private var status: some View {
         switch voice.phase {
-        case _ where elsewhere: Text("Tap to end the conversation about \(voice.repo ?? "another project")")
-        case .off: Text(settings.hasKey ? "Tap to talk about \(project.title)" : "Add an OpenAI API key in Voice settings")
+        case _ where elsewhere: Text("Tap to end the conversation about \(voice.about ?? "another project")")
+        case .off: Text(settings.hasKey ? (conversation != nil ? "Tap to go hands-free" : "Tap to talk about \(project.title)") : "Add an OpenAI API key in Voice settings")
         case .connecting: Text("Connecting…")
         case .closing: Text("Ending…")
         case .live:
