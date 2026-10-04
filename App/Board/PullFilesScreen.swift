@@ -1,5 +1,5 @@
 // A pull request's changed files on a phone (the Mac's PullFilesScreen): the files of one revision, read a page at a
-// time, each opening its diff in monospaced type that wraps or scrolls sideways.
+// time, each opening its diff in monospaced type that wraps.
 import SwiftUI
 
 /// The changed files, read page by page and pinned to the revision page 1 named. A saved list shows first and is kept
@@ -95,8 +95,8 @@ struct PullFilesScreen: View {
             }
             if model.shown {
                 Section {
-                    ForEach(list.files, id: \.filename) { file in
-                        NavigationLink { PullFileDiffScreen(file: file) } label: { FileRow(file: file) }
+                    ForEach(Array(list.files.enumerated()), id: \.element.filename) { index, file in
+                        NavigationLink { PullFileDiffScreen(model: model, index: index) } label: { FileRow(file: file) }
                             .listRowBackground(Theme.row)
                     }
                     if list.nextPage != nil && !list.files.isEmpty && model.error == nil {
@@ -167,14 +167,25 @@ private struct FileRow: View {
     }
 }
 
-/// One file's diff: long lines wrap, or the whole diff scrolls sideways.
+/// One file's diff, with long lines wrapped; the arrows step to the previous or next changed file.
 struct PullFileDiffScreen: View {
-    let file: PullFile
+    @ObservedObject var model: PullFilesModel
+    @State private var index: Int
     @State private var lines: [DiffLine]?
-    @AppStorage("diffWrap") private var wrap = true
+
+    init(model: PullFilesModel, index: Int) {
+        self.model = model
+        _index = State(initialValue: index)
+    }
+
+    private var files: [PullFile] { model.list.files }
 
     var body: some View {
-        ScrollView(wrap ? .vertical : [.vertical, .horizontal]) {
+        if files.indices.contains(index) { diff(files[index]) } else { Color.clear.background(Theme.background) }
+    }
+
+    private func diff(_ file: PullFile) -> some View {
+        ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(file.filename).font(.footnote.monospaced().weight(.medium)).textSelection(.enabled)
@@ -195,30 +206,34 @@ struct PullFileDiffScreen: View {
                     }
                     .padding(12)
                 }
-                ForEach(lines ?? [], id: \.id) { DiffRow(line: $0, wrap: wrap) }
-                if safeWebURL(file.url) {
-                    Button { boardOpenWeb(file.url) } label: { Label("Open file on GitHub", systemImage: "arrow.up.right") }
-                        .font(.footnote).padding(12)
-                }
+                ForEach(lines ?? [], id: \.id) { DiffRow(line: $0) }
             }
-            .frame(maxWidth: wrap ? .infinity : nil, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .id(file.filename)
         .background(Theme.background)
         .navigationTitle(file.name).navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { wrap.toggle() } label: { Image(systemName: wrap ? "arrow.left.and.right.text.vertical" : "text.word.spacing") }
-                    .accessibilityLabel(wrap ? "Scroll long lines" : "Wrap long lines")
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button { index -= 1 } label: { Image(systemName: "chevron.up") }
+                    .disabled(index == 0)
+                    .accessibilityLabel("Previous file")
+                Button { index += 1 } label: { Image(systemName: "chevron.down") }
+                    .disabled(index + 1 >= files.count)
+                    .accessibilityLabel("Next file")
             }
         }
-        .task { if lines == nil { lines = diffParse(file.patch) } }
+        .task(id: file.filename) {
+            lines = diffParse(file.patch)
+            // Reaching the last file read so far reads the next page, so the next arrow can keep going.
+            if index + 1 >= files.count, model.list.nextPage != nil, model.error == nil { await model.load() }
+        }
     }
 }
 
 /// One line of the patch: its number, its sign and its text on the added or removed tint; a hunk header on a band.
 private struct DiffRow: View {
     let line: DiffLine
-    let wrap: Bool
     private var tint: Color {
         switch line.kind {
         case .added: return Theme.success
@@ -238,9 +253,8 @@ private struct DiffRow: View {
         switch line.kind {
         case .hunk, .note:
             Text(text).font(.caption2.monospaced()).foregroundStyle(.secondary)
-                .lineLimit(wrap ? nil : 1).fixedSize(horizontal: !wrap, vertical: false)
                 .padding(.horizontal, 12).padding(.vertical, line.kind == .hunk ? 6 : 2)
-                .frame(maxWidth: wrap ? .infinity : nil, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(line.kind == .hunk ? Theme.surface : Color.clear)
         default:
             let n = line.newLine != 0 ? line.newLine : line.oldLine
@@ -248,11 +262,11 @@ private struct DiffRow: View {
                 Text(n != 0 ? String(n) : "").font(.caption2.monospacedDigit()).foregroundStyle(.tertiary).frame(width: 34, alignment: .trailing)
                 Text(sign).font(.caption.monospaced()).foregroundStyle(line.kind == .context ? Color.secondary : tint)
                 Text(text.isEmpty ? " " : text).font(.caption.monospaced())
-                    .lineLimit(wrap ? nil : 1).fixedSize(horizontal: !wrap, vertical: wrap)
+                    .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
             .padding(.trailing, 12).padding(.vertical, 1.5)
-            .frame(maxWidth: wrap ? .infinity : nil, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(tint.opacity(0.13))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(line.kind == .added ? "Added" : line.kind == .removed ? "Removed" : "Line") \(line.text)")
