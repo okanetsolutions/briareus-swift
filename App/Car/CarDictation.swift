@@ -6,9 +6,10 @@ import AVFoundation
 @MainActor
 final class CarDictation: NSObject, AVAudioRecorderDelegate {
     enum Failure: LocalizedError {
-        case microphone, recorder(String)
+        case microphone, recorder(String), voiceConversation
         var errorDescription: String? {
             switch self {
+            case .voiceConversation: return "End the voice conversation on your iPhone to dictate."
             case .microphone: return "Allow Briareus to use the microphone in Settings on your iPhone."
             case .recorder(let why): return "The recording could not start: \(why)"
             }
@@ -36,6 +37,8 @@ final class CarDictation: NSObject, AVAudioRecorderDelegate {
     /// Answers nil when nothing was said or the dictation was dropped.
     func listen() async throws -> Data? {
         guard recorder == nil else { return nil }
+        // A voice conversation holds the audio; dictating would take it over and leave the call deaf and mute.
+        guard !VoiceSession.shared.isOn else { throw Failure.voiceConversation }
         guard await AVAudioApplication.requestRecordPermission() else { throw Failure.microphone }
         guard recorder == nil else { return nil }
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("car-note-\(UUID().uuidString).m4a")
