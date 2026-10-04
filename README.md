@@ -296,6 +296,8 @@ The GitHub Actions workflow runs on every pull request and on pushes to `main`, 
 
 The simulator artifact is not an installable IPA, and the workflow neither signs nor uploads to App Store Connect.
 
+A second workflow, **Release**, runs on every push to `main`, so each merged pull request becomes a [release](https://github.com/okanetsolutions/briareus-swift/releases), as Briareus for Windows does. It tags the merged commit with the next minor version (`v1.1.0`, `v1.2.0`, …) and builds with that version and the commit count as the build number, without committing them back. The release attaches `Briareus-mac.zip` and `Briareus-iphone-simulator.zip`. The Mac app is signed ad hoc: macOS asks to confirm the first launch (right-click → Open), and without the team's keychain access group the app keeps its token in the login keychain. Pushing a `v*` tag by hand releases that tag as it is.
+
 Tests exercise the saved-response cache, origin validation, credential headers, operation bodies, redirect rejection, non-JSON responses, expiry, rate limiting, write timeouts without retry, revocation, response compatibility, transcript cursor and deduplication, runtime selection, pull request file paging, diff line numbering, board rows, filters, errands, issue nesting, and conversations and pull requests as a car's screen words them. The simulator test verifies pairing and HTTP rejection without a live server or a real token.
 
 Manual acceptance with a deployed test project:
