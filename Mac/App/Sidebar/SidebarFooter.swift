@@ -35,6 +35,8 @@ struct SidebarFooter: View {
             if media.state.available { player }
             foot
         }
+        // Its own height only, so the rows above take the rest and the player sits on the foot.
+        .fixedSize(horizontal: false, vertical: true)
         .background(Theme.sidebar)
     }
 
