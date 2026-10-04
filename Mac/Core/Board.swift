@@ -360,11 +360,13 @@ struct BoardAction: Equatable, Sendable {
         BoardAction(id: "implement-feedback", label: "Implement feedback", hint: "Address the review findings on this pull request, push the fixes, and have those changes reviewed automatically"),
         BoardAction(id: "custom-feedback", label: "Give feedback", hint: "Say in your own words what to change on this pull request, and it is implemented and pushed",
                     input: ActionInput(label: "Your feedback", placeholder: "What should change on this pull request?", required: true)),
+        BoardAction(id: "test-sheet", label: "Test sheet", hint: "Derive a manual QA checklist from this pull request\u{2019}s diff and post it as one editable comment"),
+        BoardAction(id: "test-run", label: "Run test sheet", hint: "Execute this pull request\u{2019}s test sheet in a fresh workspace and record a video of every scenario"),
         BoardAction(id: "pr-body-summary", label: "PR body", hint: "Rewrite this pull request\u{2019}s description from its own diff, following the team template"),
         BoardAction(id: "delete-self-comments", label: "Delete my comments", hint: "Remove every comment and review the configured GitHub account left on this pull request"),
     ]
     /// Errands this app no longer offers, even when the server still lists them.
-    private static let dropped: Set<String> = ["qa", "test-sheet", "test-run"]
+    private static let dropped: Set<String> = ["qa"]
 
     /// The errands worth offering on one pull request. `catalog` is what the server's `actions` lists; null or empty before it
     /// is known, when every errand this app knows is offered. `failedChecks` is the Checks tab's count of failed checks.
