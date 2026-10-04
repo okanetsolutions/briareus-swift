@@ -28,6 +28,8 @@ final class PhoneVoiceNote: NSObject, ObservableObject, AVAudioRecorderDelegate 
     /// Asks the server whether it transcribes, then for the microphone, then records.
     func record() {
         guard state == .idle else { return }
+        // A voice conversation holds the audio; a note would take it over and leave the call deaf and mute.
+        guard !VoiceSession.shared.isOn else { error = "End the voice conversation to record a voice note."; return }
         state = .starting; error = nil
         generation += 1
         let mine = generation

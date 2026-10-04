@@ -1,6 +1,6 @@
 # Briareus for iPhone, iPad, Mac and CarPlay
 
-A native SwiftUI client for [Briareus](https://github.com/nadinyamaui/briareus), the server for running coding agents against your projects. It talks to the server's client API (`/api/v1`), as the Mac and Windows clients do, and works with any Briareus server you can reach over HTTPS. Requires iOS 17 or macOS 14 or later. No third-party dependencies.
+A native SwiftUI client for [Briareus](https://github.com/nadinyamaui/briareus), the server for running coding agents against your projects. It talks to the server's client API (`/api/v1`), as the Mac and Windows clients do, and works with any Briareus server you can reach over HTTPS. Requires iOS 17 or macOS 14 or later. Its one third-party dependency is Google's WebRTC ([stasel/WebRTC](https://github.com/stasel/WebRTC), a binary Swift package), which the iPhone app's voice mode talks to GPT-Realtime with.
 
 ## Contents
 
@@ -36,6 +36,15 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 - Records voice notes and has the server transcribe them into the message box, in whichever language was spoken. On a server that cannot transcribe, the microphone says what the server is missing.
 - On an iPad, keeps the projects and conversations in a column on the left and the chosen conversation on the right. A window too narrow for both falls back to the phone's single column.
 - On a Mac, runs as a Mac app of its own (`Mac/`), the twin of [Briareus for Windows](https://github.com/okanetsolutions/briareus-windows): the same screens, layout and features, on the client API (`/api/v1`). See [The Mac app](#the-mac-app).
+
+**Voice**
+
+- Holds a spoken conversation about one project, opened from that project's screen (the waveform): what its conversations are doing, what an agent asks, which pull requests wait, which findings need a decision. It answers only when spoken to.
+- Talks with OpenAI's [GPT-Realtime mini](https://developers.openai.com/api/docs/models/gpt-realtime-2.1-mini), which picks the actions itself; the phone runs them on `/api/v1` with its own token.
+- Everything it does stays on that project: no tool names a repository, and a conversation named by id is checked to be the project's first. It reads what a pull request changes (how many files, lines added and removed, its description, and each file's diff, to sum up what it touches), the project's open issues, any one of them in full with its description and latest comments, and starts an agent on one, as the board's own button does; starts a conversation, sends a message or answers an agent's question, stops a running turn, closes or deletes a conversation; starts a code review, implement feedback, fix checks or solve conflicts on a pull request; takes a yes or a no on each finding, on a pull request or in a review round a conversation holds; and merges a pull request, saying first what stands in its way (failing checks, conflicts, a missing code-approved label, a place in a stack above position 1) and merging the head it read. Everything is done as soon as it is asked for; only a merge is read back and runs on a yes said after it.
+- Talks to OpenAI directly from the phone with an API key kept in its Keychain (Settings › Voice), over WebRTC: the microphone and the voice travel on audio tracks, with WebRTC's echo cancellation and jitter buffer, and events on a data channel.
+- Goes on with the phone locked, and ends on its own after a silence (3 minutes by default), as GPT-Realtime bills the audio it hears and says.
+- Shows what the conversation has cost under its controls, ticking while it runs: each response's and each transcription's tokens, as OpenAI reports them, at gpt-realtime-2.1-mini's and gpt-4o-mini-transcribe's published prices. Each finished conversation's time and cost is kept on the phone, and Settings › Voice adds them up: time, cost and cost per minute. An estimate; OpenAI's bill is the reference.
 
 **Project board**
 
