@@ -342,14 +342,15 @@ final class BoardTests: XCTestCase {
 
     func testKnownErrandsAreListedInOrder() {
         let k = BoardAction.known
-        XCTAssertEqual(ids(k), "run,review,solve-conflicts,fix-checks,implement-feedback,custom-feedback,pr-body-summary,delete-self-comments")
+        XCTAssertEqual(ids(k), "run,review,solve-conflicts,fix-checks,implement-feedback,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments")
         for a in k { XCTAssertFalse(a.label.isEmpty); XCTAssertFalse(a.hint.isEmpty); XCTAssertEqual(a.input != nil, a.id == "custom-feedback") }
         let feedback = known("custom-feedback")!
         XCTAssertEqual(feedback.label, "Give feedback")
         XCTAssertEqual(feedback.input, ActionInput(label: "Your feedback", placeholder: "What should change on this pull request?", required: true))
         XCTAssertEqual(known("run")?.label, "Run"); XCTAssertEqual(known("review")?.label, "Code review")
-        // QA and the test sheet were removed (#12).
-        XCTAssertNil(known("qa")); XCTAssertNil(known("test-sheet")); XCTAssertNil(known("test-run"))
+        XCTAssertEqual(known("test-sheet")?.label, "Test sheet"); XCTAssertEqual(known("test-run")?.label, "Run test sheet")
+        // QA as an errand of its own was removed (#12); the test sheet and its run came back.
+        XCTAssertNil(known("qa"))
     }
     func testErrandsStartThroughTheirOwnOperation() {
         // Since /api/v1 (#26) every errand but Run and Code review goes through `action`, not an operation named after it.
@@ -383,31 +384,31 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(feedback.arguments(repo: "o/r", number: 9, input: "line one\nline two")["input"].string, "line one\nline two")
     }
     func testErrandsAreOfferedForTheStateAPullRequestIsIn() {
-        let always = "run,review,custom-feedback,pr-body-summary,delete-self-comments"
+        let always = "run,review,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments"
         XCTAssertEqual(offered(nil, #"{"number":1,"mergeable":"mergeable","checks":"success"}"#, 0), always)
         // A draft is offered the same errands.
         XCTAssertEqual(offered(nil, #"{"number":1,"draft":true}"#, 0), always)
-        XCTAssertEqual(offered(nil, #"{"number":1,"mergeable":"conflicting"}"#, 0), "run,review,solve-conflicts,custom-feedback,pr-body-summary,delete-self-comments")
-        XCTAssertEqual(offered(nil, #"{"number":1,"labels":["Has-Conflicts"]}"#, 0), "run,review,solve-conflicts,custom-feedback,pr-body-summary,delete-self-comments")
-        XCTAssertEqual(offered(nil, #"{"number":1,"checks":"error"}"#, 0), "run,review,fix-checks,custom-feedback,pr-body-summary,delete-self-comments")
+        XCTAssertEqual(offered(nil, #"{"number":1,"mergeable":"conflicting"}"#, 0), "run,review,solve-conflicts,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments")
+        XCTAssertEqual(offered(nil, #"{"number":1,"labels":["Has-Conflicts"]}"#, 0), "run,review,solve-conflicts,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments")
+        XCTAssertEqual(offered(nil, #"{"number":1,"checks":"error"}"#, 0), "run,review,fix-checks,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments")
         // A run still going has nothing to fix; a count of failed checks from the Checks tab outweighs the summary.
         XCTAssertEqual(offered(nil, #"{"number":1,"checks":"pending"}"#, 0), always)
-        XCTAssertEqual(offered(nil, #"{"number":1,"checks":"success"}"#, 2), "run,review,fix-checks,custom-feedback,pr-body-summary,delete-self-comments")
+        XCTAssertEqual(offered(nil, #"{"number":1,"checks":"success"}"#, 2), "run,review,fix-checks,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments")
         XCTAssertEqual(offered(nil, #"{"number":1}"#, -1), always)
-        XCTAssertEqual(offered(nil, #"{"number":1,"labels":["FEEDBACK-GIVEN"]}"#, 0), "run,review,implement-feedback,custom-feedback,pr-body-summary,delete-self-comments")
+        XCTAssertEqual(offered(nil, #"{"number":1,"labels":["FEEDBACK-GIVEN"]}"#, 0), "run,review,implement-feedback,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments")
         XCTAssertEqual(offered(nil, #"{"number":1,"mergeable":"conflicting","checks":"failure","labels":["feedback-given"]}"#, 0),
-                       "run,review,solve-conflicts,fix-checks,implement-feedback,custom-feedback,pr-body-summary,delete-self-comments")
+                       "run,review,solve-conflicts,fix-checks,implement-feedback,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments")
         // Without a pull request, everything but fixing checks nobody has seen fail.
-        XCTAssertEqual(offered(nil, nil, 0), "run,review,solve-conflicts,implement-feedback,custom-feedback,pr-body-summary,delete-self-comments")
-        XCTAssertEqual(offered(nil, nil, 1), "run,review,solve-conflicts,fix-checks,implement-feedback,custom-feedback,pr-body-summary,delete-self-comments")
+        XCTAssertEqual(offered(nil, nil, 0), "run,review,solve-conflicts,implement-feedback,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments")
+        XCTAssertEqual(offered(nil, nil, 1), "run,review,solve-conflicts,fix-checks,implement-feedback,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments")
     }
     func testAKnownCatalogRestrictsErrandsToThoseItLists() {
         let conflicted = #"{"number":1,"mergeable":"conflicting","checks":"failure","labels":["feedback-given"]}"#
-        let all = "run,review,solve-conflicts,fix-checks,implement-feedback,custom-feedback,pr-body-summary,delete-self-comments"
+        let all = "run,review,solve-conflicts,fix-checks,implement-feedback,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments"
         // An empty catalog, or one with nothing readable in it, is not known yet.
         XCTAssertEqual(offered("[]", conflicted, 0), all)
         XCTAssertEqual(offered(#"[{"id":"pr-body-summary"},{"label":"x"},"y"]"#, conflicted, 0), all)
-        XCTAssertEqual(offered(#"{"id":"pr-body-summary","label":"PR body"}"#, #"{"number":1}"#, 0), "run,review,custom-feedback,pr-body-summary,delete-self-comments")
+        XCTAssertEqual(offered(#"{"id":"pr-body-summary","label":"PR body"}"#, #"{"number":1}"#, 0), "run,review,custom-feedback,test-sheet,test-run,pr-body-summary,delete-self-comments")
         // Run and Code review have routes of their own and stay.
         XCTAssertEqual(offered(#"[{"id":"pr-body-summary","label":"PR body"}]"#, conflicted, 0), "run,review,pr-body-summary")
         // Listed is not enough: the pull request has to be in the state for it.
@@ -418,10 +419,12 @@ final class BoardTests: XCTestCase {
         let catalog = #"[{"id":"zz-last","label":"Z"},{"id":"run","label":"Serve"},{"id":"qa","label":"QA"},{"id":"test-sheet","label":"Sheet"},"#
             + #"{"id":"test-run","label":"Run sheet"},{"id":"aa-first","label":"A","hint":"Does a","input":{"label":"Why?"}},"#
             + #"{"id":"zz-last","label":"Z again","hint":"later wins"}]"#
-        let a = BoardAction.offered(catalog: j(catalog), pull: nil, failedChecks: 0)
-        // QA, the test sheet and its run stay gone even when the server lists them (#12).
-        XCTAssertEqual(ids(a), "run,review,zz-last,aa-first")
-        guard a.count == 4 else { return }
+        var a = BoardAction.offered(catalog: j(catalog), pull: nil, failedChecks: 0)
+        // QA stays gone even when the server lists it (#12); the test sheet and its run are errands the app knows.
+        XCTAssertEqual(ids(a), "run,review,test-sheet,test-run,zz-last,aa-first")
+        guard a.count == 6 else { return }
+        XCTAssertEqual(a[2].label, "Test sheet"); XCTAssertEqual(a[3].label, "Run test sheet"); XCTAssertEqual(a[3].operation, "action")
+        a.removeSubrange(2...3)
         // The app words its own errands; the server's label for one it knows is not used.
         XCTAssertEqual(a[0].label, "Run"); XCTAssertNil(a[0].input)
         XCTAssertEqual(a[2].label, "Z again"); XCTAssertEqual(a[2].hint, "later wins"); XCTAssertNil(a[2].input)

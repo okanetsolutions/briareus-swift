@@ -55,6 +55,8 @@ func errandSymbol(_ id: String) -> String {
     case "fix-checks": return "wrench.and.screwdriver"
     case "implement-feedback": return "hammer"
     case "custom-feedback": return "square.and.pencil"
+    case "test-sheet": return "checklist"
+    case "test-run": return "video"
     case "pr-body-summary": return "doc.text"
     case "delete-self-comments": return "trash"
     default: return "bolt"

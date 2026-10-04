@@ -55,6 +55,8 @@ func actionIcon(_ id: String) -> String {
     case "fix-checks": return "🧪"
     case "implement-feedback": return "💬"
     case "custom-feedback": return "✍"
+    case "test-sheet": return "📋"
+    case "test-run": return "🎬"
     case "pr-body-summary": return "✎"
     case "delete-self-comments": return "🧹"
     default: return ""
