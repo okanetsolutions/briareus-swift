@@ -144,7 +144,8 @@ final class VoiceSession: ObservableObject {
             heard += 1
             touch()
         case "conversation.item.input_audio_transcription.completed":
-            caption(user: true, event["transcript"].string)
+            // A whole utterance, not a fragment: it is set apart from one before it on the same line.
+            caption(user: true, event["transcript"].string.map { lines.last?.user == true ? " " + $0 : $0 })
             cost.add(transcription: event["usage"])
             touch()
         case "response.output_audio_transcript.delta":
