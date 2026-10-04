@@ -61,7 +61,7 @@ struct VoiceScreen: View {
     @ViewBuilder private var intro: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Talk to \(project.title)'s agents").font(.system(.title2, design: .serif).weight(.semibold))
-            Text("Ask what a conversation is doing, answer an agent's question, start one, or stop one. Everything stays on this project. Changes are read back and wait for your yes.")
+            Text("Ask what a conversation is doing, answer an agent's question, start one, or stop one. Everything stays on this project, and is done as soon as you ask; only a merge waits for your yes.")
                 .foregroundStyle(.secondary)
             if elsewhere, let other = voice.repo {
                 Text("A voice conversation is going on about \(other). End it to talk about this project.")

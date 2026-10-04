@@ -56,7 +56,7 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(VoiceCost.time(3723), "1:02:03")
     }
 
-    func testClosingAndDeletingAConversationWaitForAYes() {
+    func testClosingAndDeletingAConversationActAtOnce() {
         for tool in [VoiceTool.closeConversation, .deleteConversation] {
             XCTAssertTrue(tool.changes)
             XCTAssertTrue(tool.namesConversation)
@@ -65,8 +65,8 @@ final class VoiceTests: XCTestCase {
         }
         XCTAssertEqual(VoiceTool.closeConversation.operation, "close")
         XCTAssertEqual(VoiceTool.deleteConversation.operation, "delete")
-        XCTAssertEqual(VoiceTool.closeConversation.plan(["session_id": "a"], repo: "o/r"), .confirm("Close the conversation; it can be reopened later."))
-        XCTAssertEqual(VoiceTool.deleteConversation.plan(["session_id": "a"], repo: "o/r"), .confirm("Delete the conversation and its transcript for good."))
+        XCTAssertEqual(VoiceTool.closeConversation.plan(["session_id": "a"], repo: "o/r"), .call(["sessionId": "a"]))
+        XCTAssertEqual(VoiceTool.deleteConversation.plan(["session_id": "a"], repo: "o/r"), .call(["sessionId": "a"]))
     }
 
     func testNoToolNamesAProjectAndEveryCallIsOnTheConversationsOwn() {
@@ -86,24 +86,19 @@ final class VoiceTests: XCTestCase {
         XCTAssertFalse(Voice.owns(sessions, session: "b"))
     }
 
-    func testEveryToolThatChangesSomethingAsksForConfirmed() {
+    func testOnlyAMergeAsksForConfirmed() {
+        XCTAssertEqual(VoiceTool.allCases.filter(\.confirms), [.mergePullRequest])
         for tool in VoiceTool.allCases {
             let required = tool.definition["parameters"]["required"].strings
-            XCTAssertEqual(required.contains("confirmed"), tool.changes, tool.rawValue)
+            XCTAssertEqual(required.contains("confirmed"), tool.confirms, tool.rawValue)
             XCTAssertNotNil(APIRoute.named(tool.operation), tool.rawValue)
         }
     }
 
-    func testAChangeWaitsForAYesAndThenMakesItsCall() {
-        let args: JSON = ["session_id": "s1", "text": " ship it ", "confirmed": false]
-        XCTAssertEqual(VoiceTool.sendMessage.plan(args, repo: "o/r"), .confirm("Send: ship it"))
-        var yes = args
-        yes["confirmed"] = true
-        XCTAssertEqual(VoiceTool.sendMessage.plan(yes, repo: "o/r"), .call(["sessionId": "s1", "text": "ship it"]))
-        XCTAssertEqual(VoiceTool.stopConversation.plan(["session_id": "s1"], repo: "o/r"), .confirm("Stop the agent's running turn."))
+    func testAChangeOtherThanAMergeMakesItsCallAtOnce() {
+        XCTAssertEqual(VoiceTool.sendMessage.plan(["session_id": "s1", "text": " ship it "], repo: "o/r"), .call(["sessionId": "s1", "text": "ship it"]))
+        XCTAssertEqual(VoiceTool.stopConversation.plan(["session_id": "s1"], repo: "o/r"), .call(["sessionId": "s1"]))
         XCTAssertEqual(VoiceTool.startConversation.plan(["prompt": "Fix the login", "branch": "dev"], repo: "o/r"),
-                       .confirm("Start an agent from dev with: Fix the login"))
-        XCTAssertEqual(VoiceTool.startConversation.plan(["prompt": "Fix the login", "branch": "dev", "confirmed": true], repo: "o/r"),
                        .call(["repo": "o/r", "prompt": "Fix the login", "branch": "dev"]))
     }
 
@@ -194,9 +189,8 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(issues[1]["sub_issues"], "1 of 3 done")
 
         XCTAssertTrue(VoiceTool.workOnIssue.changes)
-        XCTAssertEqual(VoiceTool.workOnIssue.plan(["issue": 5], repo: "o/r"), .confirm("Start an agent on issue #5."))
-        XCTAssertEqual(VoiceTool.workOnIssue.plan(["issue": 5, "confirmed": true], repo: "o/r"), .call(["repo": "o/r", "issue": 5]))
-        XCTAssertEqual(VoiceTool.workOnIssue.plan(["confirmed": true], repo: "o/r"), .refuse("issue is missing."))
+        XCTAssertEqual(VoiceTool.workOnIssue.plan(["issue": 5], repo: "o/r"), .call(["repo": "o/r", "issue": 5]))
+        XCTAssertEqual(VoiceTool.workOnIssue.plan([:], repo: "o/r"), .refuse("issue is missing."))
         let start = Voice.issueStart(board, number: 5, repo: "o/r")!
         XCTAssertEqual(start["activity"], "issue")
         XCTAssertTrue(start["prompt"].string!.hasPrefix("Issue #5: Add **exports**"))
@@ -322,10 +316,9 @@ final class VoiceTests: XCTestCase {
         XCTAssertTrue(readBack.hasSuffix("It is not ready: Position 2 of a stack of 2, on top of #10: the pull requests under it merge first."))
     }
 
-    func testErrandsStartTheBoardsOwnCallsOnAYes() {
+    func testErrandsStartTheBoardsOwnCalls() {
         XCTAssertTrue(VoiceTool.runErrand.changes)
-        XCTAssertEqual(VoiceTool.runErrand.plan(["number": 9, "errand": "review"], repo: "o/r"), .confirm("Code review on pull request #9."))
-        XCTAssertEqual(VoiceTool.runErrand.plan(["number": 9, "errand": "review", "confirmed": true], repo: "o/r"), .call(["repo": "o/r", "prNumber": 9]))
+        XCTAssertEqual(VoiceTool.runErrand.plan(["number": 9, "errand": "review"], repo: "o/r"), .call(["repo": "o/r", "prNumber": 9]))
         XCTAssertEqual(VoiceTool.runErrand.plan(["number": 9, "errand": "implement-feedback", "confirmed": true], repo: "o/r"),
                        .call(["repo": "o/r", "prNumber": 9, "action": "implement-feedback"]))
         XCTAssertEqual(VoiceTool.runErrand.plan(["number": 9, "errand": "delete-self-comments", "confirmed": true], repo: "o/r"),
@@ -339,8 +332,6 @@ final class VoiceTests: XCTestCase {
     func testFindingsTakeAYesOrANoOneByOne() {
         XCTAssertTrue(VoiceTool.decideFinding.changes)
         XCTAssertEqual(VoiceTool.listFindings.plan(["number": 9], repo: "o/r"), .call(["repo": "o/r", "pr": 9]))
-        XCTAssertEqual(VoiceTool.decideFinding.plan(["number": 9, "key": "k1", "decision": "dismissed"], repo: "o/r"),
-                       .confirm("Mark the finding on #9 no, dismissed."))
         XCTAssertEqual(VoiceTool.decideFinding.plan(["number": 9, "key": "k1", "decision": "fix", "confirmed": true], repo: "o/r"),
                        .call(["repo": "o/r", "pr": 9, "key": "k1", "decision": "fix"]))
         XCTAssertEqual(VoiceTool.decideFinding.plan(["number": 9, "key": "k1", "decision": "maybe"], repo: "o/r"),
@@ -363,10 +354,6 @@ final class VoiceTests: XCTestCase {
     func testAReviewRoundIsReadAndCompletedWithTheUsersVerdicts() {
         XCTAssertTrue(VoiceTool.completeReviewRound.changes)
         XCTAssertTrue(VoiceTool.completeReviewRound.namesConversation)
-        XCTAssertEqual(VoiceTool.completeReviewRound.plan(["session_id": "a", "fix": ["k1"], "dismiss": ["k2", "k3"]], repo: "o/r"),
-                       .confirm("Complete the review round: 1 finding sent to be fixed, 2 dismissed."))
-        XCTAssertEqual(VoiceTool.completeReviewRound.plan(["session_id": "a", "fix": [], "dismiss": []], repo: "o/r"),
-                       .confirm("Complete the review round: nothing to fix, so the pull request is approved."))
         XCTAssertEqual(VoiceTool.completeReviewRound.plan(["session_id": "a", "fix": ["k1"], "dismiss": [], "note": "Be brief", "confirmed": true], repo: "o/r"),
                        .call(["sessionId": "a", "fix": ["k1"], "dismiss": [], "note": "Be brief"]))
 
@@ -374,9 +361,6 @@ final class VoiceTests: XCTestCase {
         let completion = Voice.roundCompletion(held, fix: ["k1"], dismiss: ["k2"], note: "Be brief")
         XCTAssertEqual(completion["verdicts"], [["key": "k1", "decision": "fix"], ["key": "k2", "decision": "dismissed"],
                                                 ["key": "k3", "decision": "optional"]])
-        XCTAssertEqual(Voice.roundReadBack(j(#"{"mine":false,"findings":[]}"#), fix: ["k1"], dismiss: []),
-                       "Take the review round off the queue: it is on someone else's pull request, so nothing is sent to be fixed.")
-        XCTAssertEqual(Voice.roundReadBack(held, fix: ["k1"], dismiss: []), "Complete the review round: 1 finding sent to be fixed.")
         XCTAssertEqual(VoiceTool.readReviewRound.plan(["session_id": "a"], repo: "o/r"), .call(["repo": "o/r"]))
         XCTAssertEqual(VoiceTool.readReviewRound.summary(j(#"{"sessions":[{"id":"a","title":"T","status":"idle"}]}"#), args: ["session_id": "a"])["error"],
                        "That conversation holds no review round waiting for a decision.")

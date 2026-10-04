@@ -49,7 +49,7 @@ final class VoiceSession: ObservableObject {
     /// The function calls of each response, by response id, answered together once the response is done.
     private var calls: [String: [Task<(id: String, output: String), Never>]] = [:]
     private var seenCalls: Set<String> = []
-    /// The changes read back to the user, with how much had been heard at the time.
+    /// The merges read back to the user, with how much had been heard at the time.
     private var readBacks: [String: Int] = [:]
     /// The merges read back, by the same key: the call pinned to the head the user heard about, and its base.
     private var merges: [String: (arguments: JSON, base: String)] = [:]
@@ -238,17 +238,11 @@ final class VoiceSession: ObservableObject {
         guard let repo else { return finish(.failed("No project"), ["error": "The conversation has no project."]) }
         let key = Self.readBackKey(tool, step.args)
         var plan = tool.plan(step.args, repo: repo)
-        // A change goes through only on a yes the user said after hearing it read back; the model's word is not enough.
-        if case .call = plan, tool.changes, !(readBacks[key].map { heard > $0 } ?? false) {
+        // A merge goes through only on a yes the user said after hearing it read back; the model's word is not enough.
+        if case .call = plan, tool.confirms, !(readBacks[key].map { heard > $0 } ?? false) {
             var unconfirmed = step.args
             unconfirmed["confirmed"] = false
             plan = tool.plan(unconfirmed, repo: repo)
-        }
-        // A round's read-back is made from the round itself: one on someone else's pull request takes no verdicts.
-        if tool == .completeReviewRound, case .confirm = plan, let id = step.args["session_id"].string,
-           let sessions = try? await Store.shared.call("sessions", ["repo": .string(repo)]) {
-            let held = (Session.parseList(sessions) ?? []).first { $0.id == id }?.heldTriage
-            plan = .confirm(Voice.roundReadBack(held, fix: step.args["fix"].strings, dismiss: step.args["dismiss"].strings))
         }
         if tool == .mergePullRequest {
             if case .refuse(let why) = plan { return finish(.failed(why), ["error": .string(why)]) }

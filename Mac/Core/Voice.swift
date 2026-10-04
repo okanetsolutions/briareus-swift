@@ -26,9 +26,9 @@ enum Voice {
     project only: \(project). The user talks to you hands-free, often with the phone locked. Answer in the language the \
     user speaks, in one or two short sentences. Speak only when the user has said something; do not volunteer updates. \
     Use the tools for anything about the project's conversations, agents, pull requests, issues or findings, and say only \
-    what they confirm. If the user asks about another project, say this conversation can only work on \(project). Before \
-    you start, message, stop, close or delete a conversation, start an errand, decide a finding or merge a pull request, \
-    read back what will happen in a few words and wait for the user's yes.
+    what they confirm. If the user asks about another project, say this conversation can only work on \(project). Do what \
+    the user asks right away, without asking them to confirm; the one exception is merging a pull request, which waits \
+    for their yes.
 
     \(toolInstructions(project: project))
     """ }
@@ -87,10 +87,10 @@ enum Voice {
     code-approved label, requested changes. Read all of it to the user; they may still choose to merge.
 
     ## Confirmation
-    start_conversation, work_on_issue, send_message, stop_conversation, close_conversation, delete_conversation, \
-    run_errand, decide_finding, complete_review_round and merge_pull_request change things. Call them with confirmed=false first: the answer says what to read back. Call \
-    again with confirmed=true only after the user clearly agreed to that exact action in their latest turn. Never pass \
-    confirmed=true on your own.
+    Only merge_pull_request needs the user's approval. Call it with confirmed=false first: the answer says what to read \
+    back. Call again with confirmed=true only after the user clearly agreed to that exact merge in their latest turn; \
+    never pass confirmed=true on your own. Every other tool acts at once when the user asks for it: do not ask them to \
+    confirm, and say what was done once the tool answers.
 
     ## Saying the result
     Say the relevant facts in a few plain sentences, without Markdown, ids or URLs. Report an action as done only when \
@@ -196,8 +196,8 @@ struct VoiceTally: Equatable, Sendable {
 
 // MARK: - Tools
 
-/// What the model may call. Each runs one call of the client API on the conversation's project; the ones that change
-/// something wait for a yes.
+/// What the model may call. Each runs one call of the client API on the conversation's project; only a merge waits for
+/// a yes.
 enum VoiceTool: String, CaseIterable, Sendable {
     case listConversations = "list_conversations"
     case readConversation = "read_conversation"
@@ -240,6 +240,9 @@ enum VoiceTool: String, CaseIterable, Sendable {
         case .deleteConversation: return "delete"
         }
     }
+    /// Waits for a yes the user said after hearing it read back: a merge only.
+    var confirms: Bool { self == .mergePullRequest }
+    /// Changes something on the server, so the project's conversations are read again after it.
     var changes: Bool {
         [.startConversation, .workOnIssue, .sendMessage, .stopConversation, .closeConversation, .deleteConversation,
          .mergePullRequest, .completeReviewRound, .runErrand, .decideFinding].contains(self)
@@ -288,7 +291,6 @@ enum VoiceTool: String, CaseIterable, Sendable {
             properties["dismiss"] = ["type": "array", "items": ["type": "string"], "description": "Keys of the findings the user said no to."]
             required.append("dismiss")
             add("note", "string", "What the user wants the fix session told, if anything.", required: false)
-            add("confirmed", "boolean", "True only after the user agreed to this exact action.")
         case .listFindings:
             description = "The review findings left on one of the project's pull requests: each one's key, severity, place, what it says, the user's verdict (yes to fix, no, or optional) and whether it is fixed."
             add("number", "integer", "The pull request's number.")
@@ -298,13 +300,11 @@ enum VoiceTool: String, CaseIterable, Sendable {
             add("key", "string", "The finding's key, from list_findings.")
             properties["decision"] = ["type": "string", "enum": ["fix", "dismissed", "optional"], "description": "fix for yes, dismissed for no, optional to leave it to the implementer."]
             required.append("decision")
-            add("confirmed", "boolean", "True only after the user agreed to this exact action.")
         case .runErrand:
             description = "Starts an errand on one of the project's pull requests, as the board's buttons do: review (run the code review and publish it), implement-feedback (fix the findings marked fix and have the fixes reviewed), fix-checks (fix failing CI checks) or solve-conflicts (merge the base in and resolve the conflicts)."
             add("number", "integer", "The pull request's number.")
             properties["errand"] = ["type": "string", "enum": .array(Voice.errands.map { .string($0) }), "description": "Which errand."]
             required.append("errand")
-            add("confirmed", "boolean", "True only after the user agreed to this exact action.")
         case .listIssues:
             description = "The project's open issues with their labels, epic progress, the pull requests that close them and the conversations started on them."
         case .readIssue:
@@ -313,29 +313,23 @@ enum VoiceTool: String, CaseIterable, Sendable {
         case .workOnIssue:
             description = "Starts an agent on one of the project's open issues: it reads the issue in full, implements it and opens a pull request that closes it."
             add("issue", "integer", "The issue's number, from list_issues.")
-            add("confirmed", "boolean", "True only after the user agreed to this exact action.")
         case .startConversation:
             description = "Starts an agent on the project with a first prompt."
             add("prompt", "string", "What the agent should do, as the user said it.")
             add("branch", "string", "The branch to start from. Omit for the project's default.", required: false)
-            add("confirmed", "boolean", "True only after the user agreed to this exact action.")
         case .sendMessage:
             description = "Sends a message to a conversation's agent, or answers its question. A busy agent gets it in its running turn or the next."
             add("session_id", "string", "The conversation's id, from list_conversations.")
             add("text", "string", "The message, as the user said it.")
-            add("confirmed", "boolean", "True only after the user agreed to this exact action.")
         case .stopConversation:
             description = "Stops the agent's running turn. The conversation stays open."
             add("session_id", "string", "The conversation's id, from list_conversations.")
-            add("confirmed", "boolean", "True only after the user agreed to this exact action.")
         case .closeConversation:
             description = "Closes a conversation: its agent stops and its workspace is freed. It can be reopened later."
             add("session_id", "string", "The conversation's id, from list_conversations.")
-            add("confirmed", "boolean", "True only after the user agreed to this exact action.")
         case .deleteConversation:
             description = "Deletes a conversation and its transcript for good. It cannot be undone."
             add("session_id", "string", "The conversation's id, from list_conversations.")
-            add("confirmed", "boolean", "True only after the user agreed to this exact action.")
         }
         return ["type": "function", "name": .string(rawValue), "description": .string(description),
                 "parameters": ["type": "object", "properties": .object(properties), "required": JSON(required),
@@ -358,7 +352,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
         case .workOnIssue:
             guard let number = args["issue"].int, number >= 1 else { return .refuse("issue is missing.") }
             // The board is read first: the conversation's prompt is made from the issue's row there.
-            return confirmed ? .call(["repo": .string(repo), "issue": JSON(number)]) : .confirm("Start an agent on issue #\(number).")
+            return .call(["repo": .string(repo), "issue": JSON(number)])
         case .readPullRequest, .listFindings:
             guard let number = args["number"].int, number >= 1 else { return .refuse("number is missing.") }
             return .call(["repo": .string(repo), "pr": JSON(number)])
@@ -371,20 +365,19 @@ enum VoiceTool: String, CaseIterable, Sendable {
             // The phone reads the round and makes the verdicts from these keys before the call.
             var call: JSON = ["sessionId": .string(id), "fix": JSON(fix), "dismiss": JSON(dismiss)]
             if let note = text("note") { call["note"] = .string(note) }
-            return confirmed ? .call(call) : .confirm(Voice.roundReadBack(nil, fix: fix, dismiss: dismiss))
+            return .call(call)
         case .decideFinding:
             guard let number = args["number"].int, number >= 1, let key = text("key") else { return .refuse("number and key are needed.") }
             guard let decision = text("decision"), findingDecisionIds.contains(decision) else { return .refuse("decision must be fix, dismissed or optional.") }
             let call: JSON = ["repo": .string(repo), "pr": JSON(number), "key": .string(key), "decision": .string(decision)]
-            let said = ["fix": "yes, to be fixed", "dismissed": "no, dismissed", "optional": "optional"][decision] ?? decision
-            return confirmed ? .call(call) : .confirm("Mark the finding on #\(number) \(said).")
+            return .call(call)
         case .runErrand:
             guard let number = args["number"].int, number >= 1 else { return .refuse("number is missing.") }
             guard let errand = text("errand"), let action = Voice.errand(errand) else {
                 return .refuse("errand must be one of \(Voice.errands.joined(separator: ", ")).")
             }
             // Code review checks the branch out itself: the phone adds it from the board before the call.
-            return confirmed ? .call(action.arguments(repo: repo, number: number)) : .confirm("\(action.label) on pull request #\(number).")
+            return .call(action.arguments(repo: repo, number: number))
         case .mergePullRequest:
             // The phone reads the pull request before either answer: the read-back says what stands in the way, and the
             // merge is pinned to the head the user heard about.
@@ -397,20 +390,19 @@ enum VoiceTool: String, CaseIterable, Sendable {
             guard let prompt = text("prompt") else { return .refuse("prompt is missing.") }
             var call: JSON = ["repo": .string(repo), "prompt": .string(prompt)]
             if let branch = text("branch") { call["branch"] = .string(branch) }
-            let on = text("branch").map { " from \($0)" } ?? ""
-            return confirmed ? .call(call) : .confirm("Start an agent\(on) with: \(prompt)")
+            return .call(call)
         case .sendMessage:
             guard let id = text("session_id"), let message = text("text") else { return .refuse("session_id and text are needed.") }
-            return confirmed ? .call(["sessionId": .string(id), "text": .string(message)]) : .confirm("Send: \(message)")
+            return .call(["sessionId": .string(id), "text": .string(message)])
         case .stopConversation:
             guard let id = text("session_id") else { return .refuse("session_id is missing.") }
-            return confirmed ? .call(["sessionId": .string(id)]) : .confirm("Stop the agent's running turn.")
+            return .call(["sessionId": .string(id)])
         case .closeConversation:
             guard let id = text("session_id") else { return .refuse("session_id is missing.") }
-            return confirmed ? .call(["sessionId": .string(id)]) : .confirm("Close the conversation; it can be reopened later.")
+            return .call(["sessionId": .string(id)])
         case .deleteConversation:
             guard let id = text("session_id") else { return .refuse("session_id is missing.") }
-            return confirmed ? .call(["sessionId": .string(id)]) : .confirm("Delete the conversation and its transcript for good.")
+            return .call(["sessionId": .string(id)])
         }
     }
 
@@ -605,16 +597,6 @@ extension Voice {
         for key in dismiss { picked[key] = "dismissed" }
         for key in fix { picked[key] = "fix" }
         return triageCompletion(held, picked: picked, note: note ?? "")
-    }
-    /// What completing a round reads back, from the round when it was read: one on someone else's pull request takes
-    /// no verdicts and only leaves the queue.
-    static func roundReadBack(_ held: JSON?, fix: [String], dismiss: [String]) -> String {
-        if let held, !triageTakesVerdicts(held) {
-            return "Take the review round off the queue: it is on someone else's pull request, so nothing is sent to be fixed."
-        }
-        let said = fix.isEmpty ? "nothing to fix, so the pull request is approved" : "\(fix.count) finding\(fix.count == 1 ? "" : "s") sent to be fixed"
-        let dropped = dismiss.isEmpty ? "" : ", \(dismiss.count) dismissed"
-        return "Complete the review round: \(said)\(dropped)."
     }
     /// A finding as the model reads it: its key, severity, place and words, and the verdict given it in plain terms.
     static func finding(_ f: JSON, verdict: String) -> JSON {
