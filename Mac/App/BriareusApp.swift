@@ -24,8 +24,10 @@ struct BriareusApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {}
-            CommandMenu("View") {
+            // Into the system's View menu: a CommandMenu("View") would add a second one beside it.
+            CommandGroup(before: .toolbar) {
                 Button("Reload") { NotificationCenter.default.post(name: .refreshScreen, object: nil) }.keyboardShortcut("r")
+                Divider()
             }
         }
     }
