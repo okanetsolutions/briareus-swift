@@ -1,4 +1,4 @@
-// A project's voice conversation, opened from its screen: GPT-Live or GPT-Realtime about that project's agents, pull requests and
+// A project's voice conversation, opened from its screen: GPT-Realtime about that project's agents, pull requests and
 // findings, and nothing else. What both sides said scrolls as captions; the actions it ran on the server are listed
 // under them.
 import SwiftUI
@@ -141,7 +141,7 @@ struct VoiceScreen: View {
     private func costLine(since started: Date) -> some View {
         TimelineView(.periodic(from: started, by: 1)) { context in
             VStack(spacing: 2) {
-                Text(voice.engine.title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                Text(Voice.title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                 Text(voice.cost.line(elapsed: voice.elapsed(at: context.date)))
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     .lineLimit(1).minimumScaleFactor(0.7)

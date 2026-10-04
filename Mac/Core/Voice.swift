@@ -1,78 +1,39 @@
-// The voice mode's side of OpenAI's voice models: the session it opens, the tools it calls on the client API, and
-// what each answer becomes for the model to say. No UI and no audio here.
+// The voice mode's side of GPT-Realtime, OpenAI's realtime voice model: the session it opens, the tools it calls on the
+// client API, and what each answer becomes for the model to say. No UI and no audio here.
 //
-// Two models can hold the conversation, chosen in Settings so their cost can be compared. GPT-Live speaks and hands
-// the tools to a Responses model behind it (its "delegation"); GPT-Realtime decides itself which tool to call. Either
-// way the phone runs each call on /api/v1 with its own token and answers with a short JSON summary. A voice
-// conversation belongs to one project: no tool names a repository, the phone puts that project's in every call.
+// GPT-Realtime holds the spoken conversation and decides itself which tool to call. The phone runs each call on /api/v1
+// with its own token and answers with a short JSON summary. A voice conversation belongs to one project: no tool names a
+// repository, the phone puts that project's in every call.
 import Foundation
 
-/// A model the voice can talk with.
-enum VoiceEngine: String, CaseIterable, Sendable {
-    case live = "gpt-live-1"
-    case realtime = "gpt-realtime-2.1-mini"
-
-    var title: String {
-        switch self {
-        case .live: return "GPT-Live 1"
-        case .realtime: return "GPT-Realtime 2.1 mini"
-        }
-    }
-    /// Where a call starts: the phone posts its WebRTC offer with the session, and the answer comes back.
-    var endpoint: URL {
-        switch self {
-        case .live: return URL(string: "https://api.openai.com/v1/live/sessions")!
-        case .realtime: return URL(string: "https://api.openai.com/v1/realtime/calls")!
-        }
-    }
-    /// Marin first, the default of both; then each model's other voices.
-    var voices: [String] {
-        switch self {
-        case .live: return ["marin", "gleam", "meridian", "willow", "stone", "vesper", "quartz", "ripple", "bossa", "tempo",
-                            "beacon", "delta", "cinder"]
-        case .realtime: return ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"]
-        }
-    }
-    /// The voice chosen when this model has it, else its default.
-    func voice(_ chosen: String) -> String { voices.contains(chosen) ? chosen : Voice.defaultVoice }
-}
-
 enum Voice {
-    /// The data channel both models send and take their JSON events on.
+    /// Where a call starts: the phone posts its WebRTC offer with the session, and the SDP answer comes back.
+    static let endpoint = URL(string: "https://api.openai.com/v1/realtime/calls")!
+    /// The data channel GPT-Realtime sends and takes its JSON events on.
     static let channel = "oai-events"
-    static let defaultVoice = "marin"
-    /// The Responses model GPT-Live hands the tools to.
-    static let defaultBackend = "gpt-6-luna"
-    /// What writes out the user's speech for GPT-Realtime's captions; the model hears the audio itself.
+    static let model = "gpt-realtime-2.1-mini"
+    static let title = "GPT-Realtime 2.1 mini"
+    /// What writes out the user's speech for the captions; the model hears the audio itself.
     static let transcriber = "gpt-4o-mini-transcribe"
+    static let defaultVoice = "marin"
+    /// Marin first, the default; then the Realtime API's other voices.
+    static let voices = ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"]
 
     /// How the voice speaks: short, in the speaker's language, about one project, and never claiming what a tool
-    /// has not confirmed. GPT-Realtime holds the tools itself, so its instructions carry their rules too.
-    static func instructions(project: String, engine: VoiceEngine) -> String {
-        let common = """
-        You are the voice of Briareus, an app that runs coding agents on the user's projects. This conversation is about \
-        one project only: \(project). The user talks to you hands-free, often with the phone locked. Answer in the \
-        language the user speaks, in one or two short sentences. Speak only when the user has said something; do not \
-        volunteer updates. If the user asks about another project, say this conversation can only work on \(project).
-        """
-        switch engine {
-        case .live:
-            return common + """
-             Delegate anything about the project's conversations, agents, pull requests, issues or findings to the \
-            backend, and say only what it confirms. Before the backend starts, messages, stops, closes or deletes a \
-            conversation or merges a pull request, read back what will happen in a few words and wait for the user's yes.
-            """
-        case .realtime:
-            return common + """
-             Use the tools for anything about the project's conversations, agents, pull requests, issues or findings, and \
-            say only what they confirm. Before you start, message, stop, close or delete a conversation or merge a pull \
-            request, read back what will happen in a few words and wait for the user's yes.
+    /// has not confirmed; then the tools' rules.
+    static func instructions(project: String) -> String { """
+    You are the voice of Briareus, an app that runs coding agents on the user's projects. This conversation is about one \
+    project only: \(project). The user talks to you hands-free, often with the phone locked. Answer in the language the \
+    user speaks, in one or two short sentences. Speak only when the user has said something; do not volunteer updates. \
+    Use the tools for anything about the project's conversations, agents, pull requests, issues or findings, and say only \
+    what they confirm. If the user asks about another project, say this conversation can only work on \(project). Before \
+    you start, message, stop, close or delete a conversation, start an errand, decide a finding or merge a pull request, \
+    read back what will happen in a few words and wait for the user's yes.
 
-            """ + toolInstructions(project: project)
-        }
-    }
+    \(toolInstructions(project: project))
+    """ }
 
-    /// What the model that calls the tools knows of the project, the tools and their rules.
+    /// What the model knows of the project, the tools and their rules.
     static func toolInstructions(project: String) -> String { """
     ## Voice conversation context
     This is a live voice conversation about one project on the user's Briareus server: \(project). Coding agents work \
@@ -136,32 +97,15 @@ enum Voice {
     the tool says it is.
     """ }
 
-    /// GPT-Live's session: the voice, and the backend with the tools. WebRTC settles the audio format; the SDP offer
-    /// goes beside this, in `transport`.
-    static func liveSession(voice: String, backend: String, project: String) -> JSON {
-        ["model": .string(VoiceEngine.live.rawValue),
-         "instructions": .string(instructions(project: project, engine: .live)),
-         "audio": ["output": ["voice": .string(VoiceEngine.live.voice(voice))]],
-         "delegation": ["type": "responses", "responses": [
-            "model": .string(backend),
-            "instructions": .string(toolInstructions(project: project)),
-            "tools": .array(VoiceTool.allCases.map(\.definition)),
-            "tool_choice": "auto",
-            "parallel_tool_calls": false,
-         ]]]
-    }
-    /// What GPT-Live is posted: the session and the phone's offer.
-    static func liveCreate(offer sdp: String, session: JSON) -> JSON {
-        ["transport": ["type": "webrtc", "sdp": .string(sdp)], "session": session]
-    }
-    /// GPT-Realtime's session: the voice, the captions' transcriber, and the tools. The SDP offer goes beside it, as
-    /// another field of the form.
-    static func realtimeSession(voice: String, project: String) -> JSON {
+    /// What starts a call over WebRTC: the voice, the captions' transcriber and the tools, all on one project. `project`
+    /// is how it is named aloud: its label and repository. WebRTC settles the audio format; the SDP offer goes beside
+    /// this, as another field of the form.
+    static func session(voice: String, project: String) -> JSON {
         ["type": "realtime",
-         "model": .string(VoiceEngine.realtime.rawValue),
-         "instructions": .string(instructions(project: project, engine: .realtime)),
+         "model": .string(model),
+         "instructions": .string(instructions(project: project)),
          "audio": ["input": ["transcription": ["model": .string(transcriber)]],
-                   "output": ["voice": .string(VoiceEngine.realtime.voice(voice))]],
+                   "output": ["voice": .string(voices.contains(voice) ? voice : defaultVoice)]],
          "tools": .array(VoiceTool.allCases.map(\.definition)),
          "tool_choice": "auto"]
     }
@@ -169,102 +113,33 @@ enum Voice {
 
 // MARK: - Cost
 
-/// What a conversation has cost so far, in dollars, at the prices OpenAI publishes. An estimate: OpenAI's own bill is
-/// the reference.
-///
-/// GPT-Live bills the minutes a conversation is open, by the second, and the backend model's tokens apart.
-/// GPT-Realtime bills tokens: each response's on `response.done`, and each transcription of the user's speech.
+/// What a conversation has cost so far, in dollars, from the token usage OpenAI reports: each response's on
+/// `response.done`, and each transcription of the user's speech on its completed event. Prices per million tokens, as
+/// OpenAI lists them for gpt-realtime-2.1-mini and gpt-4o-mini-transcribe.
+/// An estimate: OpenAI's own bill is the reference.
 struct VoiceCost: Equatable, Sendable {
-    /// GPT-Live's dollars per minute of voice.
-    static let livePerMinute = 0.05
-    /// Backend models' dollars per million tokens: input, cached input, output.
-    static let backendPrices: [String: (input: Double, cached: Double, output: Double)] = [
-        "gpt-6-luna": (0.1, 0.01, 0.5),
-        "gpt-6-sol": (2, 0.2, 10),
-    ]
-
-    let engine: VoiceEngine
-    /// The backend model GPT-Live's tokens are priced at.
-    let backend: String
-    /// GPT-Live's voice seconds as last reported: each report replaces the one before.
-    private(set) var seconds: Double = 0
-    private(set) var inputTokens = 0
-    private(set) var cachedTokens = 0
-    private(set) var outputTokens = 0
-    /// GPT-Realtime's dollars, added up as its usage arrives.
-    private(set) var realtimeDollars = 0.0
-    private var counted: Set<String> = []
-
-    init(engine: VoiceEngine = .live, backend: String = Voice.defaultBackend) {
-        self.engine = engine
-        self.backend = backend
-    }
-
-    static func == (a: VoiceCost, b: VoiceCost) -> Bool {
-        a.engine == b.engine && a.backend == b.backend && a.seconds == b.seconds && a.tokens == b.tokens
-            && a.realtimeDollars == b.realtimeDollars
-    }
-
-    var tokens: Int { inputTokens + cachedTokens + outputTokens }
-
-    // GPT-Live
-
-    /// Reads a `session.usage.updated` or `session.closed` event's voice seconds.
-    mutating func voice(_ event: JSON) {
-        if let s = event["usage"]["seconds"].number, s.isFinite, s >= 0 { seconds = s }
-    }
-    /// Counts a backend response's tokens, from its `response.completed` event, once per response.
-    mutating func backend(_ response: JSON) {
-        let usage = response["usage"]
-        guard usage.isObject, counted.insert(response["id"].string ?? UUID().uuidString).inserted else { return }
-        let input = usage["input_tokens"].int ?? 0
-        let cached = min(usage["input_tokens_details"]["cached_tokens"].int ?? 0, input)
-        inputTokens += input - cached
-        cachedTokens += cached
-        outputTokens += usage["output_tokens"].int ?? 0
-    }
-    /// GPT-Live's voice dollars for `elapsed` seconds of conversation, at least the last reported.
-    func voiceDollars(seconds elapsed: Double = 0) -> Double { max(seconds, elapsed) / 60 * Self.livePerMinute }
-    /// GPT-Live's backend dollars; nil for a model whose price is not known here.
-    func backendDollars() -> Double? {
-        guard let price = Self.backendPrices[backend] else { return tokens == 0 ? 0 : nil }
-        return (Double(inputTokens) * price.input + Double(cachedTokens) * price.cached + Double(outputTokens) * price.output) / 1_000_000
-    }
-
-    // GPT-Realtime
+    private(set) var dollars = 0.0
+    private(set) var tokens = 0
 
     /// A response's usage: input split into text, audio and image, each with a cached part; output into text and audio.
     mutating func add(response usage: JSON) {
+        tokens += (usage["input_tokens"].int ?? 0) + (usage["output_tokens"].int ?? 0)
         let input = usage["input_token_details"], cached = input["cached_tokens_details"], output = usage["output_token_details"]
         func n(_ j: JSON) -> Double { Double(j.int ?? 0) }
-        let inCached = Int(n(cached["text_tokens"]) + n(cached["audio_tokens"]) + n(cached["image_tokens"]))
-        inputTokens += max((usage["input_tokens"].int ?? 0) - inCached, 0)
-        cachedTokens += inCached
-        outputTokens += usage["output_tokens"].int ?? 0
         let fresh = (text: n(input["text_tokens"]) - n(cached["text_tokens"]),
                      audio: n(input["audio_tokens"]) - n(cached["audio_tokens"]),
                      image: n(input["image_tokens"]) - n(cached["image_tokens"]))
-        realtimeDollars += (max(fresh.text, 0) * 0.60 + n(cached["text_tokens"]) * 0.06
-                            + max(fresh.audio, 0) * 10 + n(cached["audio_tokens"]) * 0.30
-                            + max(fresh.image, 0) * 0.80 + n(cached["image_tokens"]) * 0.08
-                            + n(output["text_tokens"]) * 2.40 + n(output["audio_tokens"]) * 20) / 1_000_000
+        dollars += (max(fresh.text, 0) * 0.60 + n(cached["text_tokens"]) * 0.06
+                    + max(fresh.audio, 0) * 10 + n(cached["audio_tokens"]) * 0.30
+                    + max(fresh.image, 0) * 0.80 + n(cached["image_tokens"]) * 0.08
+                    + n(output["text_tokens"]) * 2.40 + n(output["audio_tokens"]) * 20) / 1_000_000
     }
+
     /// A transcription's usage, when it is billed by tokens.
     mutating func add(transcription usage: JSON) {
         guard usage["type"].string == "tokens" else { return }
-        inputTokens += usage["input_tokens"].int ?? 0
-        outputTokens += usage["output_tokens"].int ?? 0
-        realtimeDollars += (Double(usage["input_tokens"].int ?? 0) * 1.25 + Double(usage["output_tokens"].int ?? 0) * 5) / 1_000_000
-    }
-
-    // Both
-
-    /// The conversation's dollars after `elapsed` seconds; GPT-Live's backend counts as nothing when its price is unknown.
-    func dollars(elapsed: Double = 0) -> Double {
-        switch engine {
-        case .live: return voiceDollars(seconds: elapsed) + (backendDollars() ?? 0)
-        case .realtime: return realtimeDollars
-        }
+        tokens += (usage["input_tokens"].int ?? 0) + (usage["output_tokens"].int ?? 0)
+        dollars += (Double(usage["input_tokens"].int ?? 0) * 1.25 + Double(usage["output_tokens"].int ?? 0) * 5) / 1_000_000
     }
 
     /// "$0.0123", with more places while it is under a cent.
@@ -276,64 +151,47 @@ struct VoiceCost: Equatable, Sendable {
         let s = Int(max(seconds, 0).rounded(.down))
         return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
     }
-    private var tokenText: String { tokens >= 1000 ? String(format: "%.1fk tokens", Double(tokens) / 1000) : "\(tokens) tokens" }
-
     /// What the screen shows under the controls after `elapsed` seconds.
     func line(elapsed: Double = 0) -> String {
-        switch engine {
-        case .realtime:
-            return "≈ \(Self.dollars(realtimeDollars)) · \(Self.time(elapsed)) · \(tokenText)"
-        case .live:
-            let voice = voiceDollars(seconds: elapsed), time = Self.time(max(seconds, elapsed))
-            guard let backend = backendDollars() else {
-                return "≈ \(Self.dollars(voice)) voice (\(time)) + \(tokenText) on \(self.backend)"
-            }
-            return "≈ \(Self.dollars(voice + backend)) · voice \(time) \(Self.dollars(voice)) · backend \(tokenText) \(Self.dollars(backend))"
-        }
+        let tokenText = tokens >= 1000 ? String(format: "%.1fk tokens", Double(tokens) / 1000) : "\(tokens) tokens"
+        return "≈ \(Self.dollars(dollars)) · \(Self.time(elapsed)) · \(tokenText)"
     }
 }
 
-// MARK: - Comparing
+// MARK: - Usage
 
-/// One finished conversation, kept on the phone to compare the models.
+/// One finished conversation, kept on the phone: how long it ran and what it cost.
 struct VoiceRecord: Equatable, Sendable {
-    var engine: VoiceEngine
     var seconds: Double
     var dollars: Double
     var date: Date
 
-    init(engine: VoiceEngine, seconds: Double, dollars: Double, date: Date) {
-        self.engine = engine; self.seconds = seconds; self.dollars = dollars; self.date = date
+    init(seconds: Double, dollars: Double, date: Date) {
+        self.seconds = seconds; self.dollars = dollars; self.date = date
     }
+    /// What `json` saved. One kept from another model (GPT-Live, which the app used to offer) is not this one's.
     init?(_ j: JSON) {
-        guard let engine = j["engine"].string.flatMap(VoiceEngine.init), let seconds = j["seconds"].number,
+        guard (j["engine"].string ?? Voice.model) == Voice.model, let seconds = j["seconds"].number,
               let dollars = j["dollars"].number, let date = j["date"].number else { return nil }
-        self.init(engine: engine, seconds: seconds, dollars: dollars, date: Date(timeIntervalSince1970: date))
+        self.init(seconds: seconds, dollars: dollars, date: Date(timeIntervalSince1970: date))
     }
     var json: JSON {
-        ["engine": .string(engine.rawValue), "seconds": .number(seconds), "dollars": .number(dollars),
+        ["engine": .string(Voice.model), "seconds": .number(seconds), "dollars": .number(dollars),
          "date": .number(date.timeIntervalSince1970)]
     }
 }
 
-/// A model's row in Settings: its conversations, how long they ran and what they cost.
+/// The conversations kept, added up: how many, how long they ran and what they cost.
 struct VoiceTally: Equatable, Sendable {
-    var engine: VoiceEngine
     var conversations = 0
     var seconds = 0.0
     var dollars = 0.0
 
+    init(_ records: [VoiceRecord]) {
+        for r in records { conversations += 1; seconds += r.seconds; dollars += r.dollars }
+    }
     /// Dollars per minute of conversation; nil before any.
     var perMinute: Double? { seconds > 0 ? dollars / seconds * 60 : nil }
-
-    /// One row per model, in the order the models are listed, those without conversations included.
-    static func rows(_ records: [VoiceRecord]) -> [VoiceTally] {
-        VoiceEngine.allCases.map { engine in
-            records.filter { $0.engine == engine }.reduce(into: VoiceTally(engine: engine)) { t, r in
-                t.conversations += 1; t.seconds += r.seconds; t.dollars += r.dollars
-            }
-        }
-    }
 }
 
 // MARK: - Tools
@@ -709,7 +567,7 @@ extension Voice {
         text.count > length ? String(text.prefix(length)) + "…" : text
     }
     /// What a pull request changes, from the first page of its files: the totals, its description, and each file by its
-    /// name with its diff, so the backend can say what the change touches. Diffs are cut to `perFile` characters each
+    /// name with its diff, so the model can say what the change touches. Diffs are cut to `perFile` characters each
     /// and `budget` in all; the files past the budget keep their names.
     static func changes(_ page: PullFilesPage, description: String? = nil, perFile: Int = 4000, budget: Int = 60000) -> JSON {
         let pr = page.pr

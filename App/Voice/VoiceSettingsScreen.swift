@@ -1,5 +1,5 @@
-// Settings › Voice: the OpenAI API key the voice mode connects with, the model it talks to, its voice, how long a
-// silence ends a conversation, and what each model's conversations have taken in time and cost, side by side.
+// Settings › Voice: the OpenAI API key the voice mode connects with, its voice, how long a silence ends a conversation,
+// and what the conversations have taken in time and cost.
 import SwiftUI
 
 struct VoiceSettingsScreen: View {
@@ -32,17 +32,9 @@ struct VoiceSettingsScreen: View {
             .listRowBackground(Theme.row)
 
             Section {
-                Picker("Model", selection: $settings.engine) {
-                    ForEach(VoiceEngine.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
+                LabeledContent("Model", value: Voice.title)
                 Picker("Voice", selection: $settings.voice) {
-                    ForEach(settings.engine.voices, id: \.self) { Text($0.capitalized).tag($0) }
-                }
-                if settings.engine == .live {
-                    LabeledContent("Backend model") {
-                        TextField(Voice.defaultBackend, text: $settings.backend)
-                            .multilineTextAlignment(.trailing).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    }
+                    ForEach(Voice.voices, id: \.self) { Text($0.capitalized).tag($0) }
                 }
                 Stepper(value: $settings.idleMinutes, in: 0...30) {
                     LabeledContent("End after silence", value: settings.idleMinutes == 0 ? "Never" : "\(settings.idleMinutes) min")
@@ -50,19 +42,17 @@ struct VoiceSettingsScreen: View {
             } header: {
                 Text("Conversation")
             } footer: {
-                Text(settings.engine == .live
-                     ? "GPT-Live bills each minute a conversation is open, by the second; its backend model chooses the actions and bills its tokens apart. Changes apply to the next conversation."
-                     : "GPT-Realtime mini chooses the actions itself and bills the audio and text it hears and says, and the transcription of your speech apart. Changes apply to the next conversation.")
+                Text("GPT-Realtime mini chooses the actions itself and bills the audio and text it hears and says, and the transcription of your speech apart. A change of voice applies to the next conversation.")
             }
             .listRowBackground(Theme.row)
 
-            comparison
+            usage
         }
         .scrollContentBackground(.hidden)
         .background(Theme.background)
         .navigationTitle("Voice")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Clear the comparison?", isPresented: $clearing, titleVisibility: .visible) {
+        .confirmationDialog("Clear the usage?", isPresented: $clearing, titleVisibility: .visible) {
             Button("Clear", role: .destructive) { history.clear() }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -70,10 +60,11 @@ struct VoiceSettingsScreen: View {
         }
     }
 
-    // MARK: Comparison
+    // MARK: Usage
 
-    private var comparison: some View {
-        Section {
+    private var usage: some View {
+        let row = history.tally
+        return Section {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                 GridRow {
                     Text("Model")
@@ -82,31 +73,29 @@ struct VoiceSettingsScreen: View {
                 }
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Divider()
-                ForEach(history.tallies, id: \.engine) { row in
-                    GridRow {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(row.engine.title).font(.subheadline.weight(.medium))
-                            Text("\(row.conversations) conversation\(row.conversations == 1 ? "" : "s")")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                        Text(VoiceCost.time(row.seconds)).font(.subheadline.monospacedDigit())
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(VoiceCost.dollars(row.dollars)).font(.subheadline.monospacedDigit())
-                            Text(row.perMinute.map { "\(VoiceCost.dollars($0))/min" } ?? "—")
-                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                        }
+                GridRow {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Voice.title).font(.subheadline.weight(.medium))
+                        Text("\(row.conversations) conversation\(row.conversations == 1 ? "" : "s")")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
-                    .accessibilityElement(children: .combine)
+                    Text(VoiceCost.time(row.seconds)).font(.subheadline.monospacedDigit())
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(VoiceCost.dollars(row.dollars)).font(.subheadline.monospacedDigit())
+                        Text(row.perMinute.map { "\(VoiceCost.dollars($0))/min" } ?? "—")
+                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }
                 }
+                .accessibilityElement(children: .combine)
             }
             .padding(.vertical, 4)
             if !history.records.isEmpty {
-                Button("Clear comparison", role: .destructive) { clearing = true }
+                Button("Clear usage", role: .destructive) { clearing = true }
             }
         } header: {
-            Text("Comparison")
+            Text("Usage")
         } footer: {
-            Text("Every voice conversation on this iPhone, by the model it was with: how long they ran and what they cost, estimated at OpenAI's published prices. OpenAI's bill is the reference.")
+            Text("Every voice conversation on this iPhone: how long they ran and what they cost, estimated at OpenAI's published prices. OpenAI's bill is the reference.")
         }
         .listRowBackground(Theme.row)
     }
