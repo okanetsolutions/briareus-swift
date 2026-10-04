@@ -309,13 +309,17 @@ final class VoiceSession: ObservableObject {
                 if tool == .readIssue, Store.shared.supports("issue_timeline") {
                     var rows: [JSON] = [], read = arguments
                     read["page"] = 1
-                    for _ in 0..<Voice.issueTimelinePages {
+                    var cut = false
+                    for page in 0..<Voice.issueTimelinePages {
                         guard let timeline = try? await Store.shared.call("issue_timeline", read, timeout: 60) else { break }
                         rows += timeline["events"].items
                         guard let next = timeline["nextPage"].int else { break }
+                        // Pages remain past the last one read: the comments read are not the latest.
+                        if page == Voice.issueTimelinePages - 1 { cut = true }
                         read["page"] = JSON(next)
                     }
                     answer["timeline"] = .array(rows)
+                    if cut { answer["timeline_cut"] = true }
                 }
                 let sessions = tool.readsConversations
                     ? (try? await Store.shared.call("sessions", ["repo": .string(repo)])).flatMap(Session.parseList) ?? []

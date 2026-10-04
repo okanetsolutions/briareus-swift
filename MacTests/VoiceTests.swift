@@ -365,4 +365,23 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(VoiceTool.readReviewRound.summary(j(#"{"sessions":[{"id":"a","title":"T","status":"idle"}]}"#), args: ["session_id": "a"])["error"],
                        "That conversation holds no review round waiting for a decision.")
     }
+
+    func testReadinessFollowsThePullRequestsDepthInItsStack() {
+        // The row's header says 1, but the chain puts it at depth 2: it is not ready, as its stack line says.
+        let answer = j(#"""
+        {"pulls":[{"number":11,"title":"On top","checks":"success","labels":[{"name":"code-approved"}],"stack":{"id":1,"position":1,"total":2}}],
+         "stacks":{"1":[{"number":10,"depth":1},{"number":11,"depth":2}]}}
+        """#)
+        let pull = VoiceTool.listPullRequests.summary(answer, args: [:])["pull_requests"][0]
+        XCTAssertEqual(pull["ready_to_merge"], false)
+        XCTAssertEqual(pull["stacked_on"], 10)
+    }
+
+    func testAnIssueReadOnlyInPartSaysItsCommentsMayNotBeTheLatest() {
+        var answer = j(#"{"issue":{"number":5,"title":"T","state":"open","comments":900}}"#)
+        answer["timeline"] = [["kind": "commented", "actor": "ana", "body": "Old"]]
+        XCTAssertTrue(VoiceTool.readIssue.summary(answer, args: [:])["comments_note"].isNull)
+        answer["timeline_cut"] = true
+        XCTAssertNotNil(VoiceTool.readIssue.summary(answer, args: [:])["comments_note"].string)
+    }
 }

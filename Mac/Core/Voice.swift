@@ -513,6 +513,9 @@ enum VoiceTool: String, CaseIterable, Sendable {
                 ["from": .string(c["actor"].string ?? "a deleted account"), "text": .string(Voice.cut(CarText.inline(c["body"].string ?? ""), 800))]
             })
             out["comments_total"] = JSON(issue.comments)
+            if answer["timeline_cut"].is(true) {
+                out["comments_note"] = "Only the start of a long timeline was read: these may not be the latest comments. Say so."
+            }
             return out
         case .startConversation, .workOnIssue:
             guard let session = Session(answer["session"]) else { return ["done": true] }
@@ -615,8 +618,10 @@ extension Voice {
     /// Ready to merge: approved by its label, checks passed, no conflicts, not a draft, and not stacked on another pull
     /// request: in a stack only the bottom one, position 1, merges next.
     static func readyToMerge(_ pr: PullSummary, stack: StackPosition? = nil) -> Bool {
-        pr.labels.contains { foldEqual($0.name, approvedLabel) } && pr.checks == "success" && !pr.hasConflicts && !pr.draft
-            && (stack?.position ?? 1) == 1
+        // Its depth in the chain, as the board shows it; the header's position only when the chain does not name it.
+        let depth: Int = stack.map { s in s.chain.first { $0.number == pr.number }?.depth ?? s.position } ?? 1
+        let approved = pr.labels.contains { foldEqual($0.name, approvedLabel) }
+        return approved && pr.checks == "success" && !pr.hasConflicts && !pr.draft && depth == 1
     }
     /// Where a pull request sits in its stack, in words, and the pull request under it; nil when it is not stacked.
     static func stacked(_ stack: StackPosition?, number: Int) -> (said: String, under: Int?)? {
