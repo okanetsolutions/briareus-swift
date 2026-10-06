@@ -1,7 +1,7 @@
 // One pull request on a phone (the Mac's PullScreen): what it is and where it stands at the top, a scrolling section
 // picker in place of GitHub's tabs (description, files, reviews and comments, the issues it closes and the project
-// boards they are on, findings, the conversations run on it, and ▶ Run), the errands in the toolbar, and a squash merge
-// that says first what stands in its way.
+// boards they are on, findings, the conversations run on it, and ▶ Run), the errands in the toolbar, its edits and Update
+// branch in the More menu, and a squash merge that says first what stands in its way.
 import SwiftUI
 
 struct PullScreen: View {
@@ -20,6 +20,8 @@ struct PullScreen: View {
     @State private var deletingServed = false
     @State private var stackOpen = false
     @State private var openFindings: Set<Int> = []
+    @State private var editPrompt: ItemEdit?
+    @State private var confirmingUpdate = false
 
     init(repo: String, number: Int, stack: JSON?, summary: JSON?) {
         self.repo = repo; self.number = number; self.stack = stack; self.summary = summary
@@ -44,7 +46,7 @@ struct PullScreen: View {
         .toolbar { toolbar }
         .task {
             await poll(every: 30) {
-                if errands.busy || model.merging || model.deciding != nil || model.mergeQuestion != nil { return nil }
+                if errands.busy || model.merging || model.deciding != nil || model.mergeQuestion != nil || model.editing || model.updatingBranch { return nil }
                 return await reading { try await model.load() }
             }
         }
@@ -79,6 +81,16 @@ struct PullScreen: View {
             Button("Delete", role: .destructive) { Task { await model.delete(s.id) } }
             Button("Cancel", role: .cancel) {}
         } message: { s in Text("\u{201C}\(s.displayTitle)\u{201D}") }
+        .alert("Update the branch of #\(number)?", isPresented: $confirmingUpdate) {
+            Button("Update branch") { Task { await model.updateBranch() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("GitHub merges the latest changes from \(model.base ?? "its base") into \(model.head ?? "its branch"), as a new commit on the branch. A session working on it needs to pull before it pushes again.")
+        }
+        .itemEdits($editPrompt, target: ItemEditTarget(what: "pull request", number: number, title: model.title, body: model.pullBody,
+                                                       labels: model.boardRow?.labels ?? [], assignees: model.boardRow?.assignees ?? [])) { fields in
+            Task { await model.edit(fields) }
+        }
         .alert("Delete this run?", isPresented: $deletingServed) {
             Button("Delete", role: .destructive) {
                 if let id = model.runTarget { Task { await model.delete(id) } }
@@ -172,6 +184,11 @@ struct PullScreen: View {
                     Button { Task { await model.askMerge() } } label: { Label("Merge…", systemImage: "arrow.triangle.merge") }
                         .disabled(model.merging || errands.busy)
                 }
+                if model.canUpdateBranch {
+                    Button { confirmingUpdate = true } label: { Label("Update branch…", systemImage: "arrow.triangle.2.circlepath") }
+                        .disabled(model.updatingBranch || model.merging)
+                }
+                if model.canEdit { editMenu }
                 if store.supports("pull_files") {
                     Button { navigate(.pullFiles(repo: repo, number: number)) } label: { Label("Files changed", systemImage: "doc.on.doc") }
                 }
@@ -183,9 +200,26 @@ struct PullScreen: View {
                     Button { Pasteboard.copy(head) } label: { Label("Copy branch name", systemImage: "arrow.triangle.branch") }
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                if model.editing || model.updatingBranch { ProgressView() } else { Image(systemName: "ellipsis.circle") }
             }
             .accessibilityLabel("More")
+        }
+    }
+
+    /// Edit the title and description, the labels and the assignees; the labels and assignees start from the board's row.
+    @ViewBuilder private var editMenu: some View {
+        Section {
+            Button { editPrompt = .details } label: { Label("Edit title and description…", systemImage: "pencil") }
+                .disabled(model.editing || model.pullBody == nil)
+            if let row = model.boardRow {
+                Button { editPrompt = .labels } label: { Label("Edit labels…", systemImage: "tag") }.disabled(model.editing)
+                Menu {
+                    AssigneesMenuItems(assignees: row.assignees, edit: $editPrompt) { fields in Task { await model.edit(fields) } }
+                } label: {
+                    Label("Assignees", systemImage: "person.badge.plus")
+                }
+                .disabled(model.editing)
+            }
         }
     }
 
@@ -203,6 +237,10 @@ struct PullScreen: View {
         if let e = model.error { Section { ErrorNotice(message: e) }.listRowBackground(Theme.row) }
         ErrandNotice(runner: errands, place: "under Conversations")
         if let e = model.mergeError { Section { ErrorNotice(message: e) }.listRowBackground(Theme.row) }
+        if let e = model.editError { Section { ErrorNotice(message: e) }.listRowBackground(Theme.row) }
+        if let note = model.branchNote {
+            Section { Label(note, systemImage: "arrow.triangle.2.circlepath").font(.callout).foregroundStyle(.secondary) }.listRowBackground(Theme.row)
+        }
     }
 
     private var stateText: String {
