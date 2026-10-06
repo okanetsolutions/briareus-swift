@@ -348,7 +348,7 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(feedback.label, "Give feedback")
         XCTAssertEqual(feedback.input, ActionInput(label: "Your feedback", placeholder: "What should change on this pull request?", required: true))
         XCTAssertEqual(known("run")?.label, "Run"); XCTAssertEqual(known("review")?.label, "Code review")
-        XCTAssertEqual(known("test-sheet")?.label, "Test sheet"); XCTAssertEqual(known("test-run")?.label, "Run test sheet")
+        XCTAssertEqual(known("test-sheet")?.label, "Test sheet"); XCTAssertEqual(known("test-run")?.label, "Record QA")
         // QA as an errand of its own was removed (#12); the test sheet and its run came back.
         XCTAssertNil(known("qa"))
     }
@@ -423,7 +423,7 @@ final class BoardTests: XCTestCase {
         // QA stays gone even when the server lists it (#12); the test sheet and its run are errands the app knows.
         XCTAssertEqual(ids(a), "run,review,test-sheet,test-run,zz-last,aa-first")
         guard a.count == 6 else { return }
-        XCTAssertEqual(a[2].label, "Test sheet"); XCTAssertEqual(a[3].label, "Run test sheet"); XCTAssertEqual(a[3].operation, "action")
+        XCTAssertEqual(a[2].label, "Test sheet"); XCTAssertEqual(a[3].label, "Record QA"); XCTAssertEqual(a[3].operation, "action")
         a.removeSubrange(2...3)
         // The app words its own errands; the server's label for one it knows is not used.
         XCTAssertEqual(a[0].label, "Run"); XCTAssertNil(a[0].input)
