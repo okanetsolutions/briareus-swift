@@ -29,6 +29,8 @@ final class IssueStatusReader {
     private var read: Set<Int> = []
     private var reading = false
     private var gen = 0
+    /// A redraw is on its way: the Statuses read meanwhile join it.
+    private var announcing = false
     private let rows: () -> (pulls: [PullSummary], filter: BoardFilter)
     private let changed: () -> Void
 
@@ -77,11 +79,22 @@ final class IssueStatusReader {
             if throttled(r.error) || r.error?.kind == .cancelled { return }
             read.insert(number)
             if let v = r.value {
-                status[number] = issueProjectStatus(v["issue"]) ?? ""
+                let said = issueProjectStatus(v["issue"]) ?? ""
+                if status[number] != said { status[number] = said; announce() }
                 Store.shared.cache.store(v, savedIssueKey(repo, number))
-                changed()
             }
             next()
+        }
+    }
+    /// The board is redrawn at most once a second while the Statuses come in, not once for each: a hundred rows drawn
+    /// again for every issue read kept the main thread busy for the whole round.
+    private func announce() {
+        guard !announcing else { return }
+        announcing = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            announcing = false
+            changed()
         }
     }
 

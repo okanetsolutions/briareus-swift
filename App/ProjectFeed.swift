@@ -14,8 +14,19 @@ final class ProjectFeed: ObservableObject {
     /// True once the conversations were read, from what was saved or from the server.
     @Published private(set) var sessionsLoaded = false
     /// The board as the server sent it (`pulls` and `issues`), which is what is saved and what names the stacks.
-    @Published private(set) var board: JSON = .null
+    @Published private(set) var board: JSON = .null {
+        // Parsed once per answer: the screens read these on every redraw, and a busy repository's board is hundreds of
+        // kilobytes to walk.
+        didSet { parseBoard() }
+    }
     @Published private(set) var boardLoaded = false
+    /// The board's pull requests and issues, each issue with what the server sent for it.
+    private(set) var pulls: [PullSummary] = []
+    private(set) var issues: [(summary: IssueSummary, raw: JSON)] = []
+    private func parseBoard() {
+        pulls = PullSummary.parseList(board["pulls"])
+        issues = board["issues"].items.compactMap { j in IssueSummary(j).map { ($0, j) } }
+    }
 
     private struct Reading {
         var at: Date?
@@ -27,7 +38,7 @@ final class ProjectFeed: ObservableObject {
     init(repo: String) {
         self.repo = repo
         if let saved = Store.shared.cache.value("sessions:\(repo)").flatMap(Session.parseList) { sessions = saved; sessionsLoaded = true }
-        if let saved = Store.shared.cache.value("pulls:\(repo)") { board = saved; boardLoaded = true }
+        if let saved = Store.shared.cache.value("pulls:\(repo)") { board = saved; boardLoaded = true; parseBoard() }
     }
 
     /// `fresh` asks the server whatever was read a moment ago, as after a write or a pull to refresh.

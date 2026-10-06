@@ -36,6 +36,9 @@ final class IssueStatusReader: ObservableObject {
     private var gen = 0
     private var pulls: [PullSummary] = []
     private var filter = BoardFilter()
+    /// Statuses read since the board was last redrawn; they join `status` together, at most once a second.
+    private var incoming: [Int: String] = [:]
+    private var announcing = false
 
     init(repo: String) { self.repo = repo }
 
@@ -79,7 +82,8 @@ final class IssueStatusReader: ObservableObject {
                 guard g == gen else { return }
                 reading = false
                 read.insert(number)
-                status[number] = issueProjectStatus(v["issue"]) ?? ""
+                let said = issueProjectStatus(v["issue"]) ?? ""
+                if status[number] != said { announce(number, said) }
                 Store.shared.cache.store(v, savedIssueKey(repo, number))
             } catch {
                 guard g == gen else { return }
@@ -89,6 +93,19 @@ final class IssueStatusReader: ObservableObject {
                 read.insert(number)
             }
             next()
+        }
+    }
+
+    /// The board is redrawn once a second while the Statuses come in, not once for each issue read.
+    private func announce(_ number: Int, _ said: String) {
+        incoming[number] = said
+        guard !announcing else { return }
+        announcing = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            announcing = false
+            status.merge(incoming) { _, new in new }
+            incoming = [:]
         }
     }
 
