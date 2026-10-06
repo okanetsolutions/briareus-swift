@@ -215,6 +215,8 @@ final class BoardModel: ObservableObject {
             case .failure(let e):
                 writeError = e.isRefusal ? e.description : "\(e.description) The merge may still have completed; refresh before trying again."
             }
+            // The other rows' Merge buttons are back while the list is read again.
+            mergingNumber = 0
             await load(fresh: true)
         }
     }
