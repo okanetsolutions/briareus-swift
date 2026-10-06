@@ -504,6 +504,9 @@ struct PullScreen: View {
             ForEach(Array(model.closes.enumerated()), id: \.offset) { _, link in
                 if !link.isForeign(repo), let raw = onBoard.first(where: { $0["number"].truncatedInt == link.number }) {
                     DestinationLink(destination: .issue(repo: repo, issue: raw)) { BoardLinkedRow(link: link, repo: repo) }
+                } else if !link.isForeign(repo), store.supports("issue") {
+                    // Off the board, the issue screen reads the rest itself.
+                    DestinationLink(destination: .issue(repo: repo, issue: bareIssue(link))) { BoardLinkedRow(link: link, repo: repo) }
                 } else if safeWebURL(link.url) {
                     Button { boardOpenWeb(link.url) } label: { BoardLinkedRow(link: link, repo: repo) }.foregroundStyle(.primary)
                 } else {
@@ -514,6 +517,13 @@ struct PullScreen: View {
             Text("Successfully merging this pull request may close these issues.")
         }
         .listRowBackground(Theme.row)
+    }
+
+    /// What the issue screen opens with until it has read the issue.
+    private func bareIssue(_ link: BoardLink) -> JSON {
+        var bare: JSON = ["number": JSON(link.number), "title": .string(link.title)]
+        if let url = link.url { bare["url"] = .string(url) }
+        return bare
     }
 
     private static let decisionIDs = ["", "fix", "optional", "dismissed"]
