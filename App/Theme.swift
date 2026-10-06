@@ -140,28 +140,42 @@ func inlineMarkdown(_ text: String) -> AttributedString {
     return out
 }
 
-/// A table that scrolls sideways when wider than the screen, its header row tinted.
+/// A table that scrolls sideways when wider than the screen, its header row tinted, with Copy table above its right edge
+/// (copying it as Markdown, as the Mac's does). Each cell selects on its own: a long press copies it.
 private struct MarkdownTable: View {
     let block: MdBlock
+    @State private var copied = false
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
-                ForEach(Array(block.cells.enumerated()), id: \.offset) { r, row in
-                    GridRow {
-                        ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
-                            let align = c < block.aligns.count ? block.aligns[c] : .left
-                            Text(inlineMarkdown(cell)).font(.callout.weight(r == 0 ? .semibold : .regular))
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(minWidth: 32, maxWidth: 280, alignment: align == .right ? .trailing : align == .center ? .center : .leading)
-                                .padding(.horizontal, 8).padding(.vertical, 5)
-                                .frame(maxHeight: .infinity, alignment: .top)
-                                .background(r == 0 ? Theme.surface : .clear)
-                                .overlay(Rectangle().strokeBorder(Theme.border, lineWidth: 0.5))
+        VStack(alignment: .trailing, spacing: 2) {
+            Button {
+                Pasteboard.copy(Markdown.tableSource(block)); copied = true
+                Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+            } label: {
+                Label(copied ? "Copied" : "Copy table", systemImage: copied ? "checkmark" : "doc.on.doc")
+                    .font(.caption).padding(.vertical, 2).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).foregroundStyle(.secondary)
+            .accessibilityLabel(copied ? "Copied" : "Copy table as Markdown")
+            ScrollView(.horizontal, showsIndicators: false) {
+                Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                    ForEach(Array(block.cells.enumerated()), id: \.offset) { r, row in
+                        GridRow {
+                            ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
+                                let align = c < block.aligns.count ? block.aligns[c] : .left
+                                Text(inlineMarkdown(cell)).font(.callout.weight(r == 0 ? .semibold : .regular))
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(minWidth: 32, maxWidth: 280, alignment: align == .right ? .trailing : align == .center ? .center : .leading)
+                                    .padding(.horizontal, 8).padding(.vertical, 5)
+                                    .frame(maxHeight: .infinity, alignment: .top)
+                                    .background(r == 0 ? Theme.surface : .clear)
+                                    .overlay(Rectangle().strokeBorder(Theme.border, lineWidth: 0.5))
+                            }
                         }
                     }
                 }
+                .overlay(Rectangle().strokeBorder(Theme.border, lineWidth: 1))
             }
-            .overlay(Rectangle().strokeBorder(Theme.border, lineWidth: 1))
         }
     }
 }

@@ -1,6 +1,6 @@
-// Settings, as the Windows client's settings page: a sidebar of its own (← Back to sessions, the projects,
-// the providers, the database pool and the SSH servers, each with ＋ New) whose rows open their forms across the detail
-// pane. Those routes need an Admin token; any other token gets a sentence saying so.
+// Settings, as the Windows client's settings page: a sidebar of its own (← Back to sessions, the projects, the providers,
+// the database pool, the SSH servers, the Forge accounts and the Slack workspaces, each with ＋ New) whose rows open their
+// forms across the detail pane. Those routes need an Admin token; any other token gets a sentence saying so.
 import SwiftUI
 
 struct SettingsSidebar: View {
@@ -35,6 +35,8 @@ struct SettingsSidebar: View {
     // MARK: Sections
 
     @ViewBuilder private var content: some View {
+        // This computer's own settings come first: they need no Admin token.
+        MeetingSettingsRow(selected: selected == Screen.meetingSettings.id)
         let why = settingsUnavailable("settings_projects", path: "settings/projects", what: "Project settings", manage: "projects")
         SectionHeader(title: "Projects", onNew: why == nil ? { model.newProject() } : nil)
         if let why {
@@ -59,18 +61,27 @@ struct SettingsSidebar: View {
                               onNew: store.supports("create_db_server") ? { model.newServer() } : nil)
                 servers
             }
-            // The SSH servers agents may run commands on, last, as on the Windows client.
+            // The SSH servers agents may run commands on, as on the Windows client, then the Forge accounts and the Slack
+            // workspaces on a server that has them.
             ssh
+            if store.supports("settings_forge_accounts") { forge }
+            if store.supports("settings_slack_workspaces") { slack }
         }
     }
 
     @ViewBuilder private var projects: some View {
         let s = model.projects
         if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
+        // The order is the dashboard sidebar's and the composer's, so it is moved from here: ↑ and ↓ on the row under the
+        // pointer and on the open one, and the same in its right-click menu.
+        let movable = s.list.count > 1 && store.supports("order_projects")
         ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
             let repo = row["repo"].string ?? ""
             ItemRow(label: row["label"].nonEmpty ?? repo, sub: repo, enabled: !row["enabled"].is(false), db: row["dbPoolEnabled"].is(true),
-                    selected: selected == "project-settings:\(row["id"].int32 ?? 0)") { model.openProject(i) }
+                    selected: selected == "project-settings:\(row["id"].int32 ?? 0)",
+                    moves: movable ? ItemRow.Moves(up: i > 0 && !model.ordering, down: i + 1 < s.list.count && !model.ordering) { model.move(i, by: $0) } : nil) {
+                model.openProject(i)
+            }
                 .contextMenu {
                     if store.supports("order_projects") {
                         Button("Move up") { model.move(i, by: -1) }.disabled(i == 0 || model.ordering)
@@ -141,6 +152,42 @@ struct SettingsSidebar: View {
             }
             if !s.loaded { LoadingNote(text: "Loading SSH servers…") }
         }
+    }
+
+    /// The Forge accounts under the SSH servers: each with its dot (a token is stored), label, organization and projects.
+    @ViewBuilder private var forge: some View {
+        Color.clear.frame(height: 8)
+        SectionHeader(title: "Forge accounts", onNew: store.supports("create_forge_account") ? { model.newForge() } : nil)
+        let s = model.forge
+        if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
+        ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
+            ItemRow(label: row["label"].nonEmpty ?? row["organization"].nonEmpty ?? "Forge account", sub: ForgeAccountFormState.sidebarLine(row),
+                    enabled: row["hasToken"].is(true), selected: selected == Screen.forgeAccountSettings(row: row, defaults: nil).id) { model.openForge(i) }
+        }
+        // An account being added shows as its own row until it is saved.
+        if selected == "forge-account:new" { ItemRow(label: "New Forge account", sub: "not saved yet", enabled: false, selected: true) {} }
+        if s.loaded && s.list.isEmpty && s.error == nil {
+            Explanation(text: "No Forge accounts yet. ＋ New adds a Laravel Forge organization and the projects that may use it.")
+        }
+        if !s.loaded { LoadingNote(text: "Loading Forge accounts…") }
+    }
+
+    /// The Slack workspaces under the Forge accounts: each with its dot (a token is stored), label, workspace and projects.
+    @ViewBuilder private var slack: some View {
+        Color.clear.frame(height: 8)
+        SectionHeader(title: "Slack workspaces", onNew: store.supports("create_slack_workspace") ? { model.newSlack() } : nil)
+        let s = model.slack
+        if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
+        ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
+            ItemRow(label: row["label"].nonEmpty ?? row["team"].nonEmpty ?? "Slack workspace", sub: SlackWorkspaceFormState.sidebarLine(row),
+                    enabled: row["hasToken"].is(true), selected: selected == Screen.slackWorkspaceSettings(row: row, defaults: nil).id) { model.openSlack(i) }
+        }
+        // A workspace being added shows as its own row until it is saved.
+        if selected == "slack-workspace:new" { ItemRow(label: "New Slack workspace", sub: "not saved yet", enabled: false, selected: true) {} }
+        if s.loaded && s.list.isEmpty && s.error == nil {
+            Explanation(text: "No Slack workspaces yet. ＋ New lets a project's sessions send Slack messages as you and hear the replies.")
+        }
+        if !s.loaded { LoadingNote(text: "Loading Slack workspaces…") }
     }
 
     // MARK: Foot
@@ -231,37 +278,92 @@ private struct Explanation: View {
 }
 
 /// A row of the projects, the pool or the SSH servers: its dot (`.dot.idle` when on, the plain grey dot when off), its label,
-/// and its repository or address under it, with the pool's `db` tag after a project that claims a server.
+/// and its repository or address under it, with the pool's `db` tag after a project that claims a server. A project row
+/// that can move has ↑ and ↓ at the right end of its first line while it is hovered or open.
 private struct ItemRow: View {
+    /// Which way the row can go now, and what a click on an arrow does with -1 or 1.
+    struct Moves {
+        var up: Bool
+        var down: Bool
+        var move: (Int) -> Void
+    }
     var label: String
     var sub: String
     var enabled: Bool
     var db = false
     var selected: Bool
+    var moves: Moves? = nil
+    var action: () -> Void
+    @State private var hovered = false
+    private var arrows: Bool { moves != nil && (hovered || selected) }
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Button(action: action) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 7) {
+                        StatusDot(status: enabled ? "idle" : "")
+                        Text(label).font(Theme.subheadline).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
+                        Spacer(minLength: 0)
+                    }
+                    // The label stops short of the arrows while they show.
+                    .padding(.trailing, arrows ? 50 : 0)
+                    .frame(height: 22)
+                    HStack(spacing: 8) {
+                        Text(sub).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.tail)
+                        if db { Tag(text: "db") }
+                        Spacer(minLength: 0)
+                    }
+                    .frame(height: 18)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 6).fill(hovered || selected ? Theme.raise : .clear))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if let moves, arrows {
+                HStack(spacing: 2) {
+                    MoveArrow(up: true, enabled: moves.up) { moves.move(-1) }
+                    MoveArrow(up: false, enabled: moves.down) { moves.move(1) }
+                }
+                .padding(.top, 6).padding(.trailing, 6)
+            }
+        }
+        .onHover { hovered = $0 }
+    }
+}
+
+/// A project row's ↑ or ↓: 22px, raised, the sidebar's fill and the accent's border under the pointer. A disabled one still
+/// takes the click, so the end of the list does not open the project under it.
+private struct MoveArrow: View {
+    var up: Bool
+    var enabled: Bool
     var action: () -> Void
     @State private var hovered = false
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 7) {
-                    StatusDot(status: enabled ? "idle" : "")
-                    Text(label).font(Theme.subheadline).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
-                    Spacer(minLength: 0)
-                }
-                .frame(height: 22)
-                HStack(spacing: 8) {
-                    Text(sub).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.tail)
-                    if db { Tag(text: "db") }
-                    Spacer(minLength: 0)
-                }
-                .frame(height: 18)
-            }
-            .padding(.horizontal, 8).padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 6).fill(hovered || selected ? Theme.raise : .clear))
-            .contentShape(Rectangle())
+        let lit = enabled && hovered
+        Button { if enabled { action() } } label: {
+            Image(systemName: Glyph.symbol(up ? 0xE70E : 0xE70D)).font(.system(size: 10))
+                .foregroundStyle(!enabled ? Theme.muted.opacity(0.5) : lit ? Theme.ink : Theme.muted)
+                .frame(width: 22, height: 22)
+                .background(RoundedRectangle(cornerRadius: 4).fill(lit ? Theme.sidebar : Theme.raise))
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(lit ? Theme.accentDim : Theme.raise, lineWidth: 1))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(up ? "Move up" : "Move down")
         .onHover { hovered = $0 }
+    }
+}
+
+/// "This computer": the meeting assistant's row, its dot on once an ElevenLabs API key is saved.
+private struct MeetingSettingsRow: View {
+    var selected: Bool
+    @ObservedObject private var meeting = Meeting.shared
+    var body: some View {
+        SectionHeader(title: "This computer", onNew: nil)
+        ItemRow(label: "🎙 Meeting assistant", sub: meeting.hasKey ? "ElevenLabs API key saved" : "add an ElevenLabs API key",
+                enabled: meeting.hasKey, selected: selected) { Navigator.shared.show(.meetingSettings) }
+        Color.clear.frame(height: 16)
     }
 }
 

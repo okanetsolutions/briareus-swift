@@ -1,7 +1,7 @@
 // The Settings tab: this device's connection (who it is, what it may do, revoke or forget it), the voice mode's OpenAI key, then for an Admin token
 // the Mac app's settings page as the Mac's settings sidebar lists it: the projects (in the server's order, which Edit
-// rearranges), the providers sessions start on, the database pool, the SSH servers, and the tokens issued. Each row opens
-// its form.
+// rearranges, as each row's Move up and Move down do), the providers sessions start on, the database pool, the SSH
+// servers, the Forge accounts and the Slack workspaces. Each row opens its form.
 import SwiftUI
 
 struct SettingsScreen: View {
@@ -19,7 +19,8 @@ struct SettingsScreen: View {
 
     /// Any of the settings lists is this token's to read.
     private var managesServer: Bool {
-        ["settings_projects", "settings_providers", "settings_db_servers", "settings_ssh_servers"].contains { store.supports($0) }
+        ["settings_projects", "settings_providers", "settings_db_servers", "settings_ssh_servers", "settings_forge_accounts",
+         "settings_slack_workspaces"].contains { store.supports($0) }
     }
 
     var body: some View {
@@ -41,6 +42,8 @@ struct SettingsScreen: View {
                 if store.supports("settings_providers") { providers }
                 if store.supports("settings_db_servers") { servers }
                 ssh
+                if store.supports("settings_forge_accounts") { forge }
+                if store.supports("settings_slack_workspaces") { slack }
             }
             Section {
                 Text("Briareus for \(Platform.name) · \(Platform.version)").font(.footnote).foregroundStyle(.secondary)
@@ -136,8 +139,21 @@ struct SettingsScreen: View {
         let s = lists.projects
         Section {
             if let error = s.error { ErrorNotice(message: error) }
-            ForEach(Array(s.list.enumerated()), id: \.offset) { _, row in
+            let movable = store.supports("order_projects") && s.list.count > 1
+            ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
                 DestinationLink(destination: .projectSettings(row: row, defaults: s.defaults)) { SettingsProjectRow(row: row) }
+                    .contextMenu {
+                        if movable {
+                            Button("Move up", systemImage: "arrow.up") { lists.moveProject(i, by: -1) }.disabled(i == 0 || lists.ordering)
+                            Button("Move down", systemImage: "arrow.down") { lists.moveProject(i, by: 1) }.disabled(i + 1 >= s.list.count || lists.ordering)
+                        }
+                    }
+                    .accessibilityActions {
+                        if movable && !lists.ordering {
+                            if i > 0 { Button("Move up") { lists.moveProject(i, by: -1) } }
+                            if i + 1 < s.list.count { Button("Move down") { lists.moveProject(i, by: 1) } }
+                        }
+                    }
             }
             .onMove(perform: store.supports("order_projects") ? { lists.moveProjects(from: $0, to: $1) } : nil)
             if !s.loaded { SettingsLoadingRow(text: "Loading projects…") }
@@ -148,7 +164,7 @@ struct SettingsScreen: View {
             if s.loaded && s.list.isEmpty && s.error == nil {
                 Text("No projects yet. ＋ adds a repository sessions can be started against.")
             } else if store.supports("order_projects") && s.list.count > 1 {
-                Text("The order here is the order the apps list them in; Edit rearranges it.")
+                Text("The order here is the order the apps list them in; Edit rearranges it, and so do Move up and Move down when a row is held.")
             }
         }
         .listRowBackground(Theme.row)
@@ -226,6 +242,61 @@ struct SettingsScreen: View {
                 Text(why)
             } else if s.loaded && s.list.isEmpty && s.error == nil {
                 Text("No SSH servers registered. ＋ lets a project's sessions run commands on one, with approval.")
+            }
+        }
+        .listRowBackground(Theme.row)
+    }
+}
+
+extension SettingsScreen {
+    // MARK: Forge accounts
+
+    /// The Forge accounts under the SSH servers: each with its icon (tinted while a token is stored), label, organization
+    /// and projects.
+    @ViewBuilder fileprivate var forge: some View {
+        let s = lists.forge
+        Section {
+            if let error = s.error { ErrorNotice(message: error) }
+            ForEach(Array(s.list.enumerated()), id: \.offset) { _, row in
+                DestinationLink(destination: .forgeAccountSettings(row: row, defaults: s.defaults)) {
+                    SettingsItemRow(title: row["label"].nonEmpty ?? row["organization"].nonEmpty ?? "Forge account",
+                                    subtitle: ForgeAccountFormState.sidebarLine(row), on: row["hasToken"].is(true), systemImage: "cloud")
+                }
+            }
+            if !s.loaded { SettingsLoadingRow(text: "Loading Forge accounts…") }
+        } header: {
+            SettingsSectionHeader(title: "Forge accounts", newLabel: "New Forge account",
+                                  onNew: store.supports("create_forge_account") ? { navigate(.forgeAccountSettings(row: nil, defaults: s.defaults)) } : nil)
+        } footer: {
+            if s.loaded && s.list.isEmpty && s.error == nil {
+                Text("No Forge accounts yet. ＋ adds a Laravel Forge organization and the projects that may use it.")
+            }
+        }
+        .listRowBackground(Theme.row)
+    }
+
+    // MARK: Slack workspaces
+
+    /// The Slack workspaces under the Forge accounts: each with its icon (tinted while a token is stored), label,
+    /// workspace and projects.
+    @ViewBuilder fileprivate var slack: some View {
+        let s = lists.slack
+        Section {
+            if let error = s.error { ErrorNotice(message: error) }
+            ForEach(Array(s.list.enumerated()), id: \.offset) { _, row in
+                DestinationLink(destination: .slackWorkspaceSettings(row: row, defaults: s.defaults)) {
+                    SettingsItemRow(title: row["label"].nonEmpty ?? row["team"].nonEmpty ?? "Slack workspace",
+                                    subtitle: SlackWorkspaceFormState.sidebarLine(row), on: row["hasToken"].is(true),
+                                    systemImage: "bubble.left.and.text.bubble.right")
+                }
+            }
+            if !s.loaded { SettingsLoadingRow(text: "Loading Slack workspaces…") }
+        } header: {
+            SettingsSectionHeader(title: "Slack workspaces", newLabel: "New Slack workspace",
+                                  onNew: store.supports("create_slack_workspace") ? { navigate(.slackWorkspaceSettings(row: nil, defaults: s.defaults)) } : nil)
+        } footer: {
+            if s.loaded && s.list.isEmpty && s.error == nil {
+                Text("No Slack workspaces yet. ＋ lets a project's sessions send Slack messages as you and hear the replies.")
             }
         }
         .listRowBackground(Theme.row)

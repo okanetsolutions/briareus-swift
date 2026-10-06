@@ -16,6 +16,8 @@ func conversationStatusLine(_ s: Session) -> String {
         if let round = loop["rounds"].truncatedInt { sub += " \u{00B7} \u{1F501} loop round \(round)" } else { sub += " \u{00B7} \u{1F501} loop" }
     }
     if let branch = s.raw["branch"].nonEmpty { sub += " \u{00B7} \(branch)" }
+    let browser = BrowserState.sessionOn(s.raw)
+    if browser.on { sub += browser.running ? " \u{00B7} \u{1F310} browser" : " \u{00B7} \u{1F310} browser starts next turn" }
     let input = s.raw["inputTokens"].number, output = s.raw["outputTokens"].number
     if input != nil || output != nil { sub += " \u{00B7} \(formatTokens((input ?? 0) + (output ?? 0))) tok" }
     if let cost = s.raw["costUsd"].number { sub += " \u{00B7} \(formatCost(cost))" }

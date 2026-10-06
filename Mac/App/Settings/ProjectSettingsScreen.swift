@@ -1,6 +1,7 @@
-// A project's settings across the whole pane, the Windows client's sections as tabs along the top (Project with its setup,
-// Database, Code review, Orchestrator, Checkout .env, Run), saved through /settings/projects. A dot marks a tab with
-// unsaved changes; the provider, model and effort pickers serve the code review, each errand step and the workers.
+// A project's settings across the whole pane, the Windows client's sections as tabs along the top (Project with its
+// Active switch and its setup, Database, Code review, Orchestrator, Checkout .env, Run), saved through /settings/projects.
+// A dot marks a tab with unsaved changes; the provider, model and effort pickers serve the code review, each errand step
+// and the workers.
 import SwiftUI
 
 @MainActor
@@ -274,7 +275,14 @@ struct ProjectSettingsScreen: View {
         switch model.tab {
         case .project:
             SettingsPair { field(.repo) } right: { field(.label) }
+            // Switching a project off keeps it, and its settings, without a session starting on it.
+            check(.enabled)
+            if state.offered(.enabled) && !state.bool(.enabled) {
+                SettingsNote(text: "Inactive: no session can be started on it and it is left out of the project lists; its settings are kept for when it is switched back on.")
+            }
+            Color.clear.frame(height: 4)
             field(.localDir)
+            field(.board)
             field(.setup)
             field(.php)
             SettingsNote(text: "This project's own prompt wording is kept on the server; saving here keeps it as it is.")
@@ -291,6 +299,10 @@ struct ProjectSettingsScreen: View {
             }
             runtimeRow(.review)
             field(.publish)
+            check(.autoLoop)
+            if state.offered(.autoLoop) && state.bool(.autoLoop) {
+                SettingsNote(text: "Every finding of a session's review-loop round, low severity and parked ones too, goes to ⚙ Implement feedback on its own, and the fix is pushed and reviewed again until a round comes back clean and code-approved. The loop's round limit and repeated-findings check still stop one that cannot converge. Sessions still need their review loop switched on; a standalone ⌕ Code review keeps its manual findings.")
+            }
             // Each step runs as a turn of its own, on the code review's runtime unless it names one; a step switched off has none.
             check(.testSheet)
             if state.bool(.testSheet) { runtimeRow(.testSheet).padding(.leading, 23) }

@@ -12,6 +12,8 @@ enum Destination: Hashable, Identifiable {
     case board(repo: String)
     /// A pull request; `stack` is its StackPosition JSON and `summary` its board row, either nil when unknown.
     case pull(repo: String, number: Int, stack: JSON?, summary: JSON?)
+    /// ▶ Run on the project's default branch, served in an embedded browser.
+    case branchRun(repo: String)
     /// A pull request's changed files on their own.
     case pullFiles(repo: String, number: Int)
     /// An issue, with its board row.
@@ -25,10 +27,18 @@ enum Destination: Hashable, Identifiable {
     case providerSettings(row: JSON?, defaults: JSON?)
     case dbServerSettings(row: JSON?, defaults: JSON?)
     case sshServerSettings(row: JSON?, defaults: JSON?)
+    case forgeAccountSettings(row: JSON?, defaults: JSON?)
+    case slackWorkspaceSettings(row: JSON?, defaults: JSON?)
     /// A project's voice conversation, or a hands-free one held to one of its conversations.
     case voice(repo: String, conversation: VoiceConversation? = nil)
     /// The voice mode's OpenAI key and choices.
     case voiceSettings
+    /// A session's ⚡ Webhook: its settings, URLs and keys.
+    case webhook(session: JSON)
+    /// A project's Laravel Forge servers and sites.
+    case forge(repo: String)
+    /// One Forge site: its overview, deploy script and .env. `account` is the Forge account's id.
+    case forgeSite(repo: String, account: Double, server: JSON, site: JSON)
 
     var id: String {
         switch self {
@@ -37,6 +47,7 @@ enum Destination: Hashable, Identifiable {
         case .board(let repo): return "pulls:\(repo)"
         case .pull(let repo, let n, _, _): return "pull:\(repo)#\(n)"
         case .pullFiles(let repo, let n): return "files:\(repo)#\(n)"
+        case .branchRun(let repo): return "branch-run:\(repo)"
         case .issue(let repo, let issue): return "issue:\(repo)#\(issue["number"].int ?? 0)"
         case .findings(let repo): return "findings:\(repo ?? "")"
         case .usage: return "usage"
@@ -44,8 +55,14 @@ enum Destination: Hashable, Identifiable {
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .dbServerSettings(let row, _): return "db-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .sshServerSettings(let row, _): return "ssh-server:\(row?["id"].int.map(String.init) ?? "new")"
+        case .forgeAccountSettings(let row, _): return "forge-account:\(row?["id"].int.map(String.init) ?? "new")"
+        case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
         case .voice(let repo, let held): return "voice:\(repo)" + (held.map { ":\($0.id)" } ?? "")
         case .voiceSettings: return "voice-settings"
+        case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
+        case .forge(let repo): return "forge:\(repo)"
+        case .forgeSite(let repo, let account, let server, let site):
+            return "forge-site:\(repo):" + String(format: "%.0f:%.0f:%.0f", account, server["id"].number ?? 0, site["id"].number ?? 0)
         }
     }
     static func == (a: Destination, b: Destination) -> Bool { a.id == b.id }
@@ -58,6 +75,7 @@ enum Destination: Hashable, Identifiable {
         case .board(let repo): BoardScreen(repo: repo)
         case .pull(let repo, let number, let stack, let summary): PullScreen(repo: repo, number: number, stack: stack, summary: summary)
         case .pullFiles(let repo, let number): PullFilesScreen(repo: repo, number: number)
+        case .branchRun(let repo): BranchRunScreen(repo: repo)
         case .issue(let repo, let issue): IssueScreen(repo: repo, issue: issue)
         case .findings(let repo): FindingsScreen(repo: repo)
         case .usage: UsageScreen()
@@ -65,8 +83,13 @@ enum Destination: Hashable, Identifiable {
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)
         case .dbServerSettings(let row, let defaults): DBServerSettingsScreen(row: row, defaults: defaults)
         case .sshServerSettings(let row, let defaults): SSHServerSettingsScreen(row: row, defaults: defaults)
+        case .forgeAccountSettings(let row, let defaults): ForgeAccountSettingsScreen(row: row, defaults: defaults)
+        case .slackWorkspaceSettings(let row, let defaults): SlackWorkspaceSettingsScreen(row: row, defaults: defaults)
         case .voice(let repo, let held): VoiceScreen(repo: repo, conversation: held)
         case .voiceSettings: VoiceSettingsScreen()
+        case .webhook(let session): WebhookScreen(session: session)
+        case .forge(let repo): ProjectForgeScreen(repo: repo)
+        case .forgeSite(let repo, let account, let server, let site): ForgeSiteScreen(repo: repo, account: account, server: server, site: site)
         }
     }
 }

@@ -1,7 +1,7 @@
 // A project's conversations, as the Mac sidebar's second screen (SidebarSessions, SidebarRows): found by their title, the
 // closed ones on request, those at work first; each row marked by its pull request where it has one. Above them the
-// project's board, its findings waiting and a new conversation; a swipe closes, reopens, renames or deletes one, and
-// Select closes or deletes several, as ☑ Select does.
+// project's board, its findings waiting and a new conversation, and ▶ Run on its default branch; a swipe closes, reopens,
+// renames or deletes one, and Select closes or deletes several, as ☑ Select does. The menu also opens the project's Laravel Forge.
 import SwiftUI
 
 struct ProjectView: View {
@@ -54,6 +54,14 @@ struct ProjectView: View {
     @ViewBuilder private var sections: some View {
         if let message = actionError ?? error {
             Section { ErrorNotice(message: message) }.listRowBackground(Theme.row)
+        }
+        if BranchRunModel.offered && !editing && search.isEmpty {
+            Section {
+                DestinationLink(destination: .branchRun(repo: repo)) { Label("Run default branch", systemImage: "play.fill") }
+            } footer: {
+                Text("Serves the default branch in a fresh workspace with the project’s run commands, and opens it here.")
+            }
+            .listRowBackground(Theme.row)
         }
         let list = shown
         let active = list.filter(\.isActive)
@@ -141,9 +149,17 @@ struct ProjectView: View {
                     Button { composing = true } label: { Image(systemName: "square.and.pencil") }
                         .accessibilityLabel("New conversation")
                 }
-                if canSelect {
-                    Button { withAnimation { editMode = .active } } label: { Image(systemName: "checkmark.circle") }
-                        .accessibilityLabel("Select conversations")
+                // Selecting and the project's Laravel Forge (an Admin token's) in the menu.
+                if canSelect || ProjectForgeModel.offered {
+                    Menu {
+                        if canSelect {
+                            Button("Select Conversations", systemImage: "checkmark.circle") { withAnimation { editMode = .active } }
+                        }
+                        if ProjectForgeModel.offered {
+                            Button("Forge Servers and Sites", systemImage: "server.rack") { navigate(.forge(repo: repo)) }
+                        }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                    .accessibilityLabel("More")
                 }
             }
         }

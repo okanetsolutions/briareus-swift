@@ -1,9 +1,10 @@
 // The project board (screen_pulls.c pulls_screen_*): open pull requests and issues as tabs, with the project's SSH and SFTP
 // sessions beside them for a token that may read the servers. Each pull request row carries the errands its state offers,
 // the suggested one filled; author, reviewer and label pickers narrow the lists, and are kept per repository.
+import Combine
 import SwiftUI
 
-enum BoardTab: Int { case pulls, issues, ssh, sftp }
+enum BoardTab: Int { case pulls, issues, ssh, sftp, board, run, db, forge, meeting }
 
 @MainActor
 final class BoardModel: ObservableObject {
@@ -25,12 +26,29 @@ final class BoardModel: ObservableObject {
     @Published var startingNumber = 0
     @Published var startingID: String?
     @Published var writeError: String?
+    /// The pull request being merged from its row: read for its head first, then merged.
+    @Published var mergingNumber = 0
     @Published private(set) var reading = false
     var dialogOpen = false
+    /// The Board tab's own state (ProjectBoardTab.swift).
+    lazy var projectBoard = ProjectBoardModel(repo: repo)
+    /// The project Status of each linked issue, for the chips on the pull request rows (IssueProjects.swift).
+    lazy var issueStatus = IssueStatusReader(repo: repo, rows: { [weak self] in (self?.pulls ?? [], self?.pullFilter ?? BoardFilter()) },
+                                             changed: { [weak self] in self?.objectWillChange.send() })
     private var hasOpening = false
     private var opening = BoardFilter()
     private var readGen = 0
     private var readingActions = false, readingRuns = false
+    /// The Run, Database and Forge tabs (project_run.c, project_db.c, project_forge.c), kept with the board as the Windows
+    /// client keeps them with its screen; what they change redraws the board's header.
+    private(set) lazy var run = adoptTab(ProjectRunModel(repo: repo))
+    private(set) lazy var db = adoptTab(ProjectDBModel(repo: repo))
+    private(set) lazy var forge = adoptTab(ProjectForgeModel(repo: repo))
+    private var tabSinks: [AnyCancellable] = []
+    private func adoptTab<T: ObservableObject>(_ m: T) -> T where T.ObjectWillChangePublisher == ObservableObjectPublisher {
+        tabSinks.append(m.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() })
+        return m
+    }
 
     init(repo: String) {
         self.repo = repo
@@ -78,6 +96,7 @@ final class BoardModel: ObservableObject {
             if saved { opening = f } else { hasOpening = false; opening = BoardFilter() }
         }
         if tab == .issues && issues.isEmpty && !result["issuesError"].isSet { tab = .pulls }
+        issueStatus.restore()
         loaded = true
     }
 
@@ -111,6 +130,7 @@ final class BoardModel: ObservableObject {
             error = nil
             syncedAt = Date()
             Store.shared.cache.store(v, "pulls:\(repo)")
+            issueStatus.next()
             return nil
         case .failure(let e):
             if e.kind == .cancelled { return e }
@@ -136,9 +156,14 @@ final class BoardModel: ObservableObject {
     func refresh() {
         switch tab {
         case .ssh: RemoteSessions.sshRefresh(repo)
+        case .run: run.refresh()
+        case .db: db.refresh()
+        case .forge: forge.refresh()
         case .sftp: RemoteSessions.sftpRefresh(repo)
+        case .board: projectBoard.refresh()
         default:
             uncertain = false; writeError = nil
+            issueStatus.reset()
             Task { await load(fresh: true) }
         }
     }
@@ -176,6 +201,47 @@ final class BoardModel: ObservableObject {
         let answer = actionPrompt(action, number: pull.number)
         dialogOpen = false
         if let input = answer { start(pull, action, input: input) }
+    }
+
+    // MARK: Merge
+
+    /// ↳ Merge is offered on every pull request that is not a draft, to a token that may write on a server that reads and
+    /// merges one.
+    var mergeOffered: Bool { Store.shared.canManage && Store.shared.supports("pull") && Store.shared.supports("merge_pull") }
+    /// Merging from the board: the row carries no head commit, and the server merges only the head that was read, so the
+    /// pull request is read first and squash-merged at the head that read returns, once confirmed. Then the list is read
+    /// again.
+    func merge(_ pull: PullSummary) {
+        guard mergingNumber == 0, !busy else { return }
+        var message = "\u{201C}\(pull.title)\u{201D} is squash-merged into \(pull.baseBranch.isEmpty ? "its base branch" : pull.baseBranch) on GitHub."
+        if pull.conflicting { message += "\n\nThis branch has conflicts that must be resolved before it can merge." }
+        if pull.checksFailed { message += "\n\nSome checks failed." }
+        else if pull.checks == "pending" || pull.checks == "expected" { message += "\n\nSome checks are still running." }
+        dialogOpen = true
+        let ok = Dialogs.confirm("Merge #\(pull.number)?", message, continueLabel: "Merge", destructive: true)
+        dialogOpen = false
+        guard ok, mergingNumber == 0 else { return }
+        let number = pull.number
+        mergingNumber = number; writeError = nil
+        Task {
+            defer { mergingNumber = 0 }
+            let read = await boardCall("pull", ["repo": .string(repo), "pr": JSON(number)])
+            if let e = read.error { if e.kind != .cancelled { writeError = e.description }; return }
+            let pr = read.value?["pr"] ?? .null
+            guard pr["state"].string == "open" else { writeError = "This pull request is no longer open."; return }
+            guard let head = pr["headSha"].string, let base = pr["baseRef"].string else { writeError = "The server did not say which commit to merge."; return }
+            let r = await boardCall("merge_pull", ["repo": .string(repo), "pr": JSON(number), "headSha": .string(head), "baseRef": .string(base), "method": "squash"])
+            switch r {
+            case .success(let v):
+                writeError = v["status"].string == "pending"
+                    ? "GitHub accepted the merge and is still finishing it; the pull request leaves the list once it lands." : nil
+            case .failure(let e):
+                writeError = e.isRefusal ? e.description : "\(e.description) The merge may still have completed; refresh before trying again."
+            }
+            // The other rows' Merge buttons are back while the list is read again.
+            mergingNumber = 0
+            await load(fresh: true)
+        }
     }
 
     // MARK: Opening
@@ -223,6 +289,9 @@ struct BoardScreen: View {
     var repo: String
     @ObservedObject private var model: BoardModel
     @ObservedObject private var store = Store.shared
+    /// Which projects name a board (`hasBoard`), for the Board tab.
+    @ObservedObject private var projects = ProjectsModel.shared
+    @ObservedObject private var meeting = Meeting.shared
     @State private var remoteRevision = 0
 
     init(repo: String) {
@@ -235,18 +304,42 @@ struct BoardScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            if model.tab == .board {
+                ProjectBoardHeader(model: model.projectBoard, title: model.title, lead: meetButton, status: meeting.isFor(repo) ? meeting.status : nil)
+            } else { header }
             switch model.tab {
-            case .ssh, .sftp:
+            case .board:
+                VStack(alignment: .leading, spacing: 0) {
+                    tabs.padding(.horizontal, Theme.paneMargin)
+                    Spacer().frame(height: 14)
+                    ProjectBoardTab(model: model.projectBoard, issues: model.issues.map(\.summary), pulls: model.pulls)
+                        .padding(.horizontal, Theme.paneMargin)
+                }
+                // A project that no longer names a board falls back to its pull requests, as the tab's button goes.
+                .onReceive(projects.objectWillChange) { _ in
+                    DispatchQueue.main.async { if model.tab == .board && !ProjectBoardModel.offered(repo) { model.tab = .pulls } }
+                }
+            case .ssh, .sftp, .run, .db, .forge:
                 VStack(alignment: .leading, spacing: 0) {
                     tabs.padding(.horizontal, Theme.paneMargin)
                     Spacer().frame(height: 14)
                     Group {
-                        if model.tab == .ssh { ProjectSSHTab(repo: repo, showsHeader: false) } else { ProjectSFTPTab(repo: repo, showsHeader: false) }
+                        switch model.tab {
+                        case .ssh: ProjectSSHTab(repo: repo, showsHeader: false)
+                        case .sftp: ProjectSFTPTab(repo: repo, showsHeader: false)
+                        default: projectTab
+                        }
                     }
                     .padding(.horizontal, Theme.paneMargin)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
+            case .meeting:
+                VStack(alignment: .leading, spacing: 0) {
+                    tabs.padding(.horizontal, Theme.paneMargin)
+                    Spacer().frame(height: 14)
+                    MeetingTranscript(transcript: meeting.transcript(for: repo) ?? "")
+                }
+                .onChange(of: meeting.logRepo) { _, _ in if meeting.transcript(for: repo) == nil { model.tab = .pulls } }
             default:
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -291,6 +384,16 @@ struct BoardScreen: View {
             buttons = h?.buttons ?? []
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C),
                                         tip: model.tab == .ssh ? "Read the project's SSH servers again" : "Read the servers and the folder on show again") { model.refresh() })
+        case .run:
+            sub = model.run.subtitle
+            buttons = model.run.headerButtons
+        case .db:
+            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the project's SSH servers again") { model.refresh() })
+        case .forge:
+            if let s = model.forge.subtitle { sub = s }
+            buttons = model.forge.headerButtons
+            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read it from Forge again") { model.refresh() })
+        case .meeting: break
         default:
             // The pickers, as the Windows client's selects, and ⟳. C gives them no glyph; the SF Symbol stands in only when the
             // header is too narrow for labels, where C would draw an empty square.
@@ -301,11 +404,25 @@ struct BoardScreen: View {
                 buttons.append(HeaderButton(glyph: "person.crop.circle.badge.checkmark", label: "\(f.reviewer.isEmpty ? "All reviewers" : f.reviewer) ▾",
                                             enabled: model.loaded) { model.pick(.reviewer) })
             }
+            if model.tab == .issues {
+                let a = f.assignee.isEmpty ? "All assignees" : f.assignee == BoardFilter.noAssignee ? "No assignee" : f.assignee
+                buttons.append(HeaderButton(glyph: "person.crop.circle", label: "\(a) ▾", enabled: model.loaded) { model.pick(.assignee) })
+            }
             buttons.append(HeaderButton(glyph: "tag", label: "\(f.label.isEmpty ? "All labels" : f.label) ▾",
                                         enabled: model.loaded) { model.pick(.label) })
             buttons.append(refresh)
         }
+        // 🎙 Meet: the meeting assistant, on this project, on every tab; a meeting about it leads the line with its time,
+        // cost and what it is doing.
+        if meeting.isFor(repo) { sub = "\(meeting.status) · \(sub)" }
+        buttons.insert(meetButton, at: 0)
         return PaneHeader(title: model.title, subtitle: sub, status: status, buttons: buttons)
+    }
+    private var meetButton: HeaderButton {
+        HeaderButton(glyph: "mic", label: meeting.isFor(repo) ? "🎙 Meeting ●" : "🎙 Meet",
+                     tip: "Join a meeting with an assistant that can look up this project") {
+            MeetingMenu.show(repo: repo, title: model.title)
+        }
     }
 
     // MARK: Tabs
@@ -315,10 +432,18 @@ struct BoardScreen: View {
         _ = remoteRevision
         let open = RemoteSessions.sshCount(repo), files = RemoteSessions.sftpCount(repo)
         var labels: [(BoardTab, String)] = [(.pulls, "⇅ Pull requests"), (.issues, "⊙ Issues")]
+        // Board, after Issues, for a project that names a GitHub Projects board.
+        if ProjectBoardModel.offered(repo) { labels.append((.board, "▦ Board")) }
+        // Run, on the default branch, for a token that may serve one.
+        if ProjectRunModel.offered { labels.append((.run, "▶ Run")) }
         if remoteOffered {
             labels.append((.ssh, open > 0 ? "❯ SSH sessions \(open)" : "❯ SSH sessions"))
             labels.append((.sftp, files > 0 ? "⇵ SFTP sessions \(files)" : "⇵ SFTP sessions"))
         }
+        if ProjectDBModel.offered { labels.append((.db, "⛁ Database")) }
+        if ProjectForgeModel.offered { labels.append((.forge, "☁ Forge")) }
+        // The meeting's transcript, while one runs on this project and after it.
+        if meeting.transcript(for: repo) != nil { labels.append((.meeting, meeting.isFor(repo) ? "🎙 Meeting ●" : "🎙 Meeting")) }
         return VStack(spacing: 0) {
             HStack(spacing: 4) {
                 ForEach(labels, id: \.0) { tab, label in BoardTabButton(label: label, active: model.tab == tab) { select(tab) } }
@@ -328,7 +453,28 @@ struct BoardScreen: View {
         }
     }
     private func select(_ tab: BoardTab) {
-        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) ? tab : .pulls
+        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) || projectTabOffered(tab) || tab == .meeting ? tab : .pulls
+        if model.tab == .run { model.run.open() }
+    }
+
+    // MARK: The Run, Database and Forge tabs
+
+    private func projectTabOffered(_ tab: BoardTab) -> Bool {
+        switch tab {
+        case .run: return ProjectRunModel.offered
+        case .db: return ProjectDBModel.offered
+        case .forge: return ProjectForgeModel.offered
+        default: return false
+        }
+    }
+    /// The tab on show, from the tabs down to the bottom of the pane.
+    @ViewBuilder private var projectTab: some View {
+        switch model.tab {
+        case .run: ProjectRunTab(model: model.run)
+        case .db: ProjectDBTab(model: model.db)
+        case .forge: ProjectForgeTab(model: model.forge)
+        default: EmptyView()
+        }
     }
 
     // MARK: Lists
@@ -361,7 +507,8 @@ struct BoardScreen: View {
     @ViewBuilder private func pullList(filter: BoardFilter, shown: Int) -> some View {
         ForEach(Array(model.pulls.enumerated()), id: \.element.number) { _, pull in
             if filter.passes(BoardRow(pull)) {
-                PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number), action: { model.openPull(pull) }) {
+                PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number),
+                        issueStatus: model.issueStatus.statuses(pull), action: { model.openPull(pull) }) {
                     rowButtons(pull)
                 }
                 .padding(.bottom, 8)
@@ -376,7 +523,8 @@ struct BoardScreen: View {
     @ViewBuilder private func rowButtons(_ pull: PullSummary) -> some View {
         let actions = pull.branch.isEmpty ? [] : rowActions(catalog: model.catalog, pull: pull, failedChecks: 0)
         let runs = model.runsOn(pull.number)
-        if !actions.isEmpty || runs > 0 {
+        let merge = !pull.draft && model.mergeOffered
+        if !actions.isEmpty || runs > 0 || merge {
             FlowLayout(spacing: 6, lineSpacing: 6) {
                 ForEach(actions, id: \.id) { a in
                     let starting = model.busy && model.startingNumber == pull.number && model.startingID == a.id
@@ -386,6 +534,12 @@ struct BoardScreen: View {
                         .dashButton(pull.recommended == a.id ? .prominent : .bordered)
                         .disabled(model.busy || model.uncertain)
                         .help(a.hint)
+                }
+                if merge {
+                    Button(model.mergingNumber == pull.number ? "Merging…" : "↳ Merge") { model.merge(pull) }
+                        .dashButton(.bordered)
+                        .disabled(model.mergingNumber != 0 || model.busy)
+                        .help("Squash-merge this pull request on GitHub")
                 }
                 if runs > 0 {
                     Button(String("\(runs) run\(runs == 1 ? "" : "s") ›")) { model.openRuns(pull) }.dashButton(.plain)

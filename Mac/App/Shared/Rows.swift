@@ -132,19 +132,24 @@ struct SessionRow: View {
 
 // MARK: - Linked rows and facts
 
-/// The linked issue or pull request row under a board row: ↳, its reference, its title and its state.
+/// The linked issue or pull request row under a board row: ↳, its reference, its title and its state, and `status` (the
+/// issue's Status on its project board) as a chip after it. A pull request's row leaves the state of the issues it closes
+/// out (`showState`).
 struct LinkedRow: View {
     var link: BoardLink
     var repo: String?
+    var showState = true
     var action: (() -> Void)? = nil
+    var status: String? = nil
     var body: some View {
         let content = HStack(spacing: 5) {
             Text("↳").font(Theme.caption).foregroundStyle(Theme.tertiary).frame(width: 12, alignment: .leading)
             Text(link.reference(repo)).font(Theme.monoCaption2).foregroundStyle(Theme.muted)
             Text(link.title).font(Theme.caption).foregroundStyle(action != nil ? Theme.ink : Theme.muted).lineLimit(1).truncationMode(.tail)
-            if let state = linkedStateText(link) {
+            if showState, let state = linkedStateText(link) {
                 Text(state).font(Theme.caption2).foregroundStyle(state == "open" ? Theme.ok : state == "closed" ? Theme.muted : Theme.warn)
             }
+            if let status, !status.isEmpty { Chip(name: status, color: Theme.muted).fixedSize() }
             Spacer(minLength: 0)
         }
         .frame(height: 20)
@@ -158,15 +163,16 @@ struct MetaPart: Hashable {
     var color: Color = Theme.muted
     var mono = false
 }
-/// One 12px muted line of facts, `·` between them, the last one pushed to the right edge.
+/// One 12px muted line of facts, `·` between them (or `separator`, drawn muted), the last one pushed to the right edge.
 struct MetaLine: View {
     var parts: [MetaPart]
     var right: String? = nil
+    var separator: String? = nil
     var body: some View {
         HStack(spacing: 0) {
             HStack(spacing: 6) {
                 ForEach(Array(parts.enumerated()), id: \.offset) { i, p in
-                    if i > 0 { Text("·").font(Theme.caption).foregroundStyle(Theme.line) }
+                    if i > 0 { Text(separator ?? "·").font(Theme.caption).foregroundStyle(separator != nil ? Theme.muted : Theme.line) }
                     Text(p.text).font(p.mono ? Theme.monoCaption2 : Theme.caption).foregroundStyle(p.color).lineLimit(1).truncationMode(.tail)
                 }
             }
@@ -198,12 +204,15 @@ private struct RowBox<Content: View>: View {
     }
 }
 
-/// The row of a pull request on the board: its title, a line of facts, its labels, the issues it closes and its errand buttons.
+/// The row of a pull request on the board: its title, a line of facts split by `|`, its labels, the issues it closes and its
+/// errand buttons.
 struct PullRow<Buttons: View>: View {
     var pull: PullSummary
     var stack: StackPosition?
     var repo: String?
     var running = false
+    /// The project Status of each issue it closes, in its order; nil or "" for none.
+    var issueStatus: [String?] = []
     var action: (() -> Void)?
     @ViewBuilder var buttons: Buttons
 
@@ -219,19 +228,23 @@ struct PullRow<Buttons: View>: View {
         let review = ReviewStatus(decision: pull.reviewDecision, reviewers: pull.reviewers)
         if review != .none { d.append(MetaPart(text: review.text, color: reviewGlyph(review).color)) }
         if let stack { d.append(MetaPart(text: "stack \(stack.label())", color: Theme.accent)) }
-        if !pull.assignees.isEmpty { d.append(MetaPart(text: people(pull.assignees, limit: 2))) }
+        // The two logins say which is which; the branch is the pull request's page's to show.
+        if !pull.assignees.isEmpty { d.append(MetaPart(text: "assignee \(people(pull.assignees, limit: 2))")) }
         else { d.append(MetaPart(text: "unassigned", color: Theme.tertiary)) }
-        if let author = pull.author { d.append(MetaPart(text: "@\(author)")) }
-        if !pull.branch.isEmpty { d.append(MetaPart(text: pull.branch, mono: true)) }
+        if let author = pull.author { d.append(MetaPart(text: "author @\(author)")) }
+        let reviewers = pull.reviewers.map(\.user).filter { !$0.isEmpty }
+        if !reviewers.isEmpty { d.append(MetaPart(text: "reviewers " + reviewers.map { "@\($0)" }.joined(separator: ", "))) }
         return d
     }
 
     var body: some View {
         RowBox(running: running, action: action) {
             Text(pull.title).font(Theme.bodySemibold).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
-            MetaLine(parts: facts, right: pull.updatedAt.map { formatRelative($0) }).padding(.top, 4)
+            MetaLine(parts: facts, right: pull.updatedAt.map { formatRelative($0) }, separator: "|").padding(.top, 4)
             if !pull.labels.isEmpty { LabelChips(labels: pull.labels).padding(.top, 6) }
-            ForEach(Array(pull.issues.enumerated()), id: \.offset) { _, link in LinkedRow(link: link, repo: repo).padding(.top, 4) }
+            ForEach(Array(pull.issues.enumerated()), id: \.offset) { i, link in
+                LinkedRow(link: link, repo: repo, showState: false, status: i < issueStatus.count ? issueStatus[i] : nil).padding(.top, 4)
+            }
             buttons
         }
     }

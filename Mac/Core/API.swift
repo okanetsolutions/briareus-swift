@@ -170,12 +170,19 @@ struct APIRoute: Sendable {
         .init(name: "findings", method: "GET", path: "pulls/{pr}/findings"),
         .init(name: "finding_decision", method: "POST", path: "pulls/{pr}/findings/decision"),
         .init(name: "merge_pull", method: "POST", path: "pulls/{pr}/merge"),
+        .init(name: "update_pull", method: "PATCH", path: "pulls/{pr}"),   // its `title`, `body`, `labels` and `assignees`; a list replaces the old one
+        .init(name: "update_pull_branch", method: "POST", path: "pulls/{pr}/update-branch"),   // merges its base into it, at the `headSha` and `baseRef` read
         .init(name: "serve_pull", method: "POST", path: "pulls/{prNumber}/serve"),
         .init(name: "commit", method: "GET", path: "commits/{sha}"),
         // Issues
         .init(name: "issue", method: "GET", path: "issues/{issue}"),
         .init(name: "issue_timeline", method: "GET", path: "issues/{issue}/timeline"),   // comments and events, 100 a `page`, oldest first
         .init(name: "close_issue", method: "POST", path: "issues/{issue}/close"),   // `reason` completed or not_planned, and an optional `comment`
+        .init(name: "update_issue", method: "PATCH", path: "issues/{issue}"),   // its `title`, `body`, `labels` and `assignees`, as update_pull
+        // The project's GitHub Projects board as its view groups it (`fresh` skips the cache), and a card moved to another
+        // column: `itemId`, and `columnId` (null for "No <field>").
+        .init(name: "project_board", method: "GET", path: "project-board"),
+        .init(name: "project_board_move", method: "POST", path: "project-board/move"),
         // Sessions. The list has no project parameter: a `repo` argument cuts the answer down here instead.
         .init(name: "sessions", method: "GET", path: "sessions", filter: "repo", list: "sessions"),
         .init(name: "start_session", method: "POST", path: "sessions"),
@@ -199,6 +206,16 @@ struct APIRoute: Sendable {
         .init(name: "save_findings", method: "POST", path: "sessions/{sessionId}/findings/save"),
         .init(name: "reply_finding", method: "POST", path: "sessions/{sessionId}/findings/reply"),
         .init(name: "delete_finding", method: "POST", path: "sessions/{sessionId}/findings/delete"),
+        // The session's shared browser: its state, switched on and off, acted in, and watched (EventStream.swift).
+        .init(name: "browser", method: "GET", path: "sessions/{sessionId}/browser"),
+        .init(name: "browser_on", method: "POST", path: "sessions/{sessionId}/browser"),
+        .init(name: "browser_off", method: "DELETE", path: "sessions/{sessionId}/browser"),
+        .init(name: "browser_input", method: "POST", path: "sessions/{sessionId}/browser/input"),
+        .init(name: "browser_stream", method: "GET", path: "sessions/{sessionId}/browser/stream"),
+        // A session's webhook, for an admin token: its settings, URLs and keys, changed, and its keys replaced.
+        .init(name: "session_webhook", method: "GET", path: "sessions/{sessionId}/webhook"),
+        .init(name: "set_session_webhook", method: "PUT", path: "sessions/{sessionId}/webhook"),
+        .init(name: "rotate_session_webhook", method: "POST", path: "sessions/{sessionId}/webhook/rotate"),
         // The Cloudflare Access service token the Run tab's browser sends to ▶ Run preview hosts; a manage token.
         .init(name: "preview_access", method: "GET", path: "preview/access"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
@@ -233,6 +250,28 @@ struct APIRoute: Sendable {
         .init(name: "delete_ssh_server", method: "DELETE", path: "settings/ssh/servers/{id}"),
         // The database login stored with one, opened, for a tunnel over it to its database.
         .init(name: "ssh_server_db_credentials", method: "GET", path: "settings/ssh/servers/{id}/db-credentials"),
+        // The Laravel Forge accounts: an organization, its token (write-only) and the projects it serves; admin as well.
+        .init(name: "settings_forge_accounts", method: "GET", path: "settings/forge/accounts"),
+        .init(name: "create_forge_account", method: "POST", path: "settings/forge/accounts"),
+        .init(name: "update_forge_account", method: "PUT", path: "settings/forge/accounts/{id}"),
+        .init(name: "delete_forge_account", method: "DELETE", path: "settings/forge/accounts/{id}"),
+        // The Slack workspaces sessions send messages through: a user token and signing secret (write-only), and the
+        // projects it serves with their channels; admin as well.
+        .init(name: "settings_slack_workspaces", method: "GET", path: "settings/slack/workspaces"),
+        .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
+        .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
+        .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),
+        // ▶ Run on a branch, the default one when `branch` is absent: the board's Run tab.
+        .init(name: "serve_branch", method: "POST", path: "branches/serve"),
+        // Laravel Forge itself, read by the server with an account's token: its servers and their sites, 100 to a page.
+        .init(name: "forge_servers", method: "GET", path: "forge/accounts/{account}/servers"),
+        .init(name: "forge_sites", method: "GET", path: "forge/accounts/{account}/servers/{server}/sites"),
+        .init(name: "forge_site", method: "GET", path: "forge/accounts/{account}/servers/{server}/sites/{site}"),
+        // A site's deploy script (`content`, `autoSource`: run with its .env loaded) and its .env, read and replaced whole.
+        .init(name: "forge_deploy_script", method: "GET", path: "forge/accounts/{account}/servers/{server}/sites/{site}/deployment-script"),
+        .init(name: "set_forge_deploy_script", method: "PUT", path: "forge/accounts/{account}/servers/{server}/sites/{site}/deployment-script"),
+        .init(name: "forge_env", method: "GET", path: "forge/accounts/{account}/servers/{server}/sites/{site}/env"),
+        .init(name: "set_forge_env", method: "PUT", path: "forge/accounts/{account}/servers/{server}/sites/{site}/env"),
     ]
     private static let table: [String: APIRoute] = Dictionary(uniqueKeysWithValues: all.map { ($0.name, $0) })
 }
@@ -312,6 +351,9 @@ final class APIClient: @unchecked Sendable {
     let address: ServerAddress
     private let token: String
     var transport: HTTPTransport
+
+    /// The Authorization header's value, for a stream opened outside `send` (EventStream.swift).
+    var authorization: String { "Bearer \(token)" }
 
     /// Fails with `.invalidToken` unless the token has the token shape.
     init(address: ServerAddress, token: String, transport: HTTPTransport = URLSessionTransport()) throws {

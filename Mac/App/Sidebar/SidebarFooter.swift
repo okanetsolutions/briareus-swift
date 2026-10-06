@@ -1,6 +1,8 @@
 // The sidebar's foot (screen_projects.c sidebar_footer_paint, player_paint and the sessions screen's bulk bar): while ☑
-// Select is on, the count, Select all, ⏻ Close, 🗑 Delete and 🗑 Delete all; the player while something plays, with ⏮ ⏯ ⏭;
-// and `⚙`, `☑ Select`, the version and `⎋` above a border.
+// Select is on, the count, Select all, ⏻ Close, 🗑 Delete and 🗑 Delete all; the player while something plays, with ⏮ ⏯ ⏭
+// and under them the Mac's volume (the speaker mutes, the slider drags or clicks to a level, the wheel over the player
+// steps it); and `⚙`, `☑ Select`, the version (the waiting release's in the accent, opening the updates menu) and `⎋` above a border.
+import AppKit
 import SwiftUI
 
 /// A hairline across the sidebar, 10px in from each side.
@@ -28,6 +30,7 @@ struct SidebarFooter: View {
     var settings: () -> Void
     var signOut: () -> Void
     @ObservedObject private var media = Media.shared
+    @ObservedObject private var updater = Updater.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -68,8 +71,11 @@ struct SidebarFooter: View {
             }
             .frame(height: 36)
             .padding(.leading, 16).padding(.trailing, 10)
+            if st.hasVolume { VolumeRow(media: media).padding(.leading, 16).padding(.trailing, 10) }
             Color.clear.frame(height: 2)
         }
+        // The wheel over the player steps the volume.
+        .background(ScrollWheelCatcher { media.stepVolume($0) })
     }
 
     private func playerButton(_ symbol: String, size: CGFloat, ring: Bool, tip: String, _ action: @escaping () -> Void) -> some View {
@@ -85,15 +91,14 @@ struct SidebarFooter: View {
 
     // MARK: Foot
 
-    private var version: String { "v" + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") }
-
     private var foot: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: 6)
             FootRule()
             Color.clear.frame(height: 10)
             ZStack {
-                Text(version).font(Theme.caption2).foregroundStyle(Theme.tertiary).frame(height: 18)
+                FootText(text: updater.label, font: Theme.caption2, color: updater.highlight ? Theme.accent : Theme.tertiary) { updater.showMenu() }
+                    .help("Updates")
                 HStack(spacing: 0) {
                     FootText(text: "⚙", font: Theme.footnote, color: Theme.muted, action: settings).help("Settings")
                     Color.clear.frame(width: 12)
@@ -105,6 +110,103 @@ struct SidebarFooter: View {
             .padding(.horizontal, 16)
             Color.clear.frame(height: 12)
         }
+    }
+}
+
+/// The player's volume, under ⏮ ⏯ ⏭: the speaker mutes, the slider drags or clicks to a level, and the level in percent at
+/// the right, under ⏭.
+private struct VolumeRow: View {
+    @ObservedObject var media: Media
+
+    var body: some View {
+        let st = media.state
+        HStack(spacing: 0) {
+            Button { media.send(.mute) } label: {
+                Image(systemName: Glyph.symbol(Self.glyph(st))).font(.system(size: 11))
+                    .foregroundStyle(st.muted ? Theme.muted : Theme.ink)
+                    .frame(width: 24, height: 22).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, -4)
+            .help(st.muted ? "Unmute" : "Mute")
+            GeometryReader { geo in track(st, width: geo.size.width) }
+                .frame(height: 22)
+                .padding(.trailing, 8)
+            Text(verbatim: "\(Int((st.volume * 100).rounded()))%").font(Theme.caption2).foregroundStyle(Theme.muted)
+                .lineLimit(1).frame(width: 32, alignment: .trailing)
+                .padding(.trailing, 4)
+        }
+        .frame(height: 22)
+    }
+
+    /// The track, the level filled in Spotify's green on its own player, the accent on another's, and the knob; a press
+    /// sets the level there and a drag follows it, ending where it is.
+    private func track(_ st: Media.State, width: CGFloat) -> some View {
+        let x = width * CGFloat(st.volume)
+        let level = st.muted ? Theme.muted.opacity(0.4) : st.spotify ? Color(.sRGB, red: 0x1D / 255.0, green: 0xB9 / 255.0, blue: 0x54 / 255.0) : Theme.accent
+        return ZStack(alignment: .leading) {
+            Capsule().fill(Theme.line).frame(height: 4)
+            Capsule().fill(level).frame(width: max(0, x), height: 4)
+            Circle().fill(st.muted ? Theme.muted : Theme.ink).frame(width: 12, height: 12).offset(x: x - 6)
+        }
+        .frame(width: width, height: 22)
+        .contentShape(Rectangle().inset(by: -6))
+        .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local).onChanged { g in
+            guard width > 0 else { return }
+            media.setVolume(Float(g.location.x / width))
+        })
+    }
+
+    /// The speaker for a level: crossed out when muted, then with one to three waves.
+    static func glyph(_ st: Media.State) -> UInt32 {
+        if st.muted || st.volume <= 0.001 { return 0xE74F }
+        return st.volume < 0.34 ? 0xE993 : st.volume < 0.67 ? 0xE994 : 0xE995
+    }
+}
+
+/// Hands the wheel's notches over the view it sits behind to `step`, up positive, as the Windows client's footer_wheel: a
+/// mouse's line steps one each, a trackpad's fine deltas are summed into steps.
+private struct ScrollWheelCatcher: NSViewRepresentable {
+    var step: (Int) -> Void
+
+    final class Coordinator {
+        var step: (Int) -> Void
+        var monitor: Any?
+        var sum: CGFloat = 0
+        weak var view: NSView?
+        init(step: @escaping (Int) -> Void) { self.step = step }
+        deinit { if let monitor { NSEvent.removeMonitor(monitor) } }
+
+        func handle(_ event: NSEvent) -> NSEvent? {
+            guard let view, let window = view.window, event.window === window,
+                  view.bounds.contains(view.convert(event.locationInWindow, from: nil)) else { return event }
+            var dy = event.scrollingDeltaY
+            if event.isDirectionInvertedFromDevice { dy = -dy }
+            if event.hasPreciseScrollingDeltas {
+                sum += dy
+                let notches = Int(sum / 12)
+                if notches != 0 { sum -= CGFloat(notches) * 12; step(notches) }
+            } else if dy != 0 {
+                step(dy > 0 ? max(1, Int(dy.rounded())) : min(-1, Int(dy.rounded())))
+            }
+            return nil
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(step: step) }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        let c = context.coordinator
+        c.view = view
+        c.monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak c] event in c?.handle(event) ?? event }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) { context.coordinator.step = step }
+
+    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) {
+        if let monitor = coordinator.monitor { NSEvent.removeMonitor(monitor); coordinator.monitor = nil }
     }
 }
 

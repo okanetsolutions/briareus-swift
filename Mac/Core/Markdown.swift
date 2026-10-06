@@ -65,6 +65,18 @@ enum Markdown {
 
     /// The text with inline markers removed.
     static func plain(_ text: String?) -> String { inline(text).map(\.text).joined() }
+
+    /// A table block written back as Markdown, pipes in cells escaped (md_table_source), for its Copy table button.
+    static func tableSource(_ table: MdBlock) -> String {
+        guard let header = table.cells.first else { return "" }
+        func row(_ cells: [String]) -> String {
+            "|" + (0..<table.cols).map { c in " \((c < cells.count ? cells[c] : "").replacingOccurrences(of: "|", with: "\\|")) |" }.joined()
+        }
+        var out = row(header) + "\n|"
+        for a in table.aligns { out += a == .center ? " :---: |" : a == .right ? " ---: |" : " --- |" }
+        for r in table.cells.dropFirst() { out += "\n" + row(r) }
+        return out
+    }
 }
 
 // MARK: - Bytes

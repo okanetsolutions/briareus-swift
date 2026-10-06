@@ -205,7 +205,8 @@ final class TextSelectionGroup {
     /// The first text on screen, to take the keyboard after ⌘A.
     func firstView(in window: NSWindow?) -> SelectableTextNSView? { ordered(in: window).first?.view }
 
-    /// The selected text; texts side by side join with a space, stacked ones take a line each (doc_selection_text).
+    /// The selected text; texts side by side join with a space, table cells with a tab, stacked ones take a line each
+    /// (doc_selection_text). An empty table cell still takes its place, so the cells after it stay in their columns.
     func selectedText() -> String? {
         guard let r = range() else { return nil }
         var out = "", any = false
@@ -213,8 +214,8 @@ final class TextSelectionGroup {
         for i in r.from.0...r.to.0 {
             let (v, f) = r.list[i]
             let from = i == r.from.0 ? r.from.1 : 0, to = i == r.to.0 ? r.to.1 : v.length
-            guard from < to else { continue }
-            if any { out += f.maxY > prevMinY + 2 ? " " : "\n" }
+            guard from < to || (v.isCell && v.length == 0) else { continue }
+            if any { out += f.maxY > prevMinY + 2 ? (v.isCell ? "\t" : " ") : "\n" }
             out += (v.plain as NSString).substring(with: NSRange(location: from, length: to - from))
             prevMinY = f.minY; any = true
         }
@@ -245,7 +246,7 @@ final class TextSelectionGroup {
     /// Returns whether the key was taken.
     func handleKey(_ event: NSEvent, window: NSWindow) -> Bool {
         let responder = window.firstResponder
-        if responder is NSText { return false }   // the composer, a field: their own selection
+        if responder is NSText || responder is BrowserCanvas { return false }   // the composer, a field, a shared browser: their own keys
         if let v = responder as? SelectableTextNSView, !members.contains(v) { return false }
         let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
         let key = event.charactersIgnoringModifiers?.lowercased()
@@ -276,6 +277,9 @@ final class SelectableTextNSView: NSView {
     private var scrollTimer: Timer?
 
     var selected = NSRange(location: 0, length: 0) { didSet { if oldValue != selected { needsDisplay = true } } }
+    /// A table cell: joined to one beside it with a tab when copied, and kept even when empty.
+    var isCell = false
+    static let cellLineHeight = ceil(NSLayoutManager().defaultLineHeight(for: SelectableFont.system(14)))
     var plain: String { storage.string }
     var length: Int { storage.length }
 
@@ -326,7 +330,8 @@ final class SelectableTextNSView: NSView {
         layOut(width: width.isFinite ? width : 100_000)
         let used = layout.usedRect(for: container)
         var size = CGSize(width: ceil(used.width), height: ceil(used.height))
-        if storage.length == 0 { size.height = 0 }
+        // An empty table cell keeps a line's height, so a selection still reads it beside its neighbours.
+        if storage.length == 0 { size.height = isCell ? SelectableTextNSView.cellLineHeight : 0 }
         measured[key] = size
         if bounds.width > 0 { layOut(width: bounds.width) }
         return size
@@ -489,9 +494,10 @@ extension EnvironmentValues {
 /// A piece of selectable text: wraps to the width it is offered and takes its height.
 struct SelectableText: NSViewRepresentable {
     var text: NSAttributedString
+    var cell = false
     @Environment(\.textSelectionGroup) private var group
 
-    init(_ text: NSAttributedString) { self.text = text }
+    init(_ text: NSAttributedString, cell: Bool = false) { self.text = text; self.cell = cell }
     /// Plain text in a font and colour.
     init(_ string: String, font: NSFont, color: Color, align: NSTextAlignment = .left) {
         text = selectablePlain(string, font: font, color: color, align: align)
@@ -499,6 +505,7 @@ struct SelectableText: NSViewRepresentable {
 
     func makeNSView(context: Context) -> SelectableTextNSView {
         let v = SelectableTextNSView(frame: .zero)
+        v.isCell = cell
         v.join(group)
         v.set(text)
         return v

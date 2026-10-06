@@ -1,7 +1,7 @@
 // One pull request on a phone (the Mac's PullScreen): what it is and where it stands at the top, a scrolling section
-// picker in place of GitHub's tabs (description, files, reviews and comments, the issues it closes,
-// findings, the conversations run on it, and ▶ Run), the errands in the toolbar, and a squash merge that says first what
-// stands in its way.
+// picker in place of GitHub's tabs (description, files, reviews and comments, the issues it closes and the project
+// boards they are on, findings, the conversations run on it, and ▶ Run), the errands in the toolbar, its edits and Update
+// branch in the More menu, and a squash merge that says first what stands in its way.
 import SwiftUI
 
 struct PullScreen: View {
@@ -20,6 +20,8 @@ struct PullScreen: View {
     @State private var deletingServed = false
     @State private var stackOpen = false
     @State private var openFindings: Set<Int> = []
+    @State private var editPrompt: ItemEdit?
+    @State private var confirmingUpdate = false
 
     init(repo: String, number: Int, stack: JSON?, summary: JSON?) {
         self.repo = repo; self.number = number; self.stack = stack; self.summary = summary
@@ -28,7 +30,10 @@ struct PullScreen: View {
         _errands = StateObject(wrappedValue: ErrandRunner(repo: repo))
     }
 
-    var body: some View {
+    // The screen, its polls and its prompts, in three parts the type checker takes one at a time.
+    var body: some View { prompts }
+
+    private var screen: some View {
         Group {
             if model.section == .run {
                 VStack(spacing: 0) {
@@ -44,7 +49,7 @@ struct PullScreen: View {
         .toolbar { toolbar }
         .task {
             await poll(every: 30) {
-                if errands.busy || model.merging || model.deciding != nil || model.mergeQuestion != nil { return nil }
+                if errands.busy || model.merging || model.deciding != nil || model.mergeQuestion != nil || model.editing || model.updatingBranch { return nil }
                 return await reading { try await model.load() }
             }
         }
@@ -58,6 +63,10 @@ struct PullScreen: View {
         }
         .onAppear { model.appeared() }
         .onDisappear { model.disappeared() }
+    }
+
+    private var decisions: some View {
+        screen
         .errandPrompts(errands)
         .alert(model.mergeQuestion.map { "Merge #\(number) into \($0.base)?" } ?? "",
                isPresented: Binding(get: { model.mergeQuestion != nil }, set: { if !$0 { model.mergeQuestion = nil } }), presenting: model.mergeQuestion) { _ in
@@ -79,6 +88,20 @@ struct PullScreen: View {
             Button("Delete", role: .destructive) { Task { await model.delete(s.id) } }
             Button("Cancel", role: .cancel) {}
         } message: { s in Text("\u{201C}\(s.displayTitle)\u{201D}") }
+    }
+
+    private var prompts: some View {
+        decisions
+        .alert("Update the branch of #\(number)?", isPresented: $confirmingUpdate) {
+            Button("Update branch") { Task { await model.updateBranch() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("GitHub merges the latest changes from \(model.base ?? "its base") into \(model.head ?? "its branch"), as a new commit on the branch. A session working on it needs to pull before it pushes again.")
+        }
+        .itemEdits($editPrompt, target: ItemEditTarget(what: "pull request", number: number, title: model.title, body: model.pullBody,
+                                                       labels: model.boardRow?.labels ?? [], assignees: model.boardRow?.assignees ?? [])) { fields in
+            Task { await model.edit(fields) }
+        }
         .alert("Delete this run?", isPresented: $deletingServed) {
             Button("Delete", role: .destructive) {
                 if let id = model.runTarget { Task { await model.delete(id) } }
@@ -108,6 +131,7 @@ struct PullScreen: View {
                 case .files: files
                 case .reviews: reviews
                 case .issues: issues
+                case .projects: PullProjectsSection(entries: model.issueProjects.entries)
                 case .findings: findings
                 case .conversations: conversations
                 case .run: EmptyView()
@@ -171,6 +195,11 @@ struct PullScreen: View {
                     Button { Task { await model.askMerge() } } label: { Label("Merge…", systemImage: "arrow.triangle.merge") }
                         .disabled(model.merging || errands.busy)
                 }
+                if model.canUpdateBranch {
+                    Button { confirmingUpdate = true } label: { Label("Update branch…", systemImage: "arrow.triangle.2.circlepath") }
+                        .disabled(model.updatingBranch || model.merging)
+                }
+                if model.canEdit { editMenu }
                 if store.supports("pull_files") {
                     Button { navigate(.pullFiles(repo: repo, number: number)) } label: { Label("Files changed", systemImage: "doc.on.doc") }
                 }
@@ -182,9 +211,26 @@ struct PullScreen: View {
                     Button { Pasteboard.copy(head) } label: { Label("Copy branch name", systemImage: "arrow.triangle.branch") }
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                if model.editing || model.updatingBranch { ProgressView() } else { Image(systemName: "ellipsis.circle") }
             }
             .accessibilityLabel("More")
+        }
+    }
+
+    /// Edit the title and description, the labels and the assignees; the labels and assignees start from the board's row.
+    @ViewBuilder private var editMenu: some View {
+        Section {
+            Button { editPrompt = .details } label: { Label("Edit title and description…", systemImage: "pencil") }
+                .disabled(model.editing || model.pullBody == nil)
+            if let row = model.boardRow {
+                Button { editPrompt = .labels } label: { Label("Edit labels…", systemImage: "tag") }.disabled(model.editing)
+                Menu {
+                    AssigneesMenuItems(assignees: row.assignees, edit: $editPrompt) { fields in Task { await model.edit(fields) } }
+                } label: {
+                    Label("Assignees", systemImage: "person.badge.plus")
+                }
+                .disabled(model.editing)
+            }
         }
     }
 
@@ -202,6 +248,10 @@ struct PullScreen: View {
         if let e = model.error { Section { ErrorNotice(message: e) }.listRowBackground(Theme.row) }
         ErrandNotice(runner: errands, place: "under Conversations")
         if let e = model.mergeError { Section { ErrorNotice(message: e) }.listRowBackground(Theme.row) }
+        if let e = model.editError { Section { ErrorNotice(message: e) }.listRowBackground(Theme.row) }
+        if let note = model.branchNote {
+            Section { Label(note, systemImage: "arrow.triangle.2.circlepath").font(.callout).foregroundStyle(.secondary) }.listRowBackground(Theme.row)
+        }
     }
 
     private var stateText: String {
@@ -342,6 +392,7 @@ struct PullScreen: View {
             case .files: return store.supports("pull_files") || safeWebURL(model.url)
             case .reviews: return !model.pr.isNull
             case .issues: return !model.closes.isEmpty
+            case .projects: return store.supports("issue") && !model.linkedIssues().isEmpty
             case .findings: return store.supports("findings")
             case .run: return model.runOffered && (model.isOpen || model.runURL != nil)
             }
@@ -352,6 +403,7 @@ struct PullScreen: View {
         case .files: return model.pr["changedFiles"].int
         case .reviews: return model.commentCount ?? model.pr["reviews"].count
         case .issues: return model.closes.count
+        case .projects: return model.issueProjects.entries.map { $0.reduce(0) { $0 + $1.projects.count } }
         case .findings: return model.findings.count
         case .conversations: return model.runs.count
         default: return nil
@@ -463,6 +515,9 @@ struct PullScreen: View {
             ForEach(Array(model.closes.enumerated()), id: \.offset) { _, link in
                 if !link.isForeign(repo), let raw = onBoard.first(where: { $0["number"].truncatedInt == link.number }) {
                     DestinationLink(destination: .issue(repo: repo, issue: raw)) { BoardLinkedRow(link: link, repo: repo) }
+                } else if !link.isForeign(repo), store.supports("issue") {
+                    // Off the board, the issue screen reads the rest itself.
+                    DestinationLink(destination: .issue(repo: repo, issue: bareIssue(link))) { BoardLinkedRow(link: link, repo: repo) }
                 } else if safeWebURL(link.url) {
                     Button { boardOpenWeb(link.url) } label: { BoardLinkedRow(link: link, repo: repo) }.foregroundStyle(.primary)
                 } else {
@@ -473,6 +528,13 @@ struct PullScreen: View {
             Text("Successfully merging this pull request may close these issues.")
         }
         .listRowBackground(Theme.row)
+    }
+
+    /// What the issue screen opens with until it has read the issue.
+    private func bareIssue(_ link: BoardLink) -> JSON {
+        var bare: JSON = ["number": JSON(link.number), "title": .string(link.title)]
+        if let url = link.url { bare["url"] = .string(url) }
+        return bare
     }
 
     private static let decisionIDs = ["", "fix", "optional", "dismissed"]

@@ -30,6 +30,12 @@ enum Screen: Hashable, Identifiable {
     case providerSettings(row: JSON?, defaults: JSON?)
     case dbServerSettings(row: JSON?, defaults: JSON?)
     case sshServerSettings(row: JSON?, defaults: JSON?)
+    case forgeAccountSettings(row: JSON?, defaults: JSON?)
+    case slackWorkspaceSettings(row: JSON?, defaults: JSON?)
+    /// This Mac's meeting assistant settings.
+    case meetingSettings
+    /// A session's ⚡ Webhook, pushed over its conversation; `session` is the conversation's record.
+    case webhook(session: JSON)
 
     var id: String {
         switch self {
@@ -47,6 +53,10 @@ enum Screen: Hashable, Identifiable {
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .dbServerSettings(let row, _): return "db-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .sshServerSettings(let row, _): return "ssh-server:\(row?["id"].int.map(String.init) ?? "new")"
+        case .forgeAccountSettings(let row, _): return "forge-account:\(row?["id"].int.map(String.init) ?? "new")"
+        case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
+        case .meetingSettings: return "settings-meeting"
+        case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
         }
     }
     static func == (a: Screen, b: Screen) -> Bool { a.id == b.id }
@@ -88,6 +98,7 @@ final class Navigator: ObservableObject {
         if stack.count == 1 && root == screen { narrowShowsDetail = true; return }
         guard mayLeave() else { return }
         panelSession = nil
+        BrowserDock.shared.detailChanged(to: screen)
         stack = [screen]
         narrowShowsDetail = true
     }
@@ -98,6 +109,8 @@ final class Navigator: ObservableObject {
     }
     func pop() {
         if stack.count > 1 {
+            // A pushed form with unsaved changes (⚡ Webhook) asks first.
+            guard mayLeave() else { return }
             if top.id.hasPrefix("conversation:") { panelSession = nil }
             stack.removeLast()
         } else { narrowShowsDetail = false }
@@ -113,6 +126,7 @@ final class Navigator: ObservableObject {
     func clear() {
         guard mayLeave() else { return }
         panelSession = nil
+        BrowserDock.shared.dock(nil)
         stack = [.placeholder]
         narrowShowsDetail = false
     }
@@ -120,6 +134,7 @@ final class Navigator: ObservableObject {
     func reset() {
         leaveGuard = nil
         panelSession = nil
+        BrowserDock.shared.reset()
         stack = [.placeholder]
         sidebarMode = .projects
         narrowShowsDetail = false

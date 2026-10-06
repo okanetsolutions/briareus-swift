@@ -318,34 +318,36 @@ struct BoardUpdated: View {
 
 // MARK: - Rows
 
-/// An issue or pull request named under a row, with the state that says whether it is still open work.
+/// An issue or pull request named under a row, with the state that says whether it is still open work, and `status` (an
+/// issue's Status on its project board) as a chip after it. A pull request's row leaves the state of the issues it closes
+/// out (`showState`).
 struct BoardLinkedRow: View {
     let link: BoardLink
     let repo: String
+    var status: String? = nil
+    var showState = true
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Image(systemName: "link").font(.caption2).foregroundStyle(.tertiary)
             Text(link.reference(repo)).font(.caption.monospaced()).foregroundStyle(.secondary)
             Text(link.title).font(.caption).lineLimit(1)
-            if let state = linkedStateText(link) {
+            if showState, let state = linkedStateText(link) {
                 Text(state).font(.caption2).foregroundStyle(state == "open" ? Theme.success : state == "closed" ? Color.secondary : Theme.warning)
+            }
+            if let status, !status.isEmpty {
+                Text(status).font(.caption2.weight(.medium)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Theme.surface, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.border, lineWidth: 0.5))
+                    .accessibilityLabel("Status \(status)")
             }
         }
         .accessibilityElement(children: .combine)
     }
 }
 
-private func reviewerMark(_ state: String) -> String {
-    switch state.asciiFolded {
-    case "approved": return "✓"
-    case "changes_requested": return "✗"
-    case "requested": return "○"
-    default: return "✎"
-    }
-}
-
-/// A pull request as the board shows it: title, number and branch, its standing as badges, the errand it asks for, its
-/// labels, who wrote, holds and reviews it, and the issues it closes.
+/// A pull request as the board shows it: title and number, its standing as badges, the errand it asks for, its labels, who
+/// holds, wrote and reviews it split by pipes, and the issues it closes.
 struct BoardPullRow: View {
     let pull: PullSummary
     let stack: StackPosition?
@@ -354,6 +356,8 @@ struct BoardPullRow: View {
     var activeRuns = 0
     /// The label of the errand its state asks for, when this device could start it.
     var suggested: String? = nil
+    /// The project Status of each issue it closes, in its order; nil or "" for none.
+    var issueStatus: [String?] = []
     var showsIssues = true
 
     private var review: ReviewStatus { ReviewStatus(decision: pull.reviewDecision, reviewers: pull.reviewers) }
@@ -365,8 +369,8 @@ struct BoardPullRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(pull.title).font(.body.weight(.medium)).lineLimit(2)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    // The branch is the pull request's page's to show.
                     Text(verbatim: "#\(pull.number)").font(.caption.monospaced()).foregroundStyle(.secondary).fixedSize()
-                    Text(verbatim: pull.branch).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 4)
                     BoardUpdated(date: pull.updatedAt)
                 }
@@ -392,21 +396,23 @@ struct BoardPullRow: View {
                 }
                 if !pull.labels.isEmpty { BoardLabelChips(labels: pull.labels) }
                 Text(whoLine).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                if showsIssues { ForEach(Array(pull.issues.enumerated()), id: \.offset) { _, link in BoardLinkedRow(link: link, repo: repo) } }
+                if showsIssues {
+                    ForEach(Array(pull.issues.enumerated()), id: \.offset) { i, link in
+                        BoardLinkedRow(link: link, repo: repo, status: i < issueStatus.count ? issueStatus[i] : nil, showState: false)
+                    }
+                }
             }
         }
         .padding(.vertical, 3)
     }
 
+    /// "assignee @a | author @b | reviewers @c, @d": the words say which login is which.
     private var whoLine: String {
-        var parts: [String] = []
-        if let author = pull.author { parts.append("by @\(author)") }
-        parts.append(pull.assignees.isEmpty ? "unassigned" : "assigned \(people(pull.assignees, limit: 2))")
-        if !pull.reviewers.isEmpty {
-            parts.append("review " + pull.reviewers.prefix(2).map { "\(reviewerMark($0.state)) @\($0.user)" }.joined(separator: ", ")
-                         + (pull.reviewers.count > 2 ? " +\(pull.reviewers.count - 2)" : ""))
-        }
-        return parts.joined(separator: " · ")
+        var parts = [pull.assignees.isEmpty ? "unassigned" : "assignee \(people(pull.assignees, limit: 2))"]
+        if let author = pull.author { parts.append("author @\(author)") }
+        let reviewers = pull.reviewers.map(\.user).filter { !$0.isEmpty }
+        if !reviewers.isEmpty { parts.append("reviewers " + reviewers.map { "@\($0)" }.joined(separator: ", ")) }
+        return parts.joined(separator: " | ")
     }
 }
 
