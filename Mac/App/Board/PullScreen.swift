@@ -53,7 +53,7 @@ struct PullScreen: View {
         }
         .task {
             await poll(every: 30) {
-                if model.busy || model.merging || model.deciding != nil || model.dialogOpen { return nil }
+                if model.busy || model.merging || model.deciding != nil || model.editing || model.updatingBranch || model.dialogOpen { return nil }
                 return await model.load()
             }
         }
@@ -187,6 +187,8 @@ private struct PullHeader: View {
                 StackOverview(model: model, stack: stack).padding(.top, 10)
             }
             if let e = model.mergeError { Notice(message: e).padding(.top, 8) }
+            if let e = model.editError { Notice(message: e).padding(.top, 8) }
+            if let note = model.branchNote { GlyphLabel(glyph: 0xE895, text: note, font: Theme.footnote, color: Theme.muted).padding(.top, 8) }
         }
     }
 
@@ -199,6 +201,14 @@ private struct PullHeader: View {
     private var toolbar: some View {
         HStack(spacing: 6) {
             Button("⟳ Refresh") { model.refresh() }.dashButton(.bordered).disabled(model.readingPull)
+            if model.canEdit {
+                Button(model.editing ? "Saving…" : "Edit") { model.editDetails() }.dashButton(.bordered).disabled(model.editing || model.pullBody == nil)
+                    .help("Edit the title and description")
+            }
+            if model.canUpdateBranch {
+                Button(model.updatingBranch ? "Updating…" : "Update branch") { model.updateBranch() }.dashButton(.bordered)
+                    .disabled(model.updatingBranch || model.merging).help("Merge the latest changes from the base branch into this one")
+            }
             if model.canMerge {
                 Button(model.merging ? "Merging…" : "Merge") { model.merge() }.dashButton(.prominent).disabled(model.merging || model.busy)
             }
@@ -809,10 +819,12 @@ private struct PullSidebar: View {
             items.append(AnyView(section("Assignees") {
                 if row.assignees.isEmpty { Text("No one").font(Theme.caption).foregroundStyle(Theme.muted) }
                 ForEach(row.assignees, id: \.self) { Text($0).font(Theme.footnoteSemibold).foregroundStyle(Theme.ink).lineLimit(1) }
+                if model.canEdit { editButton("Edit assignees ▾") { model.editAssignees() } }
             }))
             items.append(AnyView(section("Labels") {
                 if row.labels.isEmpty { Text("None yet").font(Theme.caption).foregroundStyle(Theme.muted) }
                 else { LabelChips(labels: row.labels, background: Theme.canvas) }
+                if model.canEdit { editButton("Edit labels…") { model.editLabels() } }
             }))
             if let milestone = row.raw["milestone"].string {
                 items.append(AnyView(section("Milestone") { Text(milestone).font(Theme.footnote).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true) }))
@@ -836,6 +848,11 @@ private struct PullSidebar: View {
             VStack(alignment: .leading, spacing: 4) { content() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The edit button under the assignees or labels.
+    private func editButton(_ title: String, _ action: @escaping () -> Void) -> some View {
+        Button(title, action: action).dashButton(.bordered).disabled(model.editing).padding(.top, 4)
     }
 
     /// The errands as the sidebar's first item: one full-width button per action, the one the state asks for filled.

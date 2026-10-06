@@ -31,6 +31,10 @@ final class IssueModel: ObservableObject {
     @Published var busy = false
     @Published var uncertain = false
     @Published var writeError: String?
+    /// Its title, description, labels or assignees are being saved. A failed edit has a notice of its own, so it leaves an
+    /// uncertain start's notice up.
+    @Published var editing = false
+    @Published var editError: String?
     @Published var closing = false
     /// This screen closed it; the board no longer lists it.
     @Published var closed = false
@@ -162,7 +166,48 @@ final class IssueModel: ObservableObject {
     func refresh() {
         detailGen += 1; readingDetail = false
         timelineSeen = nil
+        editError = nil
         Task { await load(fresh: true) }
+    }
+
+    // MARK: Edits
+
+    /// Edit, Edit labels… and Edit assignees ▾, while the server takes `update_issue` and this screen has not closed it.
+    var editable: Bool { Store.shared.supports("update_issue") && !closed }
+    /// Sends `fields` as an edit of this issue. The title and description show as saved at once; reading it again brings
+    /// the rest, after the read already under way is dropped, since it may have been made before the edit.
+    func edit(_ fields: JSON?) {
+        guard var args = fields, !editing else { return }
+        editing = true; editError = nil
+        args["issue"] = JSON(issue.number); args["repo"] = .string(repo)
+        Task {
+            let r = await boardCall("update_issue", args)
+            editing = false
+            switch r {
+            case .success(let v):
+                editError = nil
+                if let title = v["issue"]["title"].string { issue.title = title }
+                if let body = v["issue"]["body"].string, !detail.isNull, args["body"].isSet { detail["body"] = .string(body) }
+                detailGen += 1; readingDetail = false
+                await load(fresh: true)
+            case .failure(let e):
+                // An edit sets what it names, so trying again is safe.
+                if e.kind != .cancelled { editError = e.description }
+            }
+        }
+    }
+    /// The description is the issue's own read; without it an edit would start from nothing.
+    func editDetails() {
+        guard !editing, let body = detail["body"].string else { return }
+        edit(BoardEdits.details("issue", number: issue.number, title: issue.title, body: body))
+    }
+    func editAssignees() {
+        guard !editing, let list = BoardEdits.assignees(issue.assignees, number: issue.number) else { return }
+        edit(["assignees": BoardEdits.list(list)])
+    }
+    func editLabels() {
+        guard !editing, let list = BoardEdits.labels(issue.labels, number: issue.number) else { return }
+        edit(["labels": BoardEdits.list(list)])
     }
 
     var runActive: Bool { runs.contains { $0.isActive } }
@@ -321,6 +366,7 @@ struct IssueScreen: View {
             }
             .padding(.bottom, 10)
         }
+        if let e = model.editError { Notice(message: e).padding(.bottom, 10) }
         if let e = model.detailError { Notice(message: e).padding(.bottom, 10) }
         if let e = model.loadError, e != model.detailError { Notice(message: e).padding(.bottom, 10) }
         if model.closed {
@@ -376,9 +422,13 @@ private struct IssueHeader: View {
     }
 
     @ViewBuilder private var toolbar: some View {
-        if safeWebURL(model.issue.url) {
+        if model.editable || safeWebURL(model.issue.url) {
             HStack(spacing: 6) {
-                Button("Open in GitHub ↗") { openWebURL(model.issue.url) }.dashButton(.bordered)
+                if model.editable {
+                    Button(model.editing ? "Saving…" : "Edit") { model.editDetails() }.dashButton(.bordered)
+                        .disabled(model.editing || model.detail["body"].string == nil).help("Edit the title and description")
+                }
+                if safeWebURL(model.issue.url) { Button("Open in GitHub ↗") { openWebURL(model.issue.url) }.dashButton(.bordered) }
             }
         }
     }
@@ -501,10 +551,12 @@ private struct IssueSidebar: View {
         items.append(AnyView(section("Assignees") {
             if issue.assignees.isEmpty { Text("No one").font(Theme.caption).foregroundStyle(Theme.muted) }
             ForEach(issue.assignees, id: \.self) { Text($0).font(Theme.footnoteSemibold).foregroundStyle(Theme.ink).lineLimit(1) }
+            if model.editable { editButton("Edit assignees ▾") { model.editAssignees() } }
         }))
         items.append(AnyView(section("Labels") {
             if issue.labels.isEmpty { Text("None yet").font(Theme.caption).foregroundStyle(Theme.muted) }
             else { LabelChips(labels: issue.labels, background: Theme.canvas) }
+            if model.editable { editButton("Edit labels…") { model.editLabels() } }
         }))
         if !model.detail.isNull {
             let type = model.detail["type"].string
@@ -546,6 +598,11 @@ private struct IssueSidebar: View {
             VStack(alignment: .leading, spacing: 4) { content() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The edit button under the assignees or labels.
+    private func editButton(_ title: String, _ action: @escaping () -> Void) -> some View {
+        Button(title, action: action).dashButton(.bordered).disabled(model.editing).padding(.top, 4)
     }
 
     /// Start a session, and Close issue ▾, while it is open and the server takes them.

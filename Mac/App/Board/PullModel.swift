@@ -41,6 +41,12 @@ final class PullModel: ObservableObject {
     @Published var busy = false
     @Published var uncertain = false
     @Published var merging = false
+    /// Its title, description, labels or assignees are being saved, and why the last edit failed.
+    @Published var editing = false
+    @Published var editError: String?
+    /// Update branch is under way, and what GitHub was asked to do once it took the request.
+    @Published var updatingBranch = false
+    @Published var branchNote: String?
     @Published var tab = PullTab.body
     /// The description, from `pull_description` when `pull` leaves it out.
     @Published var descriptionBody: String?
@@ -216,7 +222,7 @@ final class PullModel: ObservableObject {
         // F5 on the Run tab reloads the page, as in a browser.
         if tab == .run, let browser { browser.reload(); return }
         // Refreshing is how an uncertain start is checked: its conversation is listed in the Sessions tab if it began.
-        uncertain = false; writeError = nil
+        uncertain = false; writeError = nil; editError = nil; branchNote = nil
         bodyRead = false
         pullGen += 1; readingPull = false
         Task { await load() }
@@ -362,6 +368,96 @@ final class PullModel: ObservableObject {
             if let e = r.error {
                 mergeError = e.isRefusal ? e.description : "\(e.description) The merge may still have completed; check the state above before trying again."
             } else { mergeError = nil }
+            pullGen += 1; readingPull = false
+            await load()
+        }
+    }
+
+    // MARK: Edits
+
+    /// Edit, Edit labels… and Edit assignees ▾, on an open pull request, when the server takes `update_pull`.
+    var canEdit: Bool { Store.shared.supports("update_pull") && isOpen }
+    /// The description as last read, nil until it is: an edit starts from it.
+    var pullBody: String? { pr["body"].string ?? descriptionBody }
+    var canUpdateBranch: Bool {
+        Store.shared.supports("update_pull_branch") && pr["state"].string == "open" && pr["headSha"].string != nil && pr["baseRef"].string != nil
+    }
+
+    /// Sends `fields` as an edit of this pull request. The title and description show as saved at once; the labels and
+    /// assignees come back with the board's row, read again with the pull request.
+    func edit(_ fields: JSON?) {
+        guard var args = fields, !editing else { return }
+        editing = true; editError = nil
+        args["repo"] = .string(repo); args["pr"] = JSON(number)
+        Task {
+            let r = await boardCall("update_pull", args)
+            editing = false
+            switch r {
+            case .success(let v):
+                editError = nil
+                if let title = v["pr"]["title"].string, pr.object != nil { pr["title"] = .string(title) }
+                if let body = v["pr"]["body"].string, args["body"].isSet {
+                    descriptionBody = body
+                    if pr["body"].string != nil { pr["body"] = .string(body) }
+                }
+                save()
+            case .failure(let e):
+                // An edit sets what it names, so trying again is safe.
+                if e.kind != .cancelled { editError = e.description }
+            }
+            pullGen += 1; readingPull = false
+            await load()
+        }
+    }
+    func editDetails() {
+        guard !editing, let body = pullBody else { return }
+        let title = pr["title"].string ?? boardRow?.title ?? ""
+        dialogOpen = true
+        let fields = BoardEdits.details("pull request", number: number, title: title, body: body)
+        dialogOpen = false
+        edit(fields)
+    }
+    func editAssignees() {
+        guard !editing, let row = boardRow else { return }
+        dialogOpen = true
+        let list = BoardEdits.assignees(row.assignees, number: number)
+        dialogOpen = false
+        if let list { edit(["assignees": BoardEdits.list(list)]) }
+    }
+    func editLabels() {
+        guard !editing, let row = boardRow else { return }
+        dialogOpen = true
+        let list = BoardEdits.labels(row.labels, number: number)
+        dialogOpen = false
+        if let list { edit(["labels": BoardEdits.list(list)]) }
+    }
+
+    /// Merges the base into the branch on GitHub, at the head and base last read, once asked.
+    func updateBranch() {
+        guard !updatingBranch, !merging, let base = pr["baseRef"].string, pr["headSha"].string != nil else { return }
+        let headRef = pr["headRef"].string ?? "its branch"
+        dialogOpen = true
+        let ok = Dialogs.confirm("Update the branch of #\(number)?",
+                                 "GitHub merges the latest changes from \(base) into \(headRef), as a new commit on the branch. A session working on it needs to pull before it pushes again.",
+                                 continueLabel: "Update branch")
+        dialogOpen = false
+        // The pull request may have been read again while the dialog was open.
+        guard ok, !updatingBranch, let head = pr["headSha"].string, let baseRef = pr["baseRef"].string else { return }
+        updatingBranch = true; mergeError = nil; branchNote = nil
+        let args: JSON = ["repo": .string(repo), "pr": JSON(number), "headSha": .string(head), "baseRef": .string(baseRef)]
+        Task {
+            let r = await boardCall("update_pull_branch", args)
+            updatingBranch = false
+            switch r {
+            case .success:
+                mergeError = nil
+                branchNote = "GitHub is merging \(baseRef) into this branch; its new commit and checks show once it has."
+            case .failure(let e):
+                branchNote = nil
+                if e.kind != .cancelled {
+                    mergeError = e.isRefusal ? e.description : "\(e.description) The update may still have been made; refresh before trying again."
+                }
+            }
             pullGen += 1; readingPull = false
             await load()
         }
