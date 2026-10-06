@@ -189,8 +189,12 @@ final class PullModel: ObservableObject {
             save()
         }
     }
+    /// The newest board read wins, so one started before an edit cannot put the row back as it was.
+    private var rowsGen = 0
     private func loadRows() async {
-        guard let v = await boardCall("pulls", ["repo": .string(repo)]).value else { return }
+        rowsGen += 1
+        let gen = rowsGen
+        guard let v = await boardCall("pulls", ["repo": .string(repo)]).value, gen == rowsGen else { return }
         // A pull request the board no longer lists has been merged or closed, and its row went with it.
         let rows = PullSummary.parseList(v["pulls"])
         row = nil
