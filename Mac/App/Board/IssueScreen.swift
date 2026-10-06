@@ -91,9 +91,8 @@ final class IssueModel: ObservableObject {
     func pullRow(_ link: BoardLink) -> PullSummary? { link.isForeign(repo) ? nil : pullsFind(boardPulls, link.number) }
 
     func start() {
+        // The screen already says the session is paid and whether one is at work on it, so it starts without asking.
         guard !busy, !uncertain else { return }
-        guard Dialogs.confirm("Start a paid session on issue #\(issue.number)?", runActive ? "A session is already working on this issue." : nil,
-                              continueLabel: "Start session") else { return }
         busy = true
         let args: JSON = ["repo": .string(repo), "prompt": .string(issuePrompt(issue, repo: repo)), "activity": "issue"]
         Task {
