@@ -199,7 +199,7 @@ final class IssueModel: ObservableObject {
     /// The description is the issue's own read; without it an edit would start from nothing.
     func editDetails() {
         guard !editing, let body = detail["body"].string else { return }
-        edit(BoardEdits.details("issue", number: issue.number, title: issue.title, body: body))
+        afterThisEvent { [self] in edit(BoardEdits.details("issue", number: issue.number, title: issue.title, body: body)) }
     }
     func editAssignees() {
         guard !editing, let list = BoardEdits.assignees(issue.assignees, number: issue.number) else { return }

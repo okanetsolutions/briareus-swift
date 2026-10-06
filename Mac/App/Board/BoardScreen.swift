@@ -197,10 +197,12 @@ final class BoardModel: ObservableObject {
     func act(_ pull: PullSummary, _ action: BoardAction) {
         guard !busy, !uncertain else { return }
         if action.id == "run" { openRun(pull); return }
-        dialogOpen = true
-        let answer = actionPrompt(action, number: pull.number)
-        dialogOpen = false
-        if let input = answer { start(pull, action, input: input) }
+        afterThisEvent { [self] in
+            dialogOpen = true
+            let answer = actionPrompt(action, number: pull.number)
+            dialogOpen = false
+            if let input = answer { start(pull, action, input: input) }
+        }
     }
 
     // MARK: Merge

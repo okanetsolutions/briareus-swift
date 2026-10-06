@@ -90,6 +90,13 @@ func actionPrompt(_ action: BoardAction, number: Int) -> String?? {
     guard let text = ActionInputDialog.run(action: action, number: number) else { return nil }
     return .some(text)
 }
+/// Runs `body` from the run loop rather than where it was called. SwiftUI runs a button's action inside a block on the main
+/// queue, and a SwiftUI dialog run modally from there takes no typing: its text box waits on the main queue, which waits
+/// for the dialog. Errands and edits that open one start through this.
+@MainActor
+func afterThisEvent(_ body: @escaping @MainActor () -> Void) {
+    RunLoop.main.perform { MainActor.assumeIsolated(body) }
+}
 
 // MARK: - Popup menus
 
