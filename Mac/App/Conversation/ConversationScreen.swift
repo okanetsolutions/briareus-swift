@@ -272,7 +272,8 @@ struct ConversationScreen: View {
     @ObservedObject private var store = Store.shared
     @State private var atBottom = true
     @State private var stick = true
-    @State private var autoScrolling = false
+    /// A scroll to the end under way, which the user scrolling the transcript cancels.
+    @State private var scrolling: Task<Void, Never>?
 
     init(sessionID: String, initial: JSON?) {
         self.sessionID = sessionID
@@ -331,7 +332,10 @@ struct ConversationScreen: View {
             model.showPanel()
             stick = true
         }
-        .onDisappear { model.hidden() }
+        .onDisappear {
+            scrolling?.cancel(); scrolling = nil
+            model.hidden()
+        }
         .onChange(of: store.active) { _, active in
             // Recording cannot go on in the background: what was said until then is transcribed, as if stopped.
             if !active && model.voice.state == .recording { model.voice.stop() }
@@ -361,6 +365,7 @@ struct ConversationScreen: View {
                                 Color.clear.preference(key: TranscriptEndKey.self, value: g.frame(in: .named("transcript")).maxY)
                             })
                     }
+                    .background(UserScrollWatcher { scrolling?.cancel(); scrolling = nil })
                     .padding(.top, 18).padding(.bottom, 30)
                     .padding(.horizontal, 24)
                     .frame(maxWidth: 860)
@@ -370,14 +375,14 @@ struct ConversationScreen: View {
                 .onPreferenceChange(TranscriptEndKey.self) { maxY in
                     let bottom = maxY <= outer.size.height + 4
                     if atBottom != bottom { atBottom = bottom }
-                    if !autoScrolling && stick != bottom { stick = bottom }
+                    if scrolling == nil && stick != bottom { stick = bottom }
                 }
                 .overlay(alignment: .bottom) {
                     // The "latest" button: back to the end, which the transcript then keeps to.
                     if !atBottom && !model.blocks.isEmpty {
                         Button {
                             stick = true
-                            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("end", anchor: .bottom) }
+                            scrollToEnd(proxy, animated: true)
                         } label: { Image(systemName: Glyph.symbol(0xE74B)) }
                             .buttonStyle(IconButtonStyle())
                             .help("Latest")
@@ -391,12 +396,58 @@ struct ConversationScreen: View {
         }
     }
 
-    private func scrollToEnd(_ proxy: ScrollViewProxy) {
-        autoScrolling = true
-        DispatchQueue.main.async {
-            proxy.scrollTo("end", anchor: .bottom)
-            DispatchQueue.main.async { autoScrolling = false }
+    /// The lazy column guesses the height of messages it has not made yet, so the first scroll can stop short of the end;
+    /// it scrolls again until the end is in view. A new one replaces the one under way; the first try eases there when
+    /// animated.
+    private func scrollToEnd(_ proxy: ScrollViewProxy, animated: Bool = false) {
+        scrolling?.cancel()
+        scrolling = Task { @MainActor in
+            for attempt in 0..<6 {
+                await Task.yield()
+                if Task.isCancelled { return }
+                if animated && attempt == 0 {
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("end", anchor: .bottom) }
+                } else {
+                    proxy.scrollTo("end", anchor: .bottom)
+                }
+                try? await Task.sleep(nanoseconds: animated && attempt == 0 ? 250_000_000 : 80_000_000)
+                if Task.isCancelled { return }
+                if atBottom { break }
+            }
+            scrolling = nil
         }
+    }
+}
+
+/// Calls back when the user scrolls the scroll view it sits in: the wheel or trackpad over it, or a drag of its scroller.
+/// A scroll elsewhere in the app, or one made by the code, does not count.
+private struct UserScrollWatcher: NSViewRepresentable {
+    var onScroll: () -> Void
+    func makeNSView(context: Context) -> WatchView { let v = WatchView(); v.onScroll = onScroll; return v }
+    func updateNSView(_ v: WatchView, context: Context) { v.onScroll = onScroll }
+
+    final class WatchView: NSView {
+        var onScroll: (() -> Void)?
+        private var monitor: Any?
+        private var live: NSObjectProtocol?
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+            if let l = live { NotificationCenter.default.removeObserver(l); live = nil }
+            guard window != nil, let scroll = enclosingScrollView else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self, weak scroll] event in
+                MainActor.assumeIsolated {
+                    guard let self, let scroll, event.window === self.window,
+                          scroll.bounds.contains(scroll.convert(event.locationInWindow, from: nil)) else { return }
+                    self.onScroll?()
+                }
+                return event
+            }
+            live = NotificationCenter.default.addObserver(forName: NSScrollView.willStartLiveScrollNotification, object: scroll, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.onScroll?() }
+            }
+        }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }
 
