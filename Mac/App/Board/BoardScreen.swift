@@ -25,6 +25,8 @@ final class BoardModel: ObservableObject {
     @Published var startingNumber = 0
     @Published var startingID: String?
     @Published var writeError: String?
+    /// The pull request being merged from its row: read for its head first, then merged.
+    @Published var mergingNumber = 0
     @Published private(set) var reading = false
     var dialogOpen = false
     private var hasOpening = false
@@ -176,6 +178,45 @@ final class BoardModel: ObservableObject {
         let answer = actionPrompt(action, number: pull.number)
         dialogOpen = false
         if let input = answer { start(pull, action, input: input) }
+    }
+
+    // MARK: Merge
+
+    /// ↳ Merge is offered on every pull request that is not a draft, to a token that may write on a server that reads and
+    /// merges one.
+    var mergeOffered: Bool { Store.shared.canManage && Store.shared.supports("pull") && Store.shared.supports("merge_pull") }
+    /// Merging from the board: the row carries no head commit, and the server merges only the head that was read, so the
+    /// pull request is read first and squash-merged at the head that read returns, once confirmed. Then the list is read
+    /// again.
+    func merge(_ pull: PullSummary) {
+        guard mergingNumber == 0, !busy else { return }
+        var message = "\u{201C}\(pull.title)\u{201D} is squash-merged into \(pull.baseBranch.isEmpty ? "its base branch" : pull.baseBranch) on GitHub."
+        if pull.conflicting { message += "\n\nThis branch has conflicts that must be resolved before it can merge." }
+        if pull.checksFailed { message += "\n\nSome checks failed." }
+        else if pull.checks == "pending" || pull.checks == "expected" { message += "\n\nSome checks are still running." }
+        dialogOpen = true
+        let ok = Dialogs.confirm("Merge #\(pull.number)?", message, continueLabel: "Merge", destructive: true)
+        dialogOpen = false
+        guard ok, mergingNumber == 0 else { return }
+        let number = pull.number
+        mergingNumber = number; writeError = nil
+        Task {
+            defer { mergingNumber = 0 }
+            let read = await boardCall("pull", ["repo": .string(repo), "pr": JSON(number)])
+            if let e = read.error { if e.kind != .cancelled { writeError = e.description }; return }
+            let pr = read.value?["pr"] ?? .null
+            guard pr["state"].string == "open" else { writeError = "This pull request is no longer open."; return }
+            guard let head = pr["headSha"].string, let base = pr["baseRef"].string else { writeError = "The server did not say which commit to merge."; return }
+            let r = await boardCall("merge_pull", ["repo": .string(repo), "pr": JSON(number), "headSha": .string(head), "baseRef": .string(base), "method": "squash"])
+            switch r {
+            case .success(let v):
+                writeError = v["status"].string == "pending"
+                    ? "GitHub accepted the merge and is still finishing it; the pull request leaves the list once it lands." : nil
+            case .failure(let e):
+                writeError = e.isRefusal ? e.description : "\(e.description) The merge may still have completed; refresh before trying again."
+            }
+            await load(fresh: true)
+        }
     }
 
     // MARK: Opening
@@ -380,7 +421,8 @@ struct BoardScreen: View {
     @ViewBuilder private func rowButtons(_ pull: PullSummary) -> some View {
         let actions = pull.branch.isEmpty ? [] : rowActions(catalog: model.catalog, pull: pull, failedChecks: 0)
         let runs = model.runsOn(pull.number)
-        if !actions.isEmpty || runs > 0 {
+        let merge = !pull.draft && model.mergeOffered
+        if !actions.isEmpty || runs > 0 || merge {
             FlowLayout(spacing: 6, lineSpacing: 6) {
                 ForEach(actions, id: \.id) { a in
                     let starting = model.busy && model.startingNumber == pull.number && model.startingID == a.id
@@ -390,6 +432,12 @@ struct BoardScreen: View {
                         .dashButton(pull.recommended == a.id ? .prominent : .bordered)
                         .disabled(model.busy || model.uncertain)
                         .help(a.hint)
+                }
+                if merge {
+                    Button(model.mergingNumber == pull.number ? "Merging…" : "↳ Merge") { model.merge(pull) }
+                        .dashButton(.bordered)
+                        .disabled(model.mergingNumber != 0 || model.busy)
+                        .help("Squash-merge this pull request on GitHub")
                 }
                 if runs > 0 {
                     Button(String("\(runs) run\(runs == 1 ? "" : "s") ›")) { model.openRuns(pull) }.dashButton(.plain)
