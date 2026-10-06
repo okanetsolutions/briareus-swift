@@ -4,7 +4,7 @@
 import Combine
 import SwiftUI
 
-enum BoardTab: Int { case pulls, issues, ssh, sftp, run, db }
+enum BoardTab: Int { case pulls, issues, ssh, sftp, run, db, forge }
 
 @MainActor
 final class BoardModel: ObservableObject {
@@ -32,10 +32,11 @@ final class BoardModel: ObservableObject {
     private var opening = BoardFilter()
     private var readGen = 0
     private var readingActions = false, readingRuns = false
-    /// The Run and Database tabs (project_run.c, project_db.c), kept with the board as the Windows client keeps them with its
-    /// screen; what they change redraws the board's header.
+    /// The Run, Database and Forge tabs (project_run.c, project_db.c, project_forge.c), kept with the board as the Windows
+    /// client keeps them with its screen; what they change redraws the board's header.
     private(set) lazy var run = adoptTab(ProjectRunModel(repo: repo))
     private(set) lazy var db = adoptTab(ProjectDBModel(repo: repo))
+    private(set) lazy var forge = adoptTab(ProjectForgeModel(repo: repo))
     private var tabSinks: [AnyCancellable] = []
     private func adoptTab<T: ObservableObject>(_ m: T) -> T where T.ObjectWillChangePublisher == ObservableObjectPublisher {
         tabSinks.append(m.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() })
@@ -148,6 +149,7 @@ final class BoardModel: ObservableObject {
         case .ssh: RemoteSessions.sshRefresh(repo)
         case .run: run.refresh()
         case .db: db.refresh()
+        case .forge: forge.refresh()
         case .sftp: RemoteSessions.sftpRefresh(repo)
         default:
             uncertain = false; writeError = nil
@@ -249,7 +251,7 @@ struct BoardScreen: View {
         VStack(spacing: 0) {
             header
             switch model.tab {
-            case .ssh, .sftp, .run, .db:
+            case .ssh, .sftp, .run, .db, .forge:
                 VStack(alignment: .leading, spacing: 0) {
                     tabs.padding(.horizontal, Theme.paneMargin)
                     Spacer().frame(height: 14)
@@ -312,6 +314,10 @@ struct BoardScreen: View {
             buttons = model.run.headerButtons
         case .db:
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the project's SSH servers again") { model.refresh() })
+        case .forge:
+            if let s = model.forge.subtitle { sub = s }
+            buttons = model.forge.headerButtons
+            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read it from Forge again") { model.refresh() })
         default:
             // The pickers, as the Windows client's selects, and ⟳. C gives them no glyph; the SF Symbol stands in only when the
             // header is too narrow for labels, where C would draw an empty square.
@@ -343,6 +349,7 @@ struct BoardScreen: View {
             labels.append((.sftp, files > 0 ? "⇵ SFTP sessions \(files)" : "⇵ SFTP sessions"))
         }
         if ProjectDBModel.offered { labels.append((.db, "⛁ Database")) }
+        if ProjectForgeModel.offered { labels.append((.forge, "☁ Forge")) }
         return VStack(spacing: 0) {
             HStack(spacing: 4) {
                 ForEach(labels, id: \.0) { tab, label in BoardTabButton(label: label, active: model.tab == tab) { select(tab) } }
@@ -362,6 +369,7 @@ struct BoardScreen: View {
         switch tab {
         case .run: return ProjectRunModel.offered
         case .db: return ProjectDBModel.offered
+        case .forge: return ProjectForgeModel.offered
         default: return false
         }
     }
@@ -370,6 +378,7 @@ struct BoardScreen: View {
         switch model.tab {
         case .run: ProjectRunTab(model: model.run)
         case .db: ProjectDBTab(model: model.db)
+        case .forge: ProjectForgeTab(model: model.forge)
         default: EmptyView()
         }
     }
