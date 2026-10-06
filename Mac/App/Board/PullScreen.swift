@@ -200,7 +200,7 @@ private struct PullHeader: View {
 
     private var toolbar: some View {
         HStack(spacing: 6) {
-            Button("⟳ Refresh") { model.refresh() }.dashButton(.bordered).disabled(model.readingPull)
+            GlyphButton(glyph: "arrow.clockwise", title: "Refresh") { model.refresh() }.disabled(model.readingPull)
             if model.canEdit {
                 Button(model.editing ? "Saving…" : "Edit") { model.editDetails() }.dashButton(.bordered).disabled(model.editing || model.pullBody == nil)
                     .help("Edit the title and description")
@@ -213,7 +213,10 @@ private struct PullHeader: View {
                 Button(model.merging ? "Merging…" : "Merge") { model.merge() }.dashButton(.prominent).disabled(model.merging || model.busy)
             }
             if safeWebURL(model.pr["url"].string) {
-                Button("Open in GitHub ↗") { openWebURL(model.pr["url"].string) }.dashButton(.bordered)
+                Button { openWebURL(model.pr["url"].string) } label: {
+                    HStack(spacing: 5) { Text("Open in GitHub"); Image(systemName: "arrow.up.right").font(.system(size: 11)) }
+                }
+                .dashButton(.bordered)
             }
         }
     }
