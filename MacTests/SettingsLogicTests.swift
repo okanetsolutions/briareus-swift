@@ -36,6 +36,20 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertNil(body.object?["localDir"])
     }
 
+    func testProjectActiveSwitchAndAutonomousLoopAreSent() throws {
+        var s = ProjectFormState(row: ["id": 4, "repo": "o/r", "enabled": true, "autonomousReviewLoop": false])
+        XCTAssertTrue(s.bool(.enabled))
+        s.bools[.enabled] = false
+        XCTAssertTrue(s.tabChanged(.project))
+        s.bools[.autoLoop] = true
+        XCTAssertTrue(s.tabChanged(.review))
+        let body = try s.body().get()
+        XCTAssertEqual(body["enabled"], false)
+        XCTAssertEqual(body["autonomousReviewLoop"], true)
+        // A server whose projects predate the loop gets no key for it.
+        XCTAssertNil(try ProjectFormState(row: ["repo": "o/r", "enabled": true]).body().get().object?["autonomousReviewLoop"])
+    }
+
     func testProjectBodyRefusesABadRepoOrBudget() {
         var s = ProjectFormState(row: [:])
         s.texts[.repo] = "nope"
