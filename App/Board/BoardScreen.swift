@@ -81,8 +81,8 @@ struct BoardScreen: View {
     }
 
     private var board: JSON { feed.board }
-    private var pulls: [PullSummary] { PullSummary.parseList(board["pulls"]) }
-    private var issues: [(summary: IssueSummary, raw: JSON)] { board["issues"].items.compactMap { j in IssueSummary(j).map { ($0, j) } } }
+    private var pulls: [PullSummary] { feed.pulls }
+    private var issues: [(summary: IssueSummary, raw: JSON)] { feed.issues }
     private var loaded: Bool { feed.boardLoaded || error != nil }
     private var filter: Binding<BoardFilter> { shownTab == .pulls ? $filters.pulls : $filters.issues }
     /// The project names a GitHub Projects board this token can read.

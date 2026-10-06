@@ -86,8 +86,10 @@ final class BoardModel: ObservableObject {
 
     private func show(_ result: JSON, saved: Bool) {
         board = result
-        pulls = PullSummary.parseList(result["pulls"])
-        issues = result["issues"].items.compactMap { j in IssueSummary(j).map { ($0, j) } }
+        // A poll mostly answers what is already shown; unchanged rows are left as they are.
+        let parsed = PullSummary.parseList(result["pulls"])
+        if parsed != pulls { pulls = parsed }
+        if result["issues"] != JSON.array(issues.map(\.raw)) { issues = result["issues"].items.compactMap { j in IssueSummary(j).map { ($0, j) } } }
         // A saved board may be out of date about who has something open, so the server's first answer opens the board
         // again, unless the pickers were touched meanwhile.
         if hasOpening {
@@ -348,7 +350,8 @@ struct BoardScreen: View {
                 .onChange(of: meeting.logRepo) { _, _ in if meeting.transcript(for: repo) == nil { model.tab = .pulls } }
             default:
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
+                    // Lazy: a busy repository lists a hundred pull requests, and only the rows in view are built and redrawn.
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         tabs
                         Spacer().frame(height: 14)
                         lists
@@ -545,14 +548,12 @@ struct BoardScreen: View {
     }
 
     @ViewBuilder private func pullList(filter: BoardFilter, shown: Int) -> some View {
-        ForEach(Array(model.pulls.enumerated()), id: \.element.number) { _, pull in
-            if filter.passes(BoardRow(pull)) {
-                PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number),
-                        issueStatus: model.issueStatus.statuses(pull), action: { model.openPull(pull) }) {
-                    rowButtons(pull)
-                }
-                .padding(.bottom, 8)
+        ForEach(model.pulls.filter { filter.passes(BoardRow($0)) }, id: \.number) { pull in
+            PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number),
+                    issueStatus: model.issueStatus.statuses(pull), action: { model.openPull(pull) }) {
+                rowButtons(pull)
             }
+            .padding(.bottom, 8)
         }
         if model.loaded && shown == 0 && model.error == nil {
             Text(model.pulls.isEmpty ? "No open pull requests." : "No pull requests match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)

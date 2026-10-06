@@ -538,7 +538,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
         try Task.checkCancellation()
         guard case .pull(number) = focus else { return }
         pull = answer["pr"]
-        if feed.boardLoaded { row = pullsFind(PullSummary.parseList(feed.board["pulls"]), number) }
+        if feed.boardLoaded { row = pullsFind(feed.pulls, number) }
         if let served { catalog = served["actions"] }
         if feed.sessionsLoaded { runs = feed.sessions.filter { $0.pullNumber == number } }
         if store.supports("findings"), let found = try? await store.call("findings", args), case .pull(number) = focus { findings = found["findings"] }
