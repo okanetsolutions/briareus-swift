@@ -1,6 +1,6 @@
 // A project's conversations, as the Mac sidebar's second screen (SidebarSessions, SidebarRows): found by their title, the
 // closed ones on request, those at work first; each row marked by its pull request where it has one. Above them the
-// project's board, its findings waiting and a new conversation, and ▶ Run on its default branch; a swipe closes, reopens,
+// project's findings waiting and a new conversation, and ▶ Run on its default branch; a swipe closes, reopens,
 // renames or deletes one, and Select closes or deletes several, as ☑ Select does. The menu also opens the project's Laravel Forge.
 import SwiftUI
 
@@ -136,10 +136,6 @@ struct ProjectView: View {
                 if store.canManage {
                     Button { navigate(.voice(repo: repo)) } label: { Image(systemName: "waveform") }
                         .accessibilityLabel("Talk about this project")
-                }
-                if store.supports("pulls") {
-                    Button { navigate(.board(repo: repo)) } label: { Image(systemName: "arrow.triangle.pull") }
-                        .accessibilityLabel("Pull requests and issues")
                 }
                 if waiting > 0 {
                     Button { navigate(.findings(repo: repo)) } label: { FindingsCountIcon(count: waiting) }
