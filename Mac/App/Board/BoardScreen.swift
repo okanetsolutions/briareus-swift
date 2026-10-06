@@ -29,6 +29,9 @@ final class BoardModel: ObservableObject {
     var dialogOpen = false
     /// The Board tab's own state (ProjectBoardTab.swift).
     lazy var projectBoard = ProjectBoardModel(repo: repo)
+    /// The project Status of each linked issue, for the chips on the pull request rows (IssueProjects.swift).
+    lazy var issueStatus = IssueStatusReader(repo: repo, rows: { [weak self] in (self?.pulls ?? [], self?.pullFilter ?? BoardFilter()) },
+                                             changed: { [weak self] in self?.objectWillChange.send() })
     private var hasOpening = false
     private var opening = BoardFilter()
     private var readGen = 0
@@ -80,6 +83,7 @@ final class BoardModel: ObservableObject {
             if saved { opening = f } else { hasOpening = false; opening = BoardFilter() }
         }
         if tab == .issues && issues.isEmpty && !result["issuesError"].isSet { tab = .pulls }
+        issueStatus.restore()
         loaded = true
     }
 
@@ -113,6 +117,7 @@ final class BoardModel: ObservableObject {
             error = nil
             syncedAt = Date()
             Store.shared.cache.store(v, "pulls:\(repo)")
+            issueStatus.next()
             return nil
         case .failure(let e):
             if e.kind == .cancelled { return e }
@@ -142,6 +147,7 @@ final class BoardModel: ObservableObject {
         case .board: projectBoard.refresh()
         default:
             uncertain = false; writeError = nil
+            issueStatus.reset()
             Task { await load(fresh: true) }
         }
     }
@@ -375,7 +381,8 @@ struct BoardScreen: View {
     @ViewBuilder private func pullList(filter: BoardFilter, shown: Int) -> some View {
         ForEach(Array(model.pulls.enumerated()), id: \.element.number) { _, pull in
             if filter.passes(BoardRow(pull)) {
-                PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number), action: { model.openPull(pull) }) {
+                PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number),
+                        issueStatus: model.issueStatus.statuses(pull), action: { model.openPull(pull) }) {
                     rowButtons(pull)
                 }
                 .padding(.bottom, 8)

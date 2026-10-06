@@ -753,11 +753,13 @@ private struct RunsList: View {
 
 // MARK: - Sidebar
 
-/// The sidebar: only what the server reports; GitHub's projects and notifications are not part of it.
+/// The sidebar: only what the server reports; the projects are those of the issues it closes, and notifications are not
+/// part of it.
 private struct PullSidebar: View {
     @ObservedObject var model: PullModel
     var body: some View {
         let row = model.boardRow
+        let projects = model.issueProjects.entries.map { AnyView(PullProjectsItem(entries: $0)) }
         var items: [AnyView] = []
         if !model.actions.isEmpty { items.append(AnyView(actions(row))) }
         if !model.pr.isNull { items.append(AnyView(checks)); items.append(AnyView(reviewers(row))) }
@@ -770,10 +772,12 @@ private struct PullSidebar: View {
                 if row.labels.isEmpty { Text("None yet").font(Theme.caption).foregroundStyle(Theme.muted) }
                 else { LabelChips(labels: row.labels, background: Theme.canvas) }
             }))
+            if let projects { items.append(projects) }
             if let milestone = row.raw["milestone"].string {
                 items.append(AnyView(section("Milestone") { Text(milestone).font(Theme.footnote).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true) }))
             }
         }
+        if row == nil, let projects { items.append(projects) }
         let issues = (row?.issues.isEmpty == false) ? row!.issues : BoardLink.parseList(model.pr["issues"])
         if !issues.isEmpty { items.append(AnyView(development(issues))) }
         return VStack(alignment: .leading, spacing: 0) {

@@ -132,11 +132,13 @@ struct SessionRow: View {
 
 // MARK: - Linked rows and facts
 
-/// The linked issue or pull request row under a board row: ↳, its reference, its title and its state.
+/// The linked issue or pull request row under a board row: ↳, its reference, its title and its state, and `status` (the
+/// issue's Status on its project board) as a chip after it.
 struct LinkedRow: View {
     var link: BoardLink
     var repo: String?
     var action: (() -> Void)? = nil
+    var status: String? = nil
     var body: some View {
         let content = HStack(spacing: 5) {
             Text("↳").font(Theme.caption).foregroundStyle(Theme.tertiary).frame(width: 12, alignment: .leading)
@@ -145,6 +147,7 @@ struct LinkedRow: View {
             if let state = linkedStateText(link) {
                 Text(state).font(Theme.caption2).foregroundStyle(state == "open" ? Theme.ok : state == "closed" ? Theme.muted : Theme.warn)
             }
+            if let status, !status.isEmpty { Chip(name: status, color: Theme.muted).fixedSize() }
             Spacer(minLength: 0)
         }
         .frame(height: 20)
@@ -204,6 +207,8 @@ struct PullRow<Buttons: View>: View {
     var stack: StackPosition?
     var repo: String?
     var running = false
+    /// The project Status of each issue it closes, in its order; nil or "" for none.
+    var issueStatus: [String?] = []
     var action: (() -> Void)?
     @ViewBuilder var buttons: Buttons
 
@@ -231,7 +236,9 @@ struct PullRow<Buttons: View>: View {
             Text(pull.title).font(Theme.bodySemibold).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
             MetaLine(parts: facts, right: pull.updatedAt.map { formatRelative($0) }).padding(.top, 4)
             if !pull.labels.isEmpty { LabelChips(labels: pull.labels).padding(.top, 6) }
-            ForEach(Array(pull.issues.enumerated()), id: \.offset) { _, link in LinkedRow(link: link, repo: repo).padding(.top, 4) }
+            ForEach(Array(pull.issues.enumerated()), id: \.offset) { i, link in
+                LinkedRow(link: link, repo: repo, status: i < issueStatus.count ? issueStatus[i] : nil).padding(.top, 4)
+            }
             buttons
         }
     }
