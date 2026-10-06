@@ -1,9 +1,10 @@
 // The project board (screen_pulls.c pulls_screen_*): open pull requests and issues as tabs, with the project's SSH and SFTP
 // sessions beside them for a token that may read the servers. Each pull request row carries the errands its state offers,
 // the suggested one filled; author, reviewer and label pickers narrow the lists, and are kept per repository.
+import Combine
 import SwiftUI
 
-enum BoardTab: Int { case pulls, issues, ssh, sftp }
+enum BoardTab: Int { case pulls, issues, ssh, sftp, run }
 
 @MainActor
 final class BoardModel: ObservableObject {
@@ -31,6 +32,14 @@ final class BoardModel: ObservableObject {
     private var opening = BoardFilter()
     private var readGen = 0
     private var readingActions = false, readingRuns = false
+    /// The Run tab (project_run.c), kept with the board as the Windows client keeps it with its screen; what it changes
+    /// redraws the board's header.
+    private(set) lazy var run = adoptTab(ProjectRunModel(repo: repo))
+    private var tabSinks: [AnyCancellable] = []
+    private func adoptTab<T: ObservableObject>(_ m: T) -> T where T.ObjectWillChangePublisher == ObservableObjectPublisher {
+        tabSinks.append(m.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() })
+        return m
+    }
 
     init(repo: String) {
         self.repo = repo
@@ -136,6 +145,7 @@ final class BoardModel: ObservableObject {
     func refresh() {
         switch tab {
         case .ssh: RemoteSessions.sshRefresh(repo)
+        case .run: run.refresh()
         case .sftp: RemoteSessions.sftpRefresh(repo)
         default:
             uncertain = false; writeError = nil
@@ -237,12 +247,16 @@ struct BoardScreen: View {
         VStack(spacing: 0) {
             header
             switch model.tab {
-            case .ssh, .sftp:
+            case .ssh, .sftp, .run:
                 VStack(alignment: .leading, spacing: 0) {
                     tabs.padding(.horizontal, Theme.paneMargin)
                     Spacer().frame(height: 14)
                     Group {
-                        if model.tab == .ssh { ProjectSSHTab(repo: repo, showsHeader: false) } else { ProjectSFTPTab(repo: repo, showsHeader: false) }
+                        switch model.tab {
+                        case .ssh: ProjectSSHTab(repo: repo, showsHeader: false)
+                        case .sftp: ProjectSFTPTab(repo: repo, showsHeader: false)
+                        default: projectTab
+                        }
                     }
                     .padding(.horizontal, Theme.paneMargin)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -291,6 +305,9 @@ struct BoardScreen: View {
             buttons = h?.buttons ?? []
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C),
                                         tip: model.tab == .ssh ? "Read the project's SSH servers again" : "Read the servers and the folder on show again") { model.refresh() })
+        case .run:
+            sub = model.run.subtitle
+            buttons = model.run.headerButtons
         default:
             // The pickers, as the Windows client's selects, and ⟳. C gives them no glyph; the SF Symbol stands in only when the
             // header is too narrow for labels, where C would draw an empty square.
@@ -315,6 +332,8 @@ struct BoardScreen: View {
         _ = remoteRevision
         let open = RemoteSessions.sshCount(repo), files = RemoteSessions.sftpCount(repo)
         var labels: [(BoardTab, String)] = [(.pulls, "⇅ Pull requests"), (.issues, "⊙ Issues")]
+        // Run, on the default branch, for a token that may serve one.
+        if ProjectRunModel.offered { labels.append((.run, "▶ Run")) }
         if remoteOffered {
             labels.append((.ssh, open > 0 ? "❯ SSH sessions \(open)" : "❯ SSH sessions"))
             labels.append((.sftp, files > 0 ? "⇵ SFTP sessions \(files)" : "⇵ SFTP sessions"))
@@ -328,7 +347,24 @@ struct BoardScreen: View {
         }
     }
     private func select(_ tab: BoardTab) {
-        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) ? tab : .pulls
+        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) || projectTabOffered(tab) ? tab : .pulls
+        if model.tab == .run { model.run.open() }
+    }
+
+    // MARK: The Run, Database and Forge tabs
+
+    private func projectTabOffered(_ tab: BoardTab) -> Bool {
+        switch tab {
+        case .run: return ProjectRunModel.offered
+        default: return false
+        }
+    }
+    /// The tab on show, from the tabs down to the bottom of the pane.
+    @ViewBuilder private var projectTab: some View {
+        switch model.tab {
+        case .run: ProjectRunTab(model: model.run)
+        default: EmptyView()
+        }
     }
 
     // MARK: Lists

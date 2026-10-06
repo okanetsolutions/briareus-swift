@@ -233,6 +233,8 @@ struct APIRoute: Sendable {
         .init(name: "delete_ssh_server", method: "DELETE", path: "settings/ssh/servers/{id}"),
         // The database login stored with one, opened, for a tunnel over it to its database.
         .init(name: "ssh_server_db_credentials", method: "GET", path: "settings/ssh/servers/{id}/db-credentials"),
+        // ▶ Run on a branch, the default one when `branch` is absent: the board's Run tab.
+        .init(name: "serve_branch", method: "POST", path: "branches/serve"),
     ]
     private static let table: [String: APIRoute] = Dictionary(uniqueKeysWithValues: all.map { ($0.name, $0) })
 }

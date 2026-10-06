@@ -686,6 +686,20 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(runSessionServing(sessions["sessions"], number: 8)?.sessionId, "elsewhere")
         XCTAssertNil(runSessionServing(sessions, number: 9))
     }
+    func testABranchRunIsAPreviewWithNoPullRequest() {
+        let sessions = j(#"{"sessions":["#
+            + #"{"id":"chat","title":"Run: main","createdAt":"2026-10-01T13:00:00Z","serveLinks":[{"url":"https://chat.example.com"}]},"#
+            + #"{"id":"pr","preview":true,"startedOnPr":7,"createdAt":"2026-10-01T12:00:00Z","serveLinks":[{"url":"https://pr.example.com"}]},"#
+            + #"{"id":"old","preview":true,"createdAt":"2026-10-01T10:00:00Z","serveLinks":[{"url":"https://old.example.com"}]},"#
+            + #"{"id":"new","preview":true,"createdAt":"2026-10-01T11:00:00Z","serveLinks":null}]}"#)
+        XCTAssertEqual(runSessionPreparingBranch(sessions), "new")
+        let live = runSessionServingBranch(sessions)
+        XCTAssertEqual(live?.sessionId, "old"); XCTAssertEqual(live?.url, "https://old.example.com")
+        let pulls = j(#"[{"id":"pr","preview":true,"prStatus":{"number":3},"serveLinks":[{"url":"https://pr.example.com"}]}]"#)
+        XCTAssertNil(runSessionPreparingBranch(pulls))
+        XCTAssertNil(runSessionServingBranch(pulls))
+        XCTAssertNil(runSessionPreparingBranch(.null))
+    }
     func testTheRunLogReadsLogLinesPastItsCursor() {
         var log = RunLog()
         let events = j(#"["#
