@@ -13,7 +13,7 @@ enum SSHQuery {
 
     /// Runs `sql` on the server; cancelling the task ends its ssh.
     static func run(_ target: TermTarget, login: SQLLogin, sql: String) async -> Answer {
-        if let problem = target.problem { return Answer(ok: false, out: problem) }
+        if let problem = target.problem ?? login.problem { return Answer(ok: false, out: problem) }
         let askpass = Bundle.main.executablePath ?? CommandLine.arguments[0]
         let p = Process()
         p.executableURL = URL(fileURLWithPath: client)

@@ -117,6 +117,8 @@ final class Meeting: ObservableObject {
 
     /// How long a board read may take, within the 120 s the agent waits for a tool.
     private static let boardTimeout: TimeInterval = 110
+    /// How old a saved board may be and still answer a lookup.
+    private static let boardFresh: TimeInterval = 120
 
     private var gen = 0
     private var ready = false
@@ -377,9 +379,12 @@ final class Meeting: ObservableObject {
                     group.addTask { @MainActor in
                         guard store.supports(call.op) else { return (i, nil) }
                         // A large project's board takes GitHub a while to read: the one the project screen last synced
-                        // answers at once.
+                        // answers at once while it is recent, so a long meeting still hears what changed since.
                         let board = call.op == "pulls"
-                        if board, let saved = store.cache.value("pulls:\(repo)") { return (i, .success(saved)) }
+                        if board, let saved = store.cache.value("pulls:\(repo)"),
+                           let synced = boardDateParse(saved["syncedAt"].string), Date().timeIntervalSince(synced) < Self.boardFresh {
+                            return (i, .success(saved))
+                        }
                         do {
                             let value = try await store.call(call.op, call.args, timeout: board ? Self.boardTimeout : nil)
                             // The board read for a meeting is the project screen's too.

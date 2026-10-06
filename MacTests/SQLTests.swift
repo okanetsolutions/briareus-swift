@@ -42,4 +42,10 @@ final class SQLTests: XCTestCase {
         XCTAssertFalse(cmd.contains("secret"))
         XCTAssertEqual(login.input("SHOW DATABASES;"), "secret\nSHOW DATABASES;\n")
     }
+
+    func testAPasswordWithALineBreakIsRefused() {
+        XCTAssertNil(SQLLogin(host: "", port: 0, user: "u", password: "s3cret").problem)
+        XCTAssertNotNil(SQLLogin(host: "", port: 0, user: "u", password: "s3cret\nx").problem)
+        XCTAssertNotNil(SQLLogin(host: "", port: 0, user: "u", password: "s3cret\r").problem)
+    }
 }

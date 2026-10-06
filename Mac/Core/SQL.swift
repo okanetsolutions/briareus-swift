@@ -18,6 +18,11 @@ struct SQLLogin: Equatable, Sendable {
     }
     /// What goes in on standard input: the password line, then the statements.
     func input(_ sql: String) -> String { "\(password)\n\(sql)\n" }
+    /// A line break would end the password's line early and hand the rest to mysql as SQL, so such a login is refused.
+    var problem: String? {
+        password.contains(where: { $0 == "\n" || $0 == "\r" || $0 == "\r\n" })
+            ? "The stored database password contains a line break, which the Database tab cannot send. Edit it in ⚙ Settings → SSH servers → Database." : nil
+    }
 }
 
 /// `mysql --batch` output split into rows of fields, the first row the column names, with \t \n \\ \0 unescaped.
