@@ -33,6 +33,10 @@ enum Destination: Hashable, Identifiable {
     case voiceSettings
     /// A session's ⚡ Webhook: its settings, URLs and keys.
     case webhook(session: JSON)
+    /// A project's Laravel Forge servers and sites.
+    case forge(repo: String)
+    /// One Forge site: its overview, deploy script and .env. `account` is the Forge account's id.
+    case forgeSite(repo: String, account: Double, server: JSON, site: JSON)
 
     var id: String {
         switch self {
@@ -53,6 +57,9 @@ enum Destination: Hashable, Identifiable {
         case .voice(let repo, let held): return "voice:\(repo)" + (held.map { ":\($0.id)" } ?? "")
         case .voiceSettings: return "voice-settings"
         case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
+        case .forge(let repo): return "forge:\(repo)"
+        case .forgeSite(let repo, let account, let server, let site):
+            return "forge-site:\(repo):" + String(format: "%.0f:%.0f:%.0f", account, server["id"].number ?? 0, site["id"].number ?? 0)
         }
     }
     static func == (a: Destination, b: Destination) -> Bool { a.id == b.id }
@@ -77,6 +84,8 @@ enum Destination: Hashable, Identifiable {
         case .voice(let repo, let held): VoiceScreen(repo: repo, conversation: held)
         case .voiceSettings: VoiceSettingsScreen()
         case .webhook(let session): WebhookScreen(session: session)
+        case .forge(let repo): ProjectForgeScreen(repo: repo)
+        case .forgeSite(let repo, let account, let server, let site): ForgeSiteScreen(repo: repo, account: account, server: server, site: site)
         }
     }
 }

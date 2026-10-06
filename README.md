@@ -57,6 +57,7 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 - Starts the board's errands on a pull request: run, code review, solve conflicts, fix failing checks, implement feedback, feedback in your own words, test sheet, record QA, PR body and delete my comments. The one the pull request's state asks for is marked as suggested, named on its row in the list and offered as a button above Squash and merge.
 - Lists the repository's open issues, sub-issues nested under their epic, with the pull requests answering each, starts a session on an issue and closes one as completed or not planned.
 - Shows the project's GitHub Projects board, when its settings name one, as its view filters and groups it: a column at a time with its count and Story Points, each card with its fields, labels, assignees and the pull requests closing it, narrowed to one assignee. A card opens its issue or pull request, and moves to another column from its menu, saying why when GitHub refuses.
+- With an Admin token, lists the Laravel Forge servers the project may use from the project screen's menu, each with its sites, the project's own first. A site opens on its overview, its deploy script and its `.env`, which is read only on Show .env; both are edited and saved to Forge, and replacing the `.env` asks first.
 
 **Usage and Settings**
 
