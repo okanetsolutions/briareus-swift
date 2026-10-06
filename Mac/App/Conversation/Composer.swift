@@ -155,6 +155,12 @@ final class ComposerNSTextView: NSTextView {
         if coordinator?.parent.onPaste(NSPasteboard.general) == true { return }
         super.paste(sender)
     }
+    // A plain text view greys out Paste when the clipboard holds only an image (a screenshot), so ⌘V never reached
+    // `paste(_:)`: keep it enabled for anything the composer takes as attachments.
+    override func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(paste(_:)), isEditable, Attachments.hasFiles(NSPasteboard.general) { return true }
+        return super.validateMenuItem(item)
+    }
     override func becomeFirstResponder() -> Bool {
         let ok = super.becomeFirstResponder()
         if ok { coordinator?.focusChanged(true) }
