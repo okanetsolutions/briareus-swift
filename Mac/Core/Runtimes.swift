@@ -103,6 +103,15 @@ struct RuntimeCatalog: Equatable, Sendable {
         }
         return out
     }
+    /// A choice as this catalog still offers it, for a pick saved earlier: nil once its provider is gone or unavailable or
+    /// its model gone; an effort the model no longer offers falls back to the model's default.
+    func offered(_ c: RuntimeChoice) -> RuntimeChoice? {
+        guard let p = provider(c.providerId), p.isAvailable else { return nil }
+        guard let id = c.model else { return p.models.isEmpty ? RuntimeChoice(providerId: p.id, effort: c.effort) : nil }
+        guard let m = p.models.first(where: { $0.id == id }) else { return nil }
+        let effort = c.effort.flatMap { (m.efforts ?? []).contains($0) ? $0 : nil } ?? m.defaultEffort ?? m.efforts?.first
+        return RuntimeChoice(providerId: p.id, model: m.id, effort: effort)
+    }
     /// Used when the project has no default runtime and a start therefore needs a provider.
     func firstAvailable() -> RuntimeChoice? {
         guard let p = providers.first(where: \.isAvailable) else { return nil }
@@ -116,5 +125,22 @@ struct RuntimeCatalog: Equatable, Sendable {
         if let label = p?.label, !label.isEmpty { s = label }
         if let model, !model.isEmpty { s += (s.isEmpty ? "" : " \u{00B7} ") + model }
         return s
+    }
+}
+
+/// The runtime last picked for a new session, kept across launches so the next new session starts on it.
+enum LastRuntime {
+    static let key = "lastRuntime"
+
+    static func load(_ defaults: UserDefaults = .standard) -> RuntimeChoice? {
+        defaults.string(forKey: key).flatMap { JSON.parse($0) }.flatMap(RuntimeChoice.init)
+    }
+    /// Nil forgets the pick, so new sessions go back to the project default.
+    static func save(_ choice: RuntimeChoice?, _ defaults: UserDefaults = .standard) {
+        if let choice { defaults.set(choice.json.serialized(), forKey: key) } else { defaults.removeObject(forKey: key) }
+    }
+    /// The saved pick as this catalog offers it.
+    static func restore(_ catalog: RuntimeCatalog, _ defaults: UserDefaults = .standard) -> RuntimeChoice? {
+        load(defaults).flatMap(catalog.offered)
     }
 }
