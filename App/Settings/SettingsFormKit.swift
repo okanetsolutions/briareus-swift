@@ -23,6 +23,9 @@ final class SettingsLists: ObservableObject {
     @Published var providers = Section()
     @Published var servers = Section()
     @Published var ssh = Section()
+    @Published var forge = Section()
+    /// The Slack workspaces, which the Slack form also reads to mark the projects another one already serves.
+    @Published var slack = Section()
     /// The tokens issued, and (in `defaults`) the projects one can be held to.
     /// A reorder is on its way.
     @Published private(set) var ordering = false
@@ -38,7 +41,7 @@ final class SettingsLists: ObservableObject {
     }
 
     private func reset() {
-        projects = Section(); providers = Section(); servers = Section(); ssh = Section()
+        projects = Section(); providers = Section(); servers = Section(); ssh = Section(); forge = Section(); slack = Section()
         ordering = false
     }
 
@@ -60,17 +63,26 @@ final class SettingsLists: ObservableObject {
     func loadProviders() async throws { try await load(\.providers, "settings_providers", "providers") }
     func loadServers() async throws { try await load(\.servers, "settings_db_servers", "servers") }
     func loadSSH() async throws { try await load(\.ssh, "settings_ssh_servers", "servers") }
+    func loadForge() async throws { try await load(\.forge, "settings_forge_accounts", "accounts") }
+    func loadSlack() async throws { try await load(\.slack, "settings_slack_workspaces", "workspaces") }
 
     /// Every list afresh; the first failure is what a poll backs off on.
     func refresh() async throws {
         var first: Error?
-        for read in [loadProjects, loadProviders, loadServers, loadSSH] {
+        for read in [loadProjects, loadProviders, loadServers, loadSSH, loadForge, loadSlack] {
             do { try await read() } catch { if first == nil { first = error } }
         }
         if let first { throw first }
     }
 
     // MARK: Order
+
+    /// Moves project `i` one place up (-1) or down (1), as the row's Move up and Move down do.
+    func moveProject(_ i: Int, by step: Int) {
+        let to = i + step
+        guard projects.list.indices.contains(i), projects.list.indices.contains(to) else { return }
+        moveProjects(from: IndexSet(integer: i), to: step > 0 ? to + 1 : to)
+    }
 
     /// Moves projects within the list, which is also the order the Mac app's sidebar and composer use.
     func moveProjects(from source: IndexSet, to destination: Int) {
@@ -182,7 +194,7 @@ struct SettingsTextRow<FocusKey: Hashable>: View {
     }
 
     /// Anything typed for a machine (paths, commands, keys) goes in as typed.
-    private var literal: Bool { def.mono || def.secret || def.kind == .list || def.kind == .number }
+    private var literal: Bool { def.mono || def.secret || def.kind == .list || def.kind == .number || def.kind == .board }
 
     @ViewBuilder private var box: some View {
         if def.isMultiline {
@@ -198,7 +210,7 @@ struct SettingsTextRow<FocusKey: Hashable>: View {
         } else {
             HStack {
                 TextField(def.cue ?? "", text: $text)
-                    .keyboardType(def.kind == .number ? (def.key == "workerBudgetUsd" ? .decimalPad : .numberPad) : .default)
+                    .keyboardType(def.kind == .number ? (def.key == "workerBudgetUsd" ? .decimalPad : .numberPad) : def.kind == .board ? .URL : .default)
                     .textInputAutocapitalization(literal ? .never : .sentences)
                     .autocorrectionDisabled(literal)
                     .submitLabel(onSubmit != nil ? .go : .done)
