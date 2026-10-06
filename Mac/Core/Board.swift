@@ -131,6 +131,26 @@ struct PullSummary: Equatable, Sendable {
 /// The board row of this repository's pull request `number`, or nil.
 func pullsFind(_ pulls: [PullSummary], _ number: Int) -> PullSummary? { pulls.first { $0.number == number } }
 
+// MARK: - Review List
+
+/// The label that asks a developer to review a pull request.
+let reviewListRequestLabel = "required-dev-review"
+/// The label that says the author has answered a review.
+let reviewListAnsweredLabel = "feedback-implemented"
+
+/// The pull requests waiting on `me`'s review, in board order: those labelled `required-dev-review` that are not assigned
+/// to `me` and are not stacked on another (outside a stack, or its first), and those labelled `feedback-implemented` that
+/// `me` is a reviewer of. None without a login.
+func reviewList(_ pulls: [PullSummary], stacks: JSON, me: String?) -> [PullSummary] {
+    guard let me, !me.isEmpty else { return [] }
+    return pulls.filter { pull in
+        let carries = { (label: String) in pull.labels.contains { foldEqual($0.name, label) } }
+        if carries(reviewListAnsweredLabel) && pull.reviewers.contains(where: { foldEqual($0.user, me) }) { return true }
+        guard carries(reviewListRequestLabel), !pull.assignees.contains(where: { foldEqual($0, me) }) else { return false }
+        return (StackPosition(pull.raw["stack"], stacks: stacks)?.position ?? 1) <= 1
+    }
+}
+
 // MARK: - Issues
 
 struct IssueSummary: Equatable, Sendable {
