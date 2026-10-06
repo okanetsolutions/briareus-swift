@@ -10,16 +10,21 @@ enum Keychain {
         return SecTaskCopyValueForEntitlement(task, "keychain-access-groups" as CFString, nil) != nil
     }()
 
-    private static func query(_ origin: String) -> [String: Any] {
+    /// The device token, one per server origin.
+    static let device = "com.okanetsolutions.briareus.client"
+    /// The meeting assistant's API keys, one per service ("elevenlabs").
+    static let meeting = "com.okanetsolutions.briareus.meeting"
+
+    private static func query(_ origin: String, _ service: String = device) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: "com.okanetsolutions.briareus.client",
+         kSecAttrService as String: service,
          kSecAttrAccount as String: origin,
          kSecAttrSynchronizable as String: false,
          // This Mac only: the data protection keychain, where device-only protection holds, not the login keychain.
          kSecUseDataProtectionKeychain as String: dataProtection]
     }
-    static func read(_ origin: String) throws -> String? {
-        var q = query(origin)
+    static func read(_ origin: String, service: String = device) throws -> String? {
+        var q = query(origin, service)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
@@ -28,8 +33,8 @@ enum Keychain {
         guard status == errSecSuccess, let data = result as? Data, let token = String(data: data, encoding: .utf8) else { throw failure(status) }
         return token
     }
-    static func save(_ token: String, origin: String) throws {
-        let q = query(origin)
+    static func save(_ token: String, origin: String, service: String = device) throws {
+        let q = query(origin, service)
         let attributes: [String: Any] = [kSecValueData as String: Data(token.utf8),
                                          kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
         let status = SecItemUpdate(q as CFDictionary, attributes as CFDictionary)
@@ -39,8 +44,8 @@ enum Keychain {
         } else if status != errSecSuccess { throw failure(status) }
     }
     @discardableResult
-    static func remove(_ origin: String) -> Bool {
-        let status = SecItemDelete(query(origin) as CFDictionary)
+    static func remove(_ origin: String, service: String = device) -> Bool {
+        let status = SecItemDelete(query(origin, service) as CFDictionary)
         return status == errSecSuccess || status == errSecItemNotFound
     }
     static let failureText = "Could not access the device token in the keychain. Unlock this Mac and try again."

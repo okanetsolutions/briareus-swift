@@ -113,6 +113,7 @@ final class SettingsModel: ObservableObject {
     static func isSettingsScreen(_ screen: Screen) -> Bool {
         switch screen {
         case .projectSettings, .providerSettings, .dbServerSettings, .sshServerSettings: return true
+        case .meetingSettings: return true
         default: return false
         }
     }

@@ -3,7 +3,7 @@
 // the suggested one filled; author, reviewer and label pickers narrow the lists, and are kept per repository.
 import SwiftUI
 
-enum BoardTab: Int { case pulls, issues, ssh, sftp }
+enum BoardTab: Int { case pulls, issues, ssh, sftp, meeting }
 
 @MainActor
 final class BoardModel: ObservableObject {
@@ -223,6 +223,7 @@ struct BoardScreen: View {
     var repo: String
     @ObservedObject private var model: BoardModel
     @ObservedObject private var store = Store.shared
+    @ObservedObject private var meeting = Meeting.shared
     @State private var remoteRevision = 0
 
     init(repo: String) {
@@ -247,6 +248,13 @@ struct BoardScreen: View {
                     .padding(.horizontal, Theme.paneMargin)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
+            case .meeting:
+                VStack(alignment: .leading, spacing: 0) {
+                    tabs.padding(.horizontal, Theme.paneMargin)
+                    Spacer().frame(height: 14)
+                    MeetingTranscript(transcript: meeting.transcript(for: repo) ?? "")
+                }
+                .onChange(of: meeting.logRepo) { _, _ in if meeting.transcript(for: repo) == nil { model.tab = .pulls } }
             default:
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -291,6 +299,7 @@ struct BoardScreen: View {
             buttons = h?.buttons ?? []
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C),
                                         tip: model.tab == .ssh ? "Read the project's SSH servers again" : "Read the servers and the folder on show again") { model.refresh() })
+        case .meeting: break
         default:
             // The pickers, as the Windows client's selects, and ⟳. C gives them no glyph; the SF Symbol stands in only when the
             // header is too narrow for labels, where C would draw an empty square.
@@ -305,6 +314,14 @@ struct BoardScreen: View {
                                         enabled: model.loaded) { model.pick(.label) })
             buttons.append(refresh)
         }
+        // 🎙 Meet: the meeting assistant, on this project, on every tab; a meeting about it leads the line with its time,
+        // cost and what it is doing.
+        let here = meeting.isFor(repo)
+        if here { sub = "\(meeting.status) · \(sub)" }
+        buttons.insert(HeaderButton(glyph: "mic", label: here ? "🎙 Meeting ●" : "🎙 Meet",
+                                    tip: "Join a meeting with an assistant that can look up this project") {
+            MeetingMenu.show(repo: repo, title: model.title)
+        }, at: 0)
         return PaneHeader(title: model.title, subtitle: sub, status: status, buttons: buttons)
     }
 
@@ -319,6 +336,8 @@ struct BoardScreen: View {
             labels.append((.ssh, open > 0 ? "❯ SSH sessions \(open)" : "❯ SSH sessions"))
             labels.append((.sftp, files > 0 ? "⇵ SFTP sessions \(files)" : "⇵ SFTP sessions"))
         }
+        // The meeting's transcript, while one runs on this project and after it.
+        if meeting.transcript(for: repo) != nil { labels.append((.meeting, meeting.isFor(repo) ? "🎙 Meeting ●" : "🎙 Meeting")) }
         return VStack(spacing: 0) {
             HStack(spacing: 4) {
                 ForEach(labels, id: \.0) { tab, label in BoardTabButton(label: label, active: model.tab == tab) { select(tab) } }
@@ -328,7 +347,7 @@ struct BoardScreen: View {
         }
     }
     private func select(_ tab: BoardTab) {
-        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) ? tab : .pulls
+        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) || tab == .meeting ? tab : .pulls
     }
 
     // MARK: Lists

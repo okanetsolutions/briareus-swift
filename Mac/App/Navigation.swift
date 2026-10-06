@@ -30,6 +30,8 @@ enum Screen: Hashable, Identifiable {
     case providerSettings(row: JSON?, defaults: JSON?)
     case dbServerSettings(row: JSON?, defaults: JSON?)
     case sshServerSettings(row: JSON?, defaults: JSON?)
+    /// This Mac's meeting assistant settings.
+    case meetingSettings
 
     var id: String {
         switch self {
@@ -47,6 +49,7 @@ enum Screen: Hashable, Identifiable {
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .dbServerSettings(let row, _): return "db-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .sshServerSettings(let row, _): return "ssh-server:\(row?["id"].int.map(String.init) ?? "new")"
+        case .meetingSettings: return "settings-meeting"
         }
     }
     static func == (a: Screen, b: Screen) -> Bool { a.id == b.id }
