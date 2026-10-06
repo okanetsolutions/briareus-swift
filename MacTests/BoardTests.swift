@@ -759,4 +759,23 @@ final class BoardTests: XCTestCase {
         XCTAssertTrue(log.addEvents(j(#"[{"seq":1,"kind":"info","text":"newest"}]"#))); XCTAssertEqual(log.lines.count, RunLog.cap)
         XCTAssertEqual(log.lines[0].text, "line 1"); XCTAssertEqual(log.lines[RunLog.cap - 1].text, "newest")
     }
+
+    // MARK: - Review List
+
+    func testReviewListKeepsWhatWaitsOnMyReview() {
+        let pulls = PullSummary.parseList(j(#"""
+        [{"number":1,"labels":[{"name":"required-dev-review"}],"assignees":[]},
+         {"number":2,"labels":[{"name":"Required-Dev-Review"}],"assignees":["Me"]},
+         {"number":3,"labels":[{"name":"required-dev-review"}],"stack":{"id":7,"position":1,"total":2}},
+         {"number":4,"labels":[{"name":"required-dev-review"}],"stack":{"id":7,"position":2,"total":2}},
+         {"number":5,"labels":[{"name":"feedback-implemented"}],"reviewers":[{"user":"me","state":"changes_requested"}],
+          "stack":{"id":7,"position":2,"total":2},"assignees":["me"]},
+         {"number":6,"labels":[{"name":"feedback-implemented"}],"reviewers":[{"user":"someone","state":"requested"}]},
+         {"number":7,"labels":[{"name":"bug"}],"reviewers":[{"user":"me","state":"requested"}]}]
+        """#))
+        XCTAssertEqual(reviewList(pulls, stacks: .null, me: "me").map(\.number), [1, 3, 5])
+        XCTAssertEqual(reviewList(pulls, stacks: .null, me: "someone").map(\.number), [1, 2, 3, 6])
+        XCTAssertTrue(reviewList(pulls, stacks: .null, me: nil).isEmpty)
+        XCTAssertTrue(reviewList(pulls, stacks: .null, me: "").isEmpty)
+    }
 }

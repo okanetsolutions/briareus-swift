@@ -1,5 +1,5 @@
 // A project's board on a phone (the Mac's BoardScreen): open pull requests and issues behind a segmented control, and
-// for a project that names one, its GitHub Projects board (ProjectBoardTab.swift); the author, reviewer (pull requests),
+// for a project that names one, its GitHub Projects board (ProjectBoardTab.swift), then the Review List; the author, reviewer (pull requests),
 // assignee (issues, No assignee among them) and label pickers in the toolbar's filter menu, kept per repository. Each pull
 // request row names the errand its state asks for and offers the errands in its context menu, and its linked issues end
 // with their project Status, and a swipe to its right merges it, once confirmed with what stands in the way. The Mac's
@@ -50,7 +50,7 @@ final class BoardFilters: ObservableObject {
 
 struct BoardScreen: View {
     let repo: String
-    private enum Tab: Hashable { case pulls, issues, projectBoard }
+    private enum Tab: Hashable { case pulls, issues, projectBoard, review }
 
     @EnvironmentObject private var store: Store
     @ObservedObject private var feed: ProjectFeed
@@ -66,6 +66,10 @@ struct BoardScreen: View {
     @State private var mergeAsked: PullSummary?
     @State private var mergingNumber = 0
     @State private var mergeNote: String?
+    /// The Review List's login alert, what is typed in it, and a count that redraws the list once a login is saved.
+    @State private var loginAsked = false
+    @State private var loginText = ""
+    @State private var loginRevision = 0
 
     init(repo: String) {
         self.repo = repo
@@ -85,6 +89,8 @@ struct BoardScreen: View {
     private var boardOffered: Bool { ProjectBoardModel.offered(repo) }
     /// The tab shown: the Board tab falls back to the pull requests once the project no longer names a board.
     private var shownTab: Tab { tab == .projectBoard && !boardOffered ? .pulls : tab }
+    /// Whose review the Review List waits on: the saved GitHub login, else the project's author.
+    private var reviewer: String? { _ = loginRevision; return GitHubLogin.current ?? board["author"].nonEmpty }
 
     var body: some View {
         let pulls = self.pulls, issues = self.issues
@@ -96,14 +102,22 @@ struct BoardScreen: View {
             if let note = mergeNote { Section { ErrorNotice(message: note) }.listRowBackground(Theme.row) }
             Picker("Show", selection: $tab) {
                 // Three segments share a phone's width, so the pull requests go by their short name beside the board.
-                Text("\(boardOffered ? "PRs" : "Pull requests") (\(pulls.count))").tag(Tab.pulls)
+                Text("PRs (\(pulls.count))").tag(Tab.pulls)
                 Text("Issues (\(issues.count))").tag(Tab.issues)
                 if boardOffered { Text("Board").tag(Tab.projectBoard) }
+                // Review List, the pull requests waiting on the user's review, after the board; shortened beside it.
+                Text("\(boardOffered ? "Review" : "Review List") (\(reviewList(pulls, stacks: board["stacks"], me: reviewer).count))").tag(Tab.review)
             }
             .pickerStyle(.segmented)
             .listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             if tab == .projectBoard {
                 ProjectBoardSection(model: projectBoard, issues: issues.map(\.summary), pulls: pulls)
+            } else if tab == .review {
+                Button { loginText = GitHubLogin.current ?? ""; loginAsked = true } label: {
+                    Label(GitHubLogin.current.map { "Reviewing as \($0)" } ?? "Set my GitHub login…", systemImage: "person.crop.circle")
+                        .font(.footnote)
+                }
+                .buttonStyle(.borderless).listRowBackground(Color.clear)
             } else if filter.wrappedValue.isOn {
                 HStack {
                     Text("Showing \(rows.filter { filter.wrappedValue.passes($0) }.count) of \(rows.count)").font(.footnote).foregroundStyle(.secondary)
@@ -112,7 +126,7 @@ struct BoardScreen: View {
                 }
                 .listRowBackground(Color.clear)
             }
-            if tab == .pulls { pullRows(pulls) } else if tab == .issues { issueRows(issues) }
+            if tab == .pulls || tab == .review { pullRows(pulls, review: tab == .review) } else if tab == .issues { issueRows(issues) }
             if !loaded && tab != .projectBoard {
                 ProgressView("Loading pull requests…").frame(maxWidth: .infinity).padding(.vertical, 24).listRowBackground(Color.clear)
             }
@@ -124,7 +138,7 @@ struct BoardScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 if tab == .projectBoard {
                     ProjectBoardMenu(model: projectBoard).disabled(projectBoard.board == nil)
-                } else {
+                } else if tab != .review {
                     BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label]) { filters.picked() }
                         .disabled(!loaded || rows.isEmpty && !filter.wrappedValue.isOn)
                 }
@@ -171,6 +185,13 @@ struct BoardScreen: View {
         }
         .onChange(of: issues.isEmpty) { _, empty in if empty && tab == .issues && !board["issuesError"].isSet && feed.boardLoaded { self.tab = .pulls } }
         .errandPrompts(errands)
+        .alert("Your GitHub login", isPresented: $loginAsked) {
+            TextField("Login", text: $loginText).textInputAutocapitalization(.never).autocorrectionDisabled()
+            Button("Save") { if GitHubLogin.save(loginText) { loginRevision += 1 } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The Review List shows the pull requests waiting on this GitHub user's review.")
+        }
         .alert(mergeAsked.map { "Merge #\($0.number)?" } ?? "",
                isPresented: Binding(get: { mergeAsked != nil }, set: { if !$0 { mergeAsked = nil } }), presenting: mergeAsked) { pull in
             Button("Merge") { merge(pull) }
@@ -195,8 +216,10 @@ struct BoardScreen: View {
 
     // MARK: Pull requests
 
-    @ViewBuilder private func pullRows(_ pulls: [PullSummary]) -> some View {
-        let shown = pulls.filter { filters.pulls.passes(BoardRow($0)) }
+    /// The pull requests the filters show, or for `review` the Review List's: labelled required-dev-review, not the
+    /// user's, and not stacked on another, or labelled feedback-implemented on one they review.
+    @ViewBuilder private func pullRows(_ pulls: [PullSummary], review: Bool = false) -> some View {
+        let shown = review ? reviewList(pulls, stacks: board["stacks"], me: reviewer) : pulls.filter { filters.pulls.passes(BoardRow($0)) }
         Section {
             ForEach(shown, id: \.number) { pull in
                 let stack = StackPosition(pull.raw["stack"], stacks: board["stacks"])
@@ -217,7 +240,8 @@ struct BoardScreen: View {
             if let at = boardDateParse(board["syncedAt"].string), !shown.isEmpty { Text("Synced with GitHub \(formatRelative(at)).") }
         }
         if loaded && shown.isEmpty && error == nil {
-            ContentUnavailableView(pulls.isEmpty ? "No open pull requests" : "No pull requests match the filters", systemImage: "arrow.triangle.pull")
+            ContentUnavailableView(review ? (reviewer == nil ? "Set your GitHub login" : "Nothing waiting on your review")
+                                   : pulls.isEmpty ? "No open pull requests" : "No pull requests match the filters", systemImage: "arrow.triangle.pull")
                 .listRowBackground(Color.clear)
         }
     }
