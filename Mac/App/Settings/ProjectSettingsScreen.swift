@@ -275,6 +275,7 @@ struct ProjectSettingsScreen: View {
         case .project:
             SettingsPair { field(.repo) } right: { field(.label) }
             field(.localDir)
+            field(.board)
             field(.setup)
             field(.php)
             SettingsNote(text: "This project's own prompt wording is kept on the server; saving here keeps it as it is.")
