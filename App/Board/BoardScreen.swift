@@ -1,8 +1,9 @@
 // A project's board on a phone (the Mac's BoardScreen): open pull requests and issues behind a segmented control, and
-// for a project that names one, its GitHub Projects board (ProjectBoardTab.swift); the author, reviewer and label pickers
-// in the toolbar's filter menu, kept per repository. Each pull request row names the errand its state asks for and offers
-// the errands in its context menu, and its linked issues end with their project Status. The Mac's SSH and SFTP tabs are
-// left out: they drive local ssh and sftp processes a phone does not have.
+// for a project that names one, its GitHub Projects board (ProjectBoardTab.swift); the author, reviewer (pull requests),
+// assignee (issues, No assignee among them) and label pickers in the toolbar's filter menu, kept per repository. Each pull
+// request row names the errand its state asks for and offers the errands in its context menu, and its linked issues end
+// with their project Status. The Mac's SSH and SFTP tabs are left out: they drive local ssh and sftp processes a phone
+// does not have.
 import SwiftUI
 
 /// The board's pickers, kept on disk per repository as the Mac keeps them. A board never filtered opens on the project's
@@ -119,7 +120,7 @@ struct BoardScreen: View {
                 if tab == .projectBoard {
                     ProjectBoardMenu(model: projectBoard).disabled(projectBoard.board == nil)
                 } else {
-                    BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .label]) { filters.picked() }
+                    BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label]) { filters.picked() }
                         .disabled(!loaded || rows.isEmpty && !filter.wrappedValue.isOn)
                 }
             }
@@ -284,7 +285,7 @@ private struct BoardFilterMenu: View {
                 } label: {
                     let name = kind.name.asciiCapitalized
                     Label(filter[kind].isEmpty ? name : "\(name): \(options.first { $0.value == filter[kind] }?.text ?? filter[kind])",
-                          systemImage: kind == .author ? "person" : kind == .reviewer ? "eye" : "tag")
+                          systemImage: kind == .author ? "person" : kind == .reviewer ? "eye" : kind == .assignee ? "person.crop.circle" : "tag")
                 }
                 .pickerStyle(.menu)
                 .disabled(options.isEmpty)
