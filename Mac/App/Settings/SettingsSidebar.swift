@@ -67,10 +67,16 @@ struct SettingsSidebar: View {
     @ViewBuilder private var projects: some View {
         let s = model.projects
         if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
+        // The order is the dashboard sidebar's and the composer's, so it is moved from here: ↑ and ↓ on the row under the
+        // pointer and on the open one, and the same in its right-click menu.
+        let movable = s.list.count > 1 && store.supports("order_projects")
         ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
             let repo = row["repo"].string ?? ""
             ItemRow(label: row["label"].nonEmpty ?? repo, sub: repo, enabled: !row["enabled"].is(false), db: row["dbPoolEnabled"].is(true),
-                    selected: selected == "project-settings:\(row["id"].int32 ?? 0)") { model.openProject(i) }
+                    selected: selected == "project-settings:\(row["id"].int32 ?? 0)",
+                    moves: movable ? ItemRow.Moves(up: i > 0 && !model.ordering, down: i + 1 < s.list.count && !model.ordering) { model.move(i, by: $0) } : nil) {
+                model.openProject(i)
+            }
                 .contextMenu {
                     if store.supports("order_projects") {
                         Button("Move up") { model.move(i, by: -1) }.disabled(i == 0 || model.ordering)
@@ -231,36 +237,79 @@ private struct Explanation: View {
 }
 
 /// A row of the projects, the pool or the SSH servers: its dot (`.dot.idle` when on, the plain grey dot when off), its label,
-/// and its repository or address under it, with the pool's `db` tag after a project that claims a server.
+/// and its repository or address under it, with the pool's `db` tag after a project that claims a server. A project row
+/// that can move has ↑ and ↓ at the right end of its first line while it is hovered or open.
 private struct ItemRow: View {
+    /// Which way the row can go now, and what a click on an arrow does with -1 or 1.
+    struct Moves {
+        var up: Bool
+        var down: Bool
+        var move: (Int) -> Void
+    }
     var label: String
     var sub: String
     var enabled: Bool
     var db = false
     var selected: Bool
+    var moves: Moves? = nil
+    var action: () -> Void
+    @State private var hovered = false
+    private var arrows: Bool { moves != nil && (hovered || selected) }
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Button(action: action) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 7) {
+                        StatusDot(status: enabled ? "idle" : "")
+                        Text(label).font(Theme.subheadline).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
+                        Spacer(minLength: 0)
+                    }
+                    // The label stops short of the arrows while they show.
+                    .padding(.trailing, arrows ? 50 : 0)
+                    .frame(height: 22)
+                    HStack(spacing: 8) {
+                        Text(sub).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.tail)
+                        if db { Tag(text: "db") }
+                        Spacer(minLength: 0)
+                    }
+                    .frame(height: 18)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 6).fill(hovered || selected ? Theme.raise : .clear))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if let moves, arrows {
+                HStack(spacing: 2) {
+                    MoveArrow(up: true, enabled: moves.up) { moves.move(-1) }
+                    MoveArrow(up: false, enabled: moves.down) { moves.move(1) }
+                }
+                .padding(.top, 6).padding(.trailing, 6)
+            }
+        }
+        .onHover { hovered = $0 }
+    }
+}
+
+/// A project row's ↑ or ↓: 22px, raised, the sidebar's fill and the accent's border under the pointer. A disabled one still
+/// takes the click, so the end of the list does not open the project under it.
+private struct MoveArrow: View {
+    var up: Bool
+    var enabled: Bool
     var action: () -> Void
     @State private var hovered = false
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 7) {
-                    StatusDot(status: enabled ? "idle" : "")
-                    Text(label).font(Theme.subheadline).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
-                    Spacer(minLength: 0)
-                }
-                .frame(height: 22)
-                HStack(spacing: 8) {
-                    Text(sub).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.tail)
-                    if db { Tag(text: "db") }
-                    Spacer(minLength: 0)
-                }
-                .frame(height: 18)
-            }
-            .padding(.horizontal, 8).padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 6).fill(hovered || selected ? Theme.raise : .clear))
-            .contentShape(Rectangle())
+        let lit = enabled && hovered
+        Button { if enabled { action() } } label: {
+            Image(systemName: Glyph.symbol(up ? 0xE70E : 0xE70D)).font(.system(size: 10))
+                .foregroundStyle(!enabled ? Theme.muted.opacity(0.5) : lit ? Theme.ink : Theme.muted)
+                .frame(width: 22, height: 22)
+                .background(RoundedRectangle(cornerRadius: 4).fill(lit ? Theme.sidebar : Theme.raise))
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(lit ? Theme.accentDim : Theme.raise, lineWidth: 1))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(up ? "Move up" : "Move down")
         .onHover { hovered = $0 }
     }
 }

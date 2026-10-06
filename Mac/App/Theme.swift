@@ -139,6 +139,7 @@ enum Glyph {
         case 0xE769: return "pause.fill"
         case 0xE76C: return "chevron.right"
         case 0xE70D: return "chevron.down"
+        case 0xE70E: return "chevron.up"
         case 0xE70F: return "pencil"
         case 0xE774: return "globe"
         case 0xE783: return "exclamationmark.circle"
