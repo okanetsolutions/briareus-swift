@@ -96,7 +96,8 @@ final class Updater: ObservableObject {
         var error: String?
     }
 
-    nonisolated private static func work(install: Bool, app: URL, current: String) async -> Outcome {
+    /// `skip` is the release whose automatic install failed: `auto` installs any other newer one, decided on the release just read.
+    nonisolated private static func work(install: Bool, auto: Bool, skip: String?, app: URL, current: String) async -> Outcome {
         var out = Outcome()
         let updates = Updates()
         switch await updates.check() {
@@ -105,7 +106,7 @@ final class Updater: ObservableObject {
         }
         guard let release = out.release else { return out }
         out.newer = updateNewer(release.version, current)
-        guard out.newer, install else { return out }
+        guard out.newer, install || (auto && release.version != skip) else { return out }
         if let refusal = UpdateBundle.refusal(app) { out.error = refusal; return out }
         switch await updates.download(release) {
         case .failure(let e): out.error = e.message
@@ -122,13 +123,12 @@ final class Updater: ObservableObject {
     private func startJob(install: Bool, manual: Bool) {
         guard !busy, !ready else { return }
         // An automatic install that failed waits for the next release, or for Install in the menu.
-        let auto = automatic && !(failedVersion != nil && failedVersion == latest?.version)
-        let wantInstall = install || auto
+        let auto = automatic, skip = failedVersion
         busy = true; installing = install
         let app = app, current = Self.current
         Task {
-            let out = await Self.work(install: wantInstall, app: app, current: current)
-            self.done(out, install: wantInstall, manual: manual)
+            let out = await Self.work(install: install, auto: auto, skip: skip, app: app, current: current)
+            self.done(out, install: install || (auto && out.release?.version != skip), manual: manual)
         }
     }
 
