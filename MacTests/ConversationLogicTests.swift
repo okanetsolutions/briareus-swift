@@ -23,6 +23,13 @@ final class ConversationLogicTests: XCTestCase {
         XCTAssertEqual(conversationStatusLine(s),
                        "idle \u{00B7} \u{1F501} loop round 2 \u{00B7} feat/x \u{00B7} 2.0k tok \u{00B7} $1.50 \u{00B7} session a \u{00B7} \u{26AA} PR #70 draft \u{00B7} \u{2026}3")
     }
+    func testStatusLineSaysWhetherTheSharedBrowserIsUp() {
+        XCTAssertEqual(conversationStatusLine(session(["id": "a", "status": "idle", "branch": "b", "browser": ["running": true]])),
+                       "idle \u{00B7} b \u{00B7} \u{1F310} browser \u{00B7} session a")
+        XCTAssertEqual(conversationStatusLine(session(["id": "a", "status": "idle", "browser": ["running": false]])),
+                       "idle \u{00B7} \u{1F310} browser starts next turn \u{00B7} session a")
+        XCTAssertEqual(conversationStatusLine(session(["id": "a", "status": "idle", "browser": nil])), "idle \u{00B7} session a")
+    }
     func testLoopWithoutRoundsAndMergedPull() {
         let s = session(["id": "a", "status": "idle", "reviewLoop": [:], "prStatus": ["number": 3, "state": "merged", "checks": ["passed": 4]]])
         XCTAssertEqual(conversationStatusLine(s), "idle \u{00B7} \u{1F501} loop \u{00B7} session a \u{00B7} \u{1F7E3} PR #3 merged \u{00B7} \u{2713}4")

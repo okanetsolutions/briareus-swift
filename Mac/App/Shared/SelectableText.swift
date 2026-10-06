@@ -246,7 +246,7 @@ final class TextSelectionGroup {
     /// Returns whether the key was taken.
     func handleKey(_ event: NSEvent, window: NSWindow) -> Bool {
         let responder = window.firstResponder
-        if responder is NSText { return false }   // the composer, a field: their own selection
+        if responder is NSText || responder is BrowserCanvas { return false }   // the composer, a field, a shared browser: their own keys
         if let v = responder as? SelectableTextNSView, !members.contains(v) { return false }
         let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
         let key = event.charactersIgnoringModifiers?.lowercased()

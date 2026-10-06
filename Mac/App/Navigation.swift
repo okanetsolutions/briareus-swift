@@ -91,6 +91,7 @@ final class Navigator: ObservableObject {
         if stack.count == 1 && root == screen { narrowShowsDetail = true; return }
         guard mayLeave() else { return }
         panelSession = nil
+        BrowserDock.shared.detailChanged(to: screen)
         stack = [screen]
         narrowShowsDetail = true
     }
@@ -118,6 +119,7 @@ final class Navigator: ObservableObject {
     func clear() {
         guard mayLeave() else { return }
         panelSession = nil
+        BrowserDock.shared.dock(nil)
         stack = [.placeholder]
         narrowShowsDetail = false
     }
@@ -125,6 +127,7 @@ final class Navigator: ObservableObject {
     func reset() {
         leaveGuard = nil
         panelSession = nil
+        BrowserDock.shared.reset()
         stack = [.placeholder]
         sidebarMode = .projects
         narrowShowsDetail = false
