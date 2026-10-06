@@ -273,6 +273,7 @@ struct ConversationScreen: View {
     @State private var atBottom = true
     @State private var stick = true
     @State private var autoScrolling = false
+    @State private var scrolling: Task<Void, Never>?
 
     init(sessionID: String, initial: JSON?) {
         self.sessionID = sessionID
@@ -377,7 +378,7 @@ struct ConversationScreen: View {
                     if !atBottom && !model.blocks.isEmpty {
                         Button {
                             stick = true
-                            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("end", anchor: .bottom) }
+                            scrollToEnd(proxy)
                         } label: { Image(systemName: Glyph.symbol(0xE74B)) }
                             .buttonStyle(IconButtonStyle())
                             .help("Latest")
@@ -387,22 +388,32 @@ struct ConversationScreen: View {
                 .onChange(of: contentMark) { _, _ in if stick { scrollToEnd(proxy) } }
                 .onChange(of: model.scrollToEnd) { _, _ in stick = true; scrollToEnd(proxy) }
                 .onAppear { scrollToEnd(proxy) }
+                // The user scrolling takes over from a scroll to the end still under way.
+                .onReceive(NotificationCenter.default.publisher(for: NSScrollView.willStartLiveScrollNotification)) { _ in
+                    scrolling?.cancel(); scrolling = nil
+                    autoScrolling = false
+                }
             }
         }
     }
 
     /// The lazy column guesses the height of messages it has not made yet, so the first scroll can stop short of the end;
     /// it scrolls again until the end is in view.
+    /// A new one replaces the one under way.
     private func scrollToEnd(_ proxy: ScrollViewProxy) {
+        scrolling?.cancel()
         autoScrolling = true
-        Task { @MainActor in
+        scrolling = Task { @MainActor in
             for _ in 0..<6 {
                 await Task.yield()
+                if Task.isCancelled { return }
                 proxy.scrollTo("end", anchor: .bottom)
                 try? await Task.sleep(nanoseconds: 80_000_000)
+                if Task.isCancelled { return }
                 if atBottom { break }
             }
             autoScrolling = false
+            scrolling = nil
         }
     }
 }
