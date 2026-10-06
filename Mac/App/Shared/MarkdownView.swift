@@ -151,31 +151,76 @@ struct CodeBlock: View {
     }
 }
 
-/// A table sized to its content: a header tint, a grid, and each column's alignment.
+/// A table sized to its content: a header tint, a grid, and each column's alignment, with Copy table above its right edge
+/// (copying it as Markdown). Each cell is a text of the page's selection, so a drag selects across cells and copies them
+/// tab-separated, a line per row; links in cells open as they do elsewhere.
 private struct MarkdownTable: View {
     var block: MdBlock
     var size: MarkdownSize
     var body: some View {
         let cellSize: MarkdownSize = size == .body ? .callout : size
         ScrollView(.horizontal, showsIndicators: false) {
-            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
-                ForEach(Array(block.cells.enumerated()), id: \.offset) { r, row in
-                    GridRow {
-                        ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
-                            let align = c < block.aligns.count ? block.aligns[c] : .left
-                            Text(richText(cell, size: cellSize, bold: r == 0))
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(minWidth: 32, maxWidth: 420, alignment: align == .right ? .trailing : align == .center ? .center : .leading)
-                                .padding(.horizontal, 8).padding(.vertical, 5)
-                                .frame(maxHeight: .infinity, alignment: .top)
-                                .background(r == 0 ? Theme.raise : .clear)
-                                .overlay(Rectangle().strokeBorder(Theme.line, lineWidth: 0.5))
+            // A table narrower than the button lets it run past its right edge, so the label is not clipped.
+            VStack(alignment: .trailing, spacing: 2) {
+                TableCopyButton(source: Markdown.tableSource(block))
+                Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                    ForEach(Array(block.cells.enumerated()), id: \.offset) { r, row in
+                        GridRow {
+                            ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
+                                let align = c < block.aligns.count ? block.aligns[c] : .left
+                                SelectableText(cellText(cell, size: cellSize, bold: r == 0, align: align), cell: true)
+                                    .frame(minWidth: 32, maxWidth: 420, alignment: align == .right ? .trailing : align == .center ? .center : .leading)
+                                    .padding(.horizontal, 8).padding(.vertical, 5)
+                                    .frame(maxHeight: .infinity, alignment: .top)
+                                    .background(r == 0 ? Theme.raise : .clear)
+                                    .overlay(Rectangle().strokeBorder(Theme.line, lineWidth: 0.5))
+                            }
                         }
                     }
                 }
+                .overlay(Rectangle().strokeBorder(Theme.line, lineWidth: 1))
             }
-            .overlay(Rectangle().strokeBorder(Theme.line, lineWidth: 1))
         }
+    }
+
+    /// A cell's inline Markdown, aligned as its column.
+    private func cellText(_ source: String, size: MarkdownSize, bold: Bool, align: MdAlignment) -> NSAttributedString {
+        let text = NSMutableAttributedString(attributedString: selectableRich(source, size: size, bold: bold))
+        guard align != .left, text.length > 0 else { return text }
+        let p = NSMutableParagraphStyle()
+        p.lineSpacing = 4
+        p.lineBreakMode = .byWordWrapping
+        p.alignment = align == .right ? .right : .center
+        text.addAttribute(.paragraphStyle, value: p, range: NSRange(location: 0, length: text.length))
+        return text
+    }
+}
+
+/// Copy table: a copy glyph and its label in the caption size, tinted under the mouse (paint_table_copy).
+private struct TableCopyButton: View {
+    var source: String
+    @State private var copied = false
+    @State private var hovered = false
+    var body: some View {
+        Button {
+            Clipboard.copy(source)
+            copied = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+        } label: {
+            HStack(spacing: 2) {
+                Image(systemName: copied ? Glyph.symbol(0xE73E) : Glyph.symbol(0xE8C8)).font(.system(size: 11)).frame(width: 18)
+                Text(copied ? "Copied" : "Copy table").font(Theme.caption).lineLimit(1).fixedSize()
+            }
+            .foregroundStyle(Theme.muted)
+            .padding(.leading, 4).padding(.trailing, 6).frame(height: 22)
+            .background(RoundedRectangle(cornerRadius: 6).fill(hovered ? Theme.raise : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { on in
+            hovered = on
+            if on { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .help("Copy the table as Markdown")
     }
 }

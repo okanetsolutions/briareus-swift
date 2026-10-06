@@ -206,6 +206,16 @@ struct APIRoute: Sendable {
         .init(name: "save_findings", method: "POST", path: "sessions/{sessionId}/findings/save"),
         .init(name: "reply_finding", method: "POST", path: "sessions/{sessionId}/findings/reply"),
         .init(name: "delete_finding", method: "POST", path: "sessions/{sessionId}/findings/delete"),
+        // The session's shared browser: its state, switched on and off, acted in, and watched (EventStream.swift).
+        .init(name: "browser", method: "GET", path: "sessions/{sessionId}/browser"),
+        .init(name: "browser_on", method: "POST", path: "sessions/{sessionId}/browser"),
+        .init(name: "browser_off", method: "DELETE", path: "sessions/{sessionId}/browser"),
+        .init(name: "browser_input", method: "POST", path: "sessions/{sessionId}/browser/input"),
+        .init(name: "browser_stream", method: "GET", path: "sessions/{sessionId}/browser/stream"),
+        // A session's webhook, for an admin token: its settings, URLs and keys, changed, and its keys replaced.
+        .init(name: "session_webhook", method: "GET", path: "sessions/{sessionId}/webhook"),
+        .init(name: "set_session_webhook", method: "PUT", path: "sessions/{sessionId}/webhook"),
+        .init(name: "rotate_session_webhook", method: "POST", path: "sessions/{sessionId}/webhook/rotate"),
         // The Cloudflare Access service token the Run tab's browser sends to ▶ Run preview hosts; a manage token.
         .init(name: "preview_access", method: "GET", path: "preview/access"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
@@ -341,6 +351,9 @@ final class APIClient: @unchecked Sendable {
     let address: ServerAddress
     private let token: String
     var transport: HTTPTransport
+
+    /// The Authorization header's value, for a stream opened outside `send` (EventStream.swift).
+    var authorization: String { "Bearer \(token)" }
 
     /// Fails with `.invalidToken` unless the token has the token shape.
     init(address: ServerAddress, token: String, transport: HTTPTransport = URLSessionTransport()) throws {

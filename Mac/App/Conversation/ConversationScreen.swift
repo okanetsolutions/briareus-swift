@@ -285,6 +285,17 @@ struct ConversationScreen: View {
         let can = model.can
         let closed = s.status == "closed"
         var out: [HeaderButton] = []
+        if store.supports("browser") {
+            let browser = BrowserState.sessionOn(s.raw)
+            out.append(HeaderButton(glyph: Glyph.symbol(0xE774), label: browser.on && browser.running ? "\u{1F310} Browser \u{25CF}" : "\u{1F310} Browser",
+                                    tip: "The session's shared browser") { BrowserDock.open(s) })
+        }
+        // An admin token's; the session record carries the settings, so the button says when deliveries are on.
+        if store.supports("session_webhook") {
+            let armed = s.raw["webhook"]["armed"].is(true)
+            out.append(HeaderButton(glyph: "bolt", label: armed ? "\u{26A1} Webhook \u{25CF}" : "\u{26A1} Webhook",
+                                    tip: armed ? "Webhook (on)" : "Webhook") { Navigator.shared.push(.webhook(session: s.raw)) })
+        }
         if store.supports("cancel") && s.isActive {
             out.append(HeaderButton(glyph: Glyph.symbol(0xE71A), label: "\u{23F9} Stop", tip: "Stop", enabled: can) { model.confirmAndMutate("cancel") })
         }

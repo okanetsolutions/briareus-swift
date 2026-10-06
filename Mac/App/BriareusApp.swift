@@ -98,7 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let responder = window.firstResponder as? NSView {
             var view: NSView? = responder
             while let v = view {
-                if v is NSText || v is NSTextField || v is TerminalCanvas || v is WKWebView { return false }
+                if v is NSText || v is NSTextField || v is TerminalCanvas || v is WKWebView || v is BrowserCanvas { return false }
                 view = v.superview
             }
         }
@@ -130,6 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct MainWindow: View {
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var navigator: Navigator
+    @ObservedObject private var dock = BrowserDock.shared
 
     var body: some View {
         Group {
@@ -157,8 +158,11 @@ struct MainWindow: View {
     private func columns(narrow: Bool) -> some View {
         let showDetail = narrow && navigator.narrowShowsDetail && navigator.root != .placeholder
         let hideSidebar = narrow && showDetail, hideDetail = narrow && !showDetail
-        let panelShown = navigator.panelSession != nil
-        return ColumnsLayout(narrow: narrow, showDetail: showDetail, panel: panelShown) {
+        // The docked shared browser takes the panel's place while it is open, and can cover the detail.
+        let browserShown = !narrow && dock.session != nil
+        let panelShown = navigator.panelSession != nil && dock.session == nil
+        return ColumnsLayout(narrow: narrow, showDetail: showDetail, panel: panelShown,
+                             browser: browserShown, browserExpanded: dock.expanded, browserWidth: dock.width) {
             SidebarView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.sidebar)
@@ -166,7 +170,7 @@ struct MainWindow: View {
                 .columnHidden(hideSidebar)
             DetailPane(rootBack: narrow ? { navigator.narrowShowsDetail = false } : nil)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .columnHidden(hideDetail)
+                .columnHidden(hideDetail || (browserShown && dock.expanded))
             Group {
                 if let session = navigator.panelSession {
                     SessionPanel(session: session)
@@ -179,6 +183,16 @@ struct MainWindow: View {
                 }
             }
             .columnHidden(narrow || !panelShown)
+            Group {
+                if let session = dock.session {
+                    DockedBrowserColumn(session: session, visible: browserShown)
+                        .id(session["id"].string ?? "")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Color.clear
+                }
+            }
+            .columnHidden(!browserShown)
         }
     }
 }
@@ -190,18 +204,21 @@ private extension View {
     }
 }
 
-/// Places the sidebar, the detail and the panel (in that order) as main.c layout() sets the panes' bounds. A hidden column
-/// keeps the size it would have so its screen does not lay out at zero width.
+/// Places the sidebar, the detail, the panel and the docked browser (in that order) as main.c layout() sets the panes'
+/// bounds. A hidden column keeps the size it would have so its screen does not lay out at zero width.
 private struct ColumnsLayout: Layout {
     var narrow: Bool
     var showDetail: Bool
     var panel: Bool
+    var browser = false
+    var browserExpanded = false
+    var browserWidth: CGFloat?
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         proposal.replacingUnspecifiedDimensions()
     }
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard subviews.count == 3 else { return }
+        guard subviews.count == 4 else { return }
         let w = bounds.width, h = bounds.height
         func put(_ i: Int, x: CGFloat, width: CGFloat) {
             subviews[i].place(at: CGPoint(x: bounds.minX + x, y: bounds.minY), proposal: ProposedViewSize(width: max(width, 0), height: h))
@@ -212,11 +229,26 @@ private struct ColumnsLayout: Layout {
             put(0, x: showDetail ? w : 0, width: w)
             put(1, x: showDetail ? 0 : w, width: w)
             put(2, x: w, width: Theme.panelWidth)
+            put(3, x: w, width: w)
+        } else if browser {
+            // main.c browser_split: the column and its divider at the right, or over the detail while expanded.
+            let sw = Theme.sidebarWidth, divider = BrowserDock.dividerWidth
+            let bw = BrowserDock.columnWidth(total: w, expanded: browserExpanded, width: browserWidth)
+            put(0, x: 0, width: sw)
+            if browserExpanded {
+                put(1, x: w, width: w - sw)
+                put(3, x: sw, width: w - sw)
+            } else {
+                put(1, x: sw, width: w - sw - bw - divider)
+                put(3, x: w - bw - divider, width: bw + divider)
+            }
+            put(2, x: w, width: Theme.panelWidth)
         } else {
             let sw = Theme.sidebarWidth, pw = panel ? Theme.panelWidth : 0
             put(0, x: 0, width: sw)
             put(1, x: sw, width: w - sw - pw)
             put(2, x: panel ? w - pw : w, width: Theme.panelWidth)
+            put(3, x: w, width: max(BrowserDock.minWidth, w / 2))
         }
     }
 }
@@ -258,6 +290,7 @@ struct ScreenView: View {
         case .forgeAccountSettings(let row, let defaults): ForgeAccountSettingsScreen(row: row, defaults: defaults)
         case .slackWorkspaceSettings(let row, let defaults): SlackWorkspaceSettingsScreen(row: row, defaults: defaults)
         case .meetingSettings: MeetingSettingsScreen()
+        case .webhook(let session): WebhookScreen(session: session)
         }
     }
 }
