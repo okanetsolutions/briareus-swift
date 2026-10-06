@@ -161,6 +161,15 @@ final class MarkdownTests: XCTestCase {
     func testTableRowsArePaddedOrCutToTheHeader() {
         XCTAssertEqual(blocks("| a | b | c |\n|---|---|---|\n| 1 |\n| 1 | 2 | 3 | 4 | 5 |\n| | x | |"), "<table lll 4x3>a|b|c|1|||1|2|3||x|")
     }
+    func testATableIsWrittenBackAsMarkdownWithItsPipesEscaped() {
+        let b = Markdown.parse("| Name | Count |\n|---|--:|\n| a \\| b | 1 |\n| c |")
+        XCTAssertEqual(b.count, 1)
+        if b.count == 1 { XCTAssertEqual(Markdown.tableSource(b[0]), "| Name | Count |\n| --- | ---: |\n| a \\| b | 1 |\n| c |  |") }
+        var centred = MdBlock(kind: .table)
+        centred.cells = [["x"]]; centred.aligns = [.center]
+        XCTAssertEqual(Markdown.tableSource(centred), "| x |\n| :---: |")
+        XCTAssertEqual(Markdown.tableSource(MdBlock(kind: .table)), "")
+    }
     func testTableCellsUnescapePipes() {
         let b = Markdown.parse("| code | note |\n|---|---|\n| `a \\| b` | trailing \\|\n")
         XCTAssertEqual(b.count, 1)
