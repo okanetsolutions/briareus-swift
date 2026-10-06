@@ -1,9 +1,10 @@
 // The project board (screen_pulls.c pulls_screen_*): open pull requests and issues as tabs, with the project's SSH and SFTP
 // sessions beside them for a token that may read the servers. Each pull request row carries the errands its state offers,
 // the suggested one filled; author, reviewer and label pickers narrow the lists, and are kept per repository.
+import Combine
 import SwiftUI
 
-enum BoardTab: Int { case pulls, issues, ssh, sftp, board }
+enum BoardTab: Int { case pulls, issues, ssh, sftp, board, run, db, forge }
 
 @MainActor
 final class BoardModel: ObservableObject {
@@ -36,6 +37,16 @@ final class BoardModel: ObservableObject {
     private var opening = BoardFilter()
     private var readGen = 0
     private var readingActions = false, readingRuns = false
+    /// The Run, Database and Forge tabs (project_run.c, project_db.c, project_forge.c), kept with the board as the Windows
+    /// client keeps them with its screen; what they change redraws the board's header.
+    private(set) lazy var run = adoptTab(ProjectRunModel(repo: repo))
+    private(set) lazy var db = adoptTab(ProjectDBModel(repo: repo))
+    private(set) lazy var forge = adoptTab(ProjectForgeModel(repo: repo))
+    private var tabSinks: [AnyCancellable] = []
+    private func adoptTab<T: ObservableObject>(_ m: T) -> T where T.ObjectWillChangePublisher == ObservableObjectPublisher {
+        tabSinks.append(m.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() })
+        return m
+    }
 
     init(repo: String) {
         self.repo = repo
@@ -143,6 +154,9 @@ final class BoardModel: ObservableObject {
     func refresh() {
         switch tab {
         case .ssh: RemoteSessions.sshRefresh(repo)
+        case .run: run.refresh()
+        case .db: db.refresh()
+        case .forge: forge.refresh()
         case .sftp: RemoteSessions.sftpRefresh(repo)
         case .board: projectBoard.refresh()
         default:
@@ -255,12 +269,16 @@ struct BoardScreen: View {
                     ProjectBoardTab(model: model.projectBoard, issues: model.issues.map(\.summary), pulls: model.pulls)
                         .padding(.horizontal, Theme.paneMargin)
                 }
-            case .ssh, .sftp:
+            case .ssh, .sftp, .run, .db, .forge:
                 VStack(alignment: .leading, spacing: 0) {
                     tabs.padding(.horizontal, Theme.paneMargin)
                     Spacer().frame(height: 14)
                     Group {
-                        if model.tab == .ssh { ProjectSSHTab(repo: repo, showsHeader: false) } else { ProjectSFTPTab(repo: repo, showsHeader: false) }
+                        switch model.tab {
+                        case .ssh: ProjectSSHTab(repo: repo, showsHeader: false)
+                        case .sftp: ProjectSFTPTab(repo: repo, showsHeader: false)
+                        default: projectTab
+                        }
                     }
                     .padding(.horizontal, Theme.paneMargin)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -309,6 +327,15 @@ struct BoardScreen: View {
             buttons = h?.buttons ?? []
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C),
                                         tip: model.tab == .ssh ? "Read the project's SSH servers again" : "Read the servers and the folder on show again") { model.refresh() })
+        case .run:
+            sub = model.run.subtitle
+            buttons = model.run.headerButtons
+        case .db:
+            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the project's SSH servers again") { model.refresh() })
+        case .forge:
+            if let s = model.forge.subtitle { sub = s }
+            buttons = model.forge.headerButtons
+            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read it from Forge again") { model.refresh() })
         default:
             // The pickers, as the Windows client's selects, and ⟳. C gives them no glyph; the SF Symbol stands in only when the
             // header is too narrow for labels, where C would draw an empty square.
@@ -335,10 +362,14 @@ struct BoardScreen: View {
         var labels: [(BoardTab, String)] = [(.pulls, "⇅ Pull requests"), (.issues, "⊙ Issues")]
         // Board, after Issues, for a project that names a GitHub Projects board.
         if ProjectBoardModel.offered(repo) { labels.append((.board, "▦ Board")) }
+        // Run, on the default branch, for a token that may serve one.
+        if ProjectRunModel.offered { labels.append((.run, "▶ Run")) }
         if remoteOffered {
             labels.append((.ssh, open > 0 ? "❯ SSH sessions \(open)" : "❯ SSH sessions"))
             labels.append((.sftp, files > 0 ? "⇵ SFTP sessions \(files)" : "⇵ SFTP sessions"))
         }
+        if ProjectDBModel.offered { labels.append((.db, "⛁ Database")) }
+        if ProjectForgeModel.offered { labels.append((.forge, "☁ Forge")) }
         return VStack(spacing: 0) {
             HStack(spacing: 4) {
                 ForEach(labels, id: \.0) { tab, label in BoardTabButton(label: label, active: model.tab == tab) { select(tab) } }
@@ -348,7 +379,28 @@ struct BoardScreen: View {
         }
     }
     private func select(_ tab: BoardTab) {
-        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) ? tab : .pulls
+        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) || projectTabOffered(tab) ? tab : .pulls
+        if model.tab == .run { model.run.open() }
+    }
+
+    // MARK: The Run, Database and Forge tabs
+
+    private func projectTabOffered(_ tab: BoardTab) -> Bool {
+        switch tab {
+        case .run: return ProjectRunModel.offered
+        case .db: return ProjectDBModel.offered
+        case .forge: return ProjectForgeModel.offered
+        default: return false
+        }
+    }
+    /// The tab on show, from the tabs down to the bottom of the pane.
+    @ViewBuilder private var projectTab: some View {
+        switch model.tab {
+        case .run: ProjectRunTab(model: model.run)
+        case .db: ProjectDBTab(model: model.db)
+        case .forge: ProjectForgeTab(model: model.forge)
+        default: EmptyView()
+        }
     }
 
     // MARK: Lists

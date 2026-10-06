@@ -248,6 +248,17 @@ struct APIRoute: Sendable {
         .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
         .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
         .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),
+        // ▶ Run on a branch, the default one when `branch` is absent: the board's Run tab.
+        .init(name: "serve_branch", method: "POST", path: "branches/serve"),
+        // Laravel Forge itself, read by the server with an account's token: its servers and their sites, 100 to a page.
+        .init(name: "forge_servers", method: "GET", path: "forge/accounts/{account}/servers"),
+        .init(name: "forge_sites", method: "GET", path: "forge/accounts/{account}/servers/{server}/sites"),
+        .init(name: "forge_site", method: "GET", path: "forge/accounts/{account}/servers/{server}/sites/{site}"),
+        // A site's deploy script (`content`, `autoSource`: run with its .env loaded) and its .env, read and replaced whole.
+        .init(name: "forge_deploy_script", method: "GET", path: "forge/accounts/{account}/servers/{server}/sites/{site}/deployment-script"),
+        .init(name: "set_forge_deploy_script", method: "PUT", path: "forge/accounts/{account}/servers/{server}/sites/{site}/deployment-script"),
+        .init(name: "forge_env", method: "GET", path: "forge/accounts/{account}/servers/{server}/sites/{site}/env"),
+        .init(name: "set_forge_env", method: "PUT", path: "forge/accounts/{account}/servers/{server}/sites/{site}/env"),
     ]
     private static let table: [String: APIRoute] = Dictionary(uniqueKeysWithValues: all.map { ($0.name, $0) })
 }

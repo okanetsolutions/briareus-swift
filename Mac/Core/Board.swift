@@ -579,3 +579,27 @@ func runSessionServing(_ sessions: JSON, number: Int) -> (sessionId: String, url
     }
     return nil
 }
+
+/// A ▶ Run on a branch (the board's Run tab, on the default branch): a preview session with no pull request.
+private func branchRun(_ raw: JSON) -> Bool {
+    let s = Session(raw: raw)
+    return raw["preview"].is(true) && s.pullNumber == nil && raw["id"].string != nil
+}
+/// The session a ▶ Run on a branch is preparing while `serve_branch` waits: the newest branch preview. Nil without one.
+func runSessionPreparingBranch(_ sessions: JSON) -> String? {
+    var best: String?, bestAt = ""
+    for raw in listOf(sessions, "sessions").items where branchRun(raw) {
+        let at = raw["createdAt"].string ?? ""
+        if best == nil || bestAt.bytesPrecede(at) { best = raw["id"].string; bestAt = at }
+    }
+    return best
+}
+/// A ▶ Run already serving a branch: a branch preview with an https serve link.
+func runSessionServingBranch(_ sessions: JSON) -> (sessionId: String, url: String)? {
+    for raw in listOf(sessions, "sessions").items {
+        let url = raw["serveLinks"][0]["url"].string
+        guard branchRun(raw), safeWebURL(url), let url, let id = raw["id"].string else { continue }
+        return (id, url)
+    }
+    return nil
+}
