@@ -49,7 +49,7 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 
 **Project board**
 
-- Shows open pull requests: labels, whether they conflict with their base, the state of their checks, author, assignees, reviewers, linked issues with their project Status, and stack position, narrowed by author, reviewer or label.
+- Shows open pull requests: labels, whether they conflict with their base, the state of their checks, “assignee @a | author @b | reviewers @c”, linked issues with their project Status (not their open or closed state), and stack position, narrowed by author, reviewer or label.
 - Opens a pull request on its description, file changes with diffs, reviews, the issues it closes, the project boards those issues are on with their Status and fields, findings, the conversations already run on it and its ▶ Run preview in an embedded browser.
 - Records fix, optional or dismiss decisions on findings, and merges when the server offers it, saying first what stands in the way.
 - Starts the board's errands on a pull request: run, code review, solve conflicts, fix failing checks, implement feedback, feedback in your own words, test sheet, record QA, PR body and delete my comments. The one the pull request's state asks for is marked as suggested, named on its row in the list and offered as a button above Squash and merge.
