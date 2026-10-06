@@ -1,7 +1,8 @@
 // One conversation, as the Mac's ConversationScreen (screen_conversation.c): the transcript, read a little at a time
 // after the saved part, opening on its end; the composer under it; the session's actions in the toolbar's menu. The
 // Mac's session panel opens as a sheet from the title or the strip over the transcript, and a review round held for a
-// decision shows as a banner over the composer that opens its card.
+// decision shows as a banner over the composer that opens its card. The session's shared browser opens over it all from
+// the menu, or from its 🌐 line over the transcript while it is on.
 import SwiftUI
 
 struct ConversationScreen: View {
@@ -18,6 +19,7 @@ struct ConversationScreen: View {
     @State private var newTitle = ""
     @State private var showingDetails = false
     @State private var showingTriage = false
+    @State private var showingBrowser = false
     @State private var atBottom = true
 
     init(sessionID: String, initial: JSON?) {
@@ -73,6 +75,7 @@ struct ConversationScreen: View {
             SessionDetailsSheet(model: model) { navigate($0) }
         }
         .sheet(isPresented: $showingTriage) { triageSheet }
+        .fullScreenCover(isPresented: $showingBrowser) { SharedBrowserScreen(session: session.raw).environmentObject(store) }
     }
 
     // MARK: Transcript
@@ -130,7 +133,7 @@ struct ConversationScreen: View {
                 }
             }
             .animation(.snappy, value: atBottom)
-            .safeAreaInset(edge: .top, spacing: 0) { strip }
+            .safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { strip; browserLine } }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 0) {
                     triageBanner
@@ -188,6 +191,29 @@ struct ConversationScreen: View {
             .background(Theme.background)
             .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 0.5) }
             .accessibilityLabel("Details: \(text)")
+        }
+    }
+
+    /// While the session's shared browser is on, a line saying so, as the Mac's status line does; a tap opens it.
+    @ViewBuilder private var browserLine: some View {
+        let browser = BrowserState.sessionOn(session.raw)
+        if browser.on && store.supports("browser") {
+            Button { showingBrowser = true } label: {
+                HStack(spacing: 8) {
+                    Text("\u{1F310}").font(.caption)
+                    Text(browser.running ? "Shared browser" : "Shared browser starts next turn").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    if browser.running { Circle().fill(Theme.success).frame(width: 6, height: 6).accessibilityHidden(true) }
+                    Spacer(minLength: 0)
+                    Text("Open").font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 7)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(Theme.background)
+            .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 0.5) }
+            .accessibilityLabel(browser.running ? "Shared browser, running" : "Shared browser, starts next turn")
+            .accessibilityHint("Opens the session's shared browser")
         }
     }
 
@@ -263,6 +289,14 @@ struct ConversationScreen: View {
                     if store.supports("pull_files") {
                         Button("View Changes", systemImage: "doc.text.magnifyingglass") { navigate(.pullFiles(repo: repo, number: number)) }
                     }
+                }
+                if store.supports("browser") {
+                    let browser = BrowserState.sessionOn(s.raw)
+                    Button(browser.on && browser.running ? "Shared Browser \u{25CF}" : "Shared Browser", systemImage: "globe") { showingBrowser = true }
+                }
+                // An admin token's; the session record carries the settings, so the item says when deliveries are on.
+                if store.supports("session_webhook") {
+                    Button(s.raw["webhook"]["armed"].is(true) ? "Webhook \u{25CF}" : "Webhook", systemImage: "bolt") { navigate(.webhook(session: s.raw)) }
                 }
             }
             Section {

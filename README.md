@@ -27,11 +27,13 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 **Conversations**
 
 - Lists the projects and conversations the device token permits, with search and status updates. A conversation with a pull request shows it in place of its dot, as Claude's list does: purple once merged, grey when closed, and while open, green, amber or red by its checks.
-- Shows incremental transcripts with the time of each message, Markdown replies, agent questions and queued messages. The tools, commands and git steps an agent runs fold into one line between the messages, which opens to show them.
+- Shows incremental transcripts with the time of each message, Markdown replies, agent questions and queued messages. The tools, commands and git steps an agent runs fold into one line between the messages, which opens to show them. A reply's table copies whole as Markdown with Copy table above it, and each cell selects and copies on its own.
 - Starts conversations on any project from the Projects tab, or on the one open, on a chosen branch, provider, model and effort or on the project default, with the review loop and files attached.
 - Sends follow-ups with photos and files attached, renames, stops, closes, reopens, compacts, clears and deletes sessions, one at a time or several selected at once.
 - Shows a conversation's pull request, checks, reviews, findings and context use in a sheet, as the Mac's panel beside it does.
 - Turns the review loop on or off from inside a conversation.
+- Opens the session's shared browser, the headless Chromium its agent drives, full screen from the conversation's menu, or from the 🌐 line over the transcript while it is on: switch it on or off, watch the tab in view live and use it on the same tabs the agent does, with its tabs, an address field, back, forward and reload. A tap clicks, a drag scrolls the page (or, in Drag mode, drags in it), and the keyboard types into it, with Escape, Tab, the arrows and Paste above it.
+- With an Admin token, opens a session's ⚡ Webhook from the conversation's menu (● while armed): arm it, set its hourly and turns-in-a-row caps, SSH unattended and the instructions webhook, copy its URLs and keys (hidden until shown), see held deliveries and pauses, and rotate its keys. Going back with changes not saved asks first.
 - Triages a review round from its conversation or from the Findings tab: a verdict and a comment per finding, a note for the fix session, replies and deletions on a round that is not yours.
 - Records voice notes and has the server transcribe them into the message box, in whichever language was spoken. On a server that cannot transcribe, the microphone says what the server is missing.
 - On an iPad, keeps the projects and conversations in a column on the left and the chosen conversation on the right. A window too narrow for both falls back to the phone's single column.

@@ -31,6 +31,8 @@ enum Destination: Hashable, Identifiable {
     case voice(repo: String, conversation: VoiceConversation? = nil)
     /// The voice mode's OpenAI key and choices.
     case voiceSettings
+    /// A session's ⚡ Webhook: its settings, URLs and keys.
+    case webhook(session: JSON)
 
     var id: String {
         switch self {
@@ -50,6 +52,7 @@ enum Destination: Hashable, Identifiable {
         case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
         case .voice(let repo, let held): return "voice:\(repo)" + (held.map { ":\($0.id)" } ?? "")
         case .voiceSettings: return "voice-settings"
+        case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
         }
     }
     static func == (a: Destination, b: Destination) -> Bool { a.id == b.id }
@@ -73,6 +76,7 @@ enum Destination: Hashable, Identifiable {
         case .slackWorkspaceSettings(let row, let defaults): SlackWorkspaceSettingsScreen(row: row, defaults: defaults)
         case .voice(let repo, let held): VoiceScreen(repo: repo, conversation: held)
         case .voiceSettings: VoiceSettingsScreen()
+        case .webhook(let session): WebhookScreen(session: session)
         }
     }
 }
