@@ -215,7 +215,7 @@ struct PullProjectsSection: View {
 }
 
 /// One Projects v2 board an issue is on: its Status and the rest of its fields, under its title (with `from`, the issue it
-/// came through, when given), and Open on GitHub.
+/// came through, when given), and Open on GitHub. The issue screen lists its own projects with it too.
 struct IssueProjectSection: View {
     var project: JSON
     var from: String?

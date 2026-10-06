@@ -147,7 +147,7 @@ final class ProjectBoardModel: ObservableObject {
     /// Where a card of this repository opens on the app's own screens; nil for one that opens on GitHub, or nowhere.
     func destination(_ card: ProjectBoardCard, pulls: [PullSummary]) -> Destination? {
         guard card.repo.map({ foldEqual($0, repo) }) ?? false, card.number > 0 else { return nil }
-        // The issue screen reads the rest from the board; the card gives it what to show until it has.
+        // The issue screen reads the rest itself and from the board; the card gives it what to show until it has.
         if card.type == "issue" && Store.shared.supports("pulls") { return .issue(repo: repo, issue: card.issueJSON) }
         if card.type == "pull" && Store.shared.supports("pull") {
             return .pull(repo: repo, number: card.number, stack: nil, summary: pullsFind(pulls, card.number)?.raw)
