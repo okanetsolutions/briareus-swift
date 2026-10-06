@@ -49,16 +49,17 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 
 **Project board**
 
-- Shows open pull requests: labels, whether they conflict with their base, the state of their checks, author, assignees, reviewers, linked issues and stack position, narrowed by author, reviewer or label.
-- Opens a pull request on its description, file changes with diffs, reviews, the issues it closes, findings, the conversations already run on it and its ▶ Run preview in an embedded browser.
+- Shows open pull requests: labels, whether they conflict with their base, the state of their checks, author, assignees, reviewers, linked issues with their project Status, and stack position, narrowed by author, reviewer or label.
+- Opens a pull request on its description, file changes with diffs, reviews, the issues it closes, the project boards those issues are on with their Status and fields, findings, the conversations already run on it and its ▶ Run preview in an embedded browser.
 - Records fix, optional or dismiss decisions on findings, and merges when the server offers it, saying first what stands in the way.
 - Starts the board's errands on a pull request: run, code review, solve conflicts, fix failing checks, implement feedback, feedback in your own words, test sheet, run test sheet, PR body and delete my comments. The one the pull request's state asks for is marked as suggested, named on its row in the list and offered as a button above Squash and merge.
 - Lists the repository's open issues, sub-issues nested under their epic, with the pull requests answering each, starts a session on an issue and closes one as completed or not planned.
+- Shows the project's GitHub Projects board, when its settings name one, as its view filters and groups it: a column at a time with its count and Story Points, each card with its fields, labels, assignees and the pull requests closing it, narrowed to one assignee. A card opens its issue or pull request, and moves to another column from its menu, saying why when GitHub refuses.
 
 **Usage and Settings**
 
 - Shows what the projects spent over a window, by project, activity, provider and model, with the costliest sessions; an admin token sees every project's, others this month's for their own.
-- With an admin token, edits the server's settings as the Mac app does: projects and their order, providers and their logins, the database pool, and SSH servers with the database login each stores. Each field's hint is behind an ⓘ beside it.
+- With an admin token, edits the server's settings as the Mac app does: projects (active or not, their GitHub Projects board and autonomous review loop) and their order, providers and their logins, the database pool, SSH servers with the database login each stores, Forge accounts, and Slack workspaces with the channels each project may post to. Each field's hint is behind an ⓘ beside it.
 
 **In the car**
 

@@ -318,10 +318,12 @@ struct BoardUpdated: View {
 
 // MARK: - Rows
 
-/// An issue or pull request named under a row, with the state that says whether it is still open work.
+/// An issue or pull request named under a row, with the state that says whether it is still open work, and `status` (an
+/// issue's Status on its project board) as a chip after it.
 struct BoardLinkedRow: View {
     let link: BoardLink
     let repo: String
+    var status: String? = nil
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Image(systemName: "link").font(.caption2).foregroundStyle(.tertiary)
@@ -329,6 +331,13 @@ struct BoardLinkedRow: View {
             Text(link.title).font(.caption).lineLimit(1)
             if let state = linkedStateText(link) {
                 Text(state).font(.caption2).foregroundStyle(state == "open" ? Theme.success : state == "closed" ? Color.secondary : Theme.warning)
+            }
+            if let status, !status.isEmpty {
+                Text(status).font(.caption2.weight(.medium)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Theme.surface, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.border, lineWidth: 0.5))
+                    .accessibilityLabel("Status \(status)")
             }
         }
         .accessibilityElement(children: .combine)
@@ -354,6 +363,8 @@ struct BoardPullRow: View {
     var activeRuns = 0
     /// The label of the errand its state asks for, when this device could start it.
     var suggested: String? = nil
+    /// The project Status of each issue it closes, in its order; nil or "" for none.
+    var issueStatus: [String?] = []
     var showsIssues = true
 
     private var review: ReviewStatus { ReviewStatus(decision: pull.reviewDecision, reviewers: pull.reviewers) }
@@ -392,7 +403,11 @@ struct BoardPullRow: View {
                 }
                 if !pull.labels.isEmpty { BoardLabelChips(labels: pull.labels) }
                 Text(whoLine).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                if showsIssues { ForEach(Array(pull.issues.enumerated()), id: \.offset) { _, link in BoardLinkedRow(link: link, repo: repo) } }
+                if showsIssues {
+                    ForEach(Array(pull.issues.enumerated()), id: \.offset) { i, link in
+                        BoardLinkedRow(link: link, repo: repo, status: i < issueStatus.count ? issueStatus[i] : nil)
+                    }
+                }
             }
         }
         .padding(.vertical, 3)

@@ -1,7 +1,8 @@
-// A project's board on a phone (the Mac's BoardScreen): open pull requests and issues behind a segmented control, the
-// author, reviewer and label pickers in the toolbar's filter menu, kept per repository. Each pull request row names the
-// errand its state asks for and offers the errands in its context menu. The Mac's SSH and SFTP tabs are left out: they
-// drive local ssh and sftp processes a phone does not have.
+// A project's board on a phone (the Mac's BoardScreen): open pull requests and issues behind a segmented control, and
+// for a project that names one, its GitHub Projects board (ProjectBoardTab.swift); the author, reviewer and label pickers
+// in the toolbar's filter menu, kept per repository. Each pull request row names the errand its state asks for and offers
+// the errands in its context menu, and its linked issues end with their project Status. The Mac's SSH and SFTP tabs are
+// left out: they drive local ssh and sftp processes a phone does not have.
 import SwiftUI
 
 /// The board's pickers, kept on disk per repository as the Mac keeps them. A board never filtered opens on the project's
@@ -48,7 +49,7 @@ final class BoardFilters: ObservableObject {
 
 struct BoardScreen: View {
     let repo: String
-    private enum Tab: Hashable { case pulls, issues }
+    private enum Tab: Hashable { case pulls, issues, projectBoard }
 
     @EnvironmentObject private var store: Store
     @ObservedObject private var feed: ProjectFeed
@@ -56,6 +57,8 @@ struct BoardScreen: View {
     @ObservedObject private var projects = ProjectsModel.shared
     @StateObject private var filters: BoardFilters
     @StateObject private var errands: ErrandRunner
+    @StateObject private var projectBoard: ProjectBoardModel
+    @StateObject private var issueStatus: IssueStatusReader
     @State private var tab = Tab.pulls
     @State private var error: String?
 
@@ -64,6 +67,8 @@ struct BoardScreen: View {
         feed = Store.shared.feed(repo)
         _filters = StateObject(wrappedValue: BoardFilters(repo: repo))
         _errands = StateObject(wrappedValue: ErrandRunner(repo: repo))
+        _projectBoard = StateObject(wrappedValue: ProjectBoardModel(repo: repo))
+        _issueStatus = StateObject(wrappedValue: IssueStatusReader(repo: repo))
     }
 
     private var board: JSON { feed.board }
@@ -71,20 +76,29 @@ struct BoardScreen: View {
     private var issues: [(summary: IssueSummary, raw: JSON)] { board["issues"].items.compactMap { j in IssueSummary(j).map { ($0, j) } } }
     private var loaded: Bool { feed.boardLoaded || error != nil }
     private var filter: Binding<BoardFilter> { tab == .pulls ? $filters.pulls : $filters.issues }
+    /// The project names a GitHub Projects board this token can read.
+    private var boardOffered: Bool { ProjectBoardModel.offered(repo) }
+    /// The tab shown: the Board tab falls back to the pull requests once the project no longer names a board.
+    private var shownTab: Tab { tab == .projectBoard && !boardOffered ? .pulls : tab }
 
     var body: some View {
         let pulls = self.pulls, issues = self.issues
+        let tab = shownTab
         let rows = tab == .pulls ? pulls.map(BoardRow.init) : issues.map { BoardRow($0.summary) }
         List {
             if let error { Section { ErrorNotice(message: error) }.listRowBackground(Theme.row) }
             ErrandNotice(runner: errands, place: "in the project")
             Picker("Show", selection: $tab) {
-                Text("Pull requests (\(pulls.count))").tag(Tab.pulls)
+                // Three segments share a phone's width, so the pull requests go by their short name beside the board.
+                Text("\(boardOffered ? "PRs" : "Pull requests") (\(pulls.count))").tag(Tab.pulls)
                 Text("Issues (\(issues.count))").tag(Tab.issues)
+                if boardOffered { Text("Board").tag(Tab.projectBoard) }
             }
             .pickerStyle(.segmented)
             .listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-            if filter.wrappedValue.isOn {
+            if tab == .projectBoard {
+                ProjectBoardSection(model: projectBoard, issues: issues.map(\.summary), pulls: pulls)
+            } else if filter.wrappedValue.isOn {
                 HStack {
                     Text("Showing \(rows.filter { filter.wrappedValue.passes($0) }.count) of \(rows.count)").font(.footnote).foregroundStyle(.secondary)
                     Spacer()
@@ -92,8 +106,8 @@ struct BoardScreen: View {
                 }
                 .listRowBackground(Color.clear)
             }
-            if tab == .pulls { pullRows(pulls) } else { issueRows(issues) }
-            if !loaded {
+            if tab == .pulls { pullRows(pulls) } else if tab == .issues { issueRows(issues) }
+            if !loaded && tab != .projectBoard {
                 ProgressView("Loading pull requests…").frame(maxWidth: .infinity).padding(.vertical, 24).listRowBackground(Color.clear)
             }
         }
@@ -102,13 +116,25 @@ struct BoardScreen: View {
         .navigationTitle(projects.project(repo)?.title ?? "Board").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? FilterKind.allCases : [.author, .label]) { filters.picked() }
-                    .disabled(!loaded || rows.isEmpty && !filter.wrappedValue.isOn)
+                if tab == .projectBoard {
+                    ProjectBoardMenu(model: projectBoard).disabled(projectBoard.board == nil)
+                } else {
+                    BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? FilterKind.allCases : [.author, .label]) { filters.picked() }
+                        .disabled(!loaded || rows.isEmpty && !filter.wrappedValue.isOn)
+                }
             }
         }
         .refreshable {
             // Pulling down is how an uncertain start is checked: its conversation shows on its pull request if it began.
             errands.checked()
+            if tab == .projectBoard {
+                // The board's cards name the pull requests closing them from the pull requests' read, so both are read.
+                async let pulls: Void = read(fresh: false)
+                await projectBoard.refresh()
+                _ = await pulls
+                return
+            }
+            issueStatus.reset()
             async let sessions: Void? = store.supports("sessions") ? try? feed.loadSessions(fresh: true) : nil
             await read(fresh: true)
             _ = await sessions
@@ -118,12 +144,26 @@ struct BoardScreen: View {
             await catalog.load()
         }
         .task { await poll(every: ProjectFeed.boardEvery) { await reading { try await load() } } }
+        // The Projects board is read while its tab is on show, as often as the pull requests are.
+        .task(id: tab == .projectBoard) {
+            guard tab == .projectBoard else { return }
+            await poll(every: ProjectFeed.boardEvery) { await reading { try await projectBoard.load() } }
+        }
+        // Each linked issue's Status, one read at a time while the board is on show, the rows the filters show first.
+        .onAppear { issueStatus.shown = true; issueStatus.next(pulls: self.pulls, filter: filters.pulls) }
+        .onDisappear { issueStatus.shown = false }
+        .alert("The card could not be moved", isPresented: Binding(get: { projectBoard.moveAlert != nil }, set: { if !$0 { projectBoard.moveAlert = nil } }),
+               presenting: projectBoard.moveAlert) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { reason in
+            Text(reason + " The board shows the card where GitHub has it.")
+        }
         // Conversations start and finish faster than the board changes, and reading them asks GitHub nothing.
         .task {
             guard store.supports("sessions") else { return }
             await poll(every: ProjectFeed.sessionsEvery) { await reading { try await feed.loadSessions() } }
         }
-        .onChange(of: issues.isEmpty) { _, empty in if empty && tab == .issues && !board["issuesError"].isSet && feed.boardLoaded { tab = .pulls } }
+        .onChange(of: issues.isEmpty) { _, empty in if empty && tab == .issues && !board["issuesError"].isSet && feed.boardLoaded { self.tab = .pulls } }
         .errandPrompts(errands)
     }
 
@@ -132,6 +172,7 @@ struct BoardScreen: View {
             try await feed.loadBoard(fresh: fresh)
             filters.opened(board, answered: true)
             error = nil
+            issueStatus.next(pulls: pulls, filter: filters.pulls)
         } catch {
             if let said = failure(error) { self.error = said }
             throw error
@@ -149,7 +190,7 @@ struct BoardScreen: View {
                 let actions = pull.branch.isEmpty ? [] : boardErrands(catalog: catalog.catalog, pull: pull, failedChecks: 0)
                 DestinationLink(destination: .pull(repo: repo, number: pull.number, stack: stack?.json, summary: pull.raw)) {
                     BoardPullRow(pull: pull, stack: stack, repo: repo, activeRuns: activeRuns(pull.number),
-                                 suggested: actions.first { $0.id == pull.recommended }?.label)
+                                 suggested: actions.first { $0.id == pull.recommended }?.label, issueStatus: issueStatus.statuses(pull))
                 }
                 .contextMenu { rowMenu(pull, actions: actions) }
             }

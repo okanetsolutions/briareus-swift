@@ -55,6 +55,18 @@ struct ProjectBoardCard: Equatable, Sendable {
         fields = j["fields"].items.compactMap(ProjectBoardField.init)
     }
 
+    /// The card as a board row of its issue, the way the issue screen opens with one until it has read the rest.
+    var issueJSON: JSON {
+        var j: JSON = ["number": JSON(number), "title": JSON(title), "url": JSON(url), "author": JSON(author),
+                       "assignees": JSON(assignees),
+                       "labels": .array(labels.map { ["name": .string($0.name), "color": JSON($0.color)] })]
+        if let at = createdAt { j["createdAt"] = .string(ISO8601DateFormatter().string(from: at)) }
+        if let p = parent {
+            j["parent"] = ["number": JSON(p.number), "title": .string(p.title), "url": JSON(p.url), "repo": JSON(p.repo), "state": JSON(p.state)]
+        }
+        return j
+    }
+
     /// A field by name, compared without case, or nil.
     func field(_ name: String) -> ProjectBoardField? { fields.first { foldEqual($0.name, name) } }
     /// Whether the card passes the assignee filter: an empty pick passes every card, `projectNoAssignee` the unassigned
