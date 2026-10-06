@@ -102,7 +102,7 @@ struct BoardScreen: View {
         .navigationTitle(projects.project(repo)?.title ?? "Board").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? FilterKind.allCases : [.author, .label]) { filters.picked() }
+                BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .label]) { filters.picked() }
                     .disabled(!loaded || rows.isEmpty && !filter.wrappedValue.isOn)
             }
         }

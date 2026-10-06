@@ -9,6 +9,8 @@ struct PullScreen: View {
     var summary: JSON?
     @ObservedObject private var model: PullModel
     @ObservedObject private var store = Store.shared
+    /// How tall the notices, title block and tabs are, which decides whether they stay pinned at the top.
+    @State private var topHeight: CGFloat = 0
 
     init(repo: String, number: Int, stack: JSON?, summary: JSON?) {
         self.repo = repo; self.number = number; self.stack = stack; self.summary = summary
@@ -29,10 +31,17 @@ struct PullScreen: View {
                             .padding(.bottom, 12)
                     }
                     .padding(.horizontal, Theme.paneMargin)
+                } else if !(model.tab == .files && !model.pr.isNull) && topHeight < geo.size.height / 2 {
+                    // With the sidebar, the title and the tabs stay at the top while the tab's content scrolls beneath
+                    // them, unless they would take most of the view (a long stack overview).
+                    VStack(alignment: .leading, spacing: 0) {
+                        topMeasured(w).padding(.horizontal, Theme.paneMargin)
+                        pinnedColumns(w)
+                    }
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
-                            top(w)
+                            topMeasured(w)
                             columns(w, viewHeight: geo.size.height)
                             Spacer().frame(height: 16)
                         }
@@ -44,7 +53,7 @@ struct PullScreen: View {
         }
         .task {
             await poll(every: 30) {
-                if model.busy || model.merging || model.deciding != nil || model.dialogOpen { return nil }
+                if model.busy || model.merging || model.deciding != nil || model.editing || model.updatingBranch || model.dialogOpen { return nil }
                 return await model.load()
             }
         }
@@ -88,6 +97,41 @@ struct PullScreen: View {
         Spacer().frame(height: 12)
         PullTabs(model: model).padding(.horizontal, 4)
         Spacer().frame(height: 18)
+    }
+
+    private func topMeasured(_ w: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) { top(w) }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topHeight = $0 }
+    }
+
+    /// Under the pinned title and tabs: wide, the conversation scrolls on the left and the sidebar beside it stays in
+    /// view, scrolling on its own when it is taller than the window; narrow, the two scroll as one column.
+    @ViewBuilder private func pinnedColumns(_ w: CGFloat) -> some View {
+        if w >= 880 {
+            let side = min(max(w * 26 / 100, 240), 320)
+            // Each column's scroll bar sits in the margin at its right: the gap between them, and the pane's own margin.
+            HStack(alignment: .top, spacing: 0) {
+                ScrollView {
+                    PullMain(model: model).frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(.leading, Theme.paneMargin).padding(.trailing, 28).padding(.bottom, 16)
+                }
+                ScrollView {
+                    PullSidebar(model: model).frame(width: side).padding(.top, -14).padding(.bottom, 12)
+                        .padding(.trailing, Theme.paneMargin)
+                }
+                .frame(width: side + Theme.paneMargin)
+            }
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    PullMain(model: model)
+                    Spacer().frame(height: 6)
+                    PullSidebar(model: model).padding(.horizontal, 4)
+                    Spacer().frame(height: 16)
+                }
+                .padding(.horizontal, Theme.paneMargin)
+            }
+        }
     }
 
     @ViewBuilder private func columns(_ w: CGFloat, viewHeight: CGFloat) -> some View {
@@ -143,6 +187,8 @@ private struct PullHeader: View {
                 StackOverview(model: model, stack: stack).padding(.top, 10)
             }
             if let e = model.mergeError { Notice(message: e).padding(.top, 8) }
+            if let e = model.editError { Notice(message: e).padding(.top, 8) }
+            if let note = model.branchNote { GlyphLabel(glyph: 0xE895, text: note, font: Theme.footnote, color: Theme.muted).padding(.top, 8) }
         }
     }
 
@@ -155,6 +201,14 @@ private struct PullHeader: View {
     private var toolbar: some View {
         HStack(spacing: 6) {
             Button("⟳ Refresh") { model.refresh() }.dashButton(.bordered).disabled(model.readingPull)
+            if model.canEdit {
+                Button(model.editing ? "Saving…" : "Edit") { model.editDetails() }.dashButton(.bordered).disabled(model.editing || model.pullBody == nil)
+                    .help("Edit the title and description")
+            }
+            if model.canUpdateBranch {
+                Button(model.updatingBranch ? "Updating…" : "Update branch") { model.updateBranch() }.dashButton(.bordered)
+                    .disabled(model.updatingBranch || model.merging).help("Merge the latest changes from the base branch into this one")
+            }
             if model.canMerge {
                 Button(model.merging ? "Merging…" : "Merge") { model.merge() }.dashButton(.prominent).disabled(model.merging || model.busy)
             }
@@ -448,8 +502,8 @@ private struct PullMain: View {
     }
 }
 
-/// A timeline comment's box: the header strip, then the contents 16px in.
-private struct CommentBox<Content: View>: View {
+/// A timeline comment's box: the header strip, then the contents 16px in. The issue page draws its comments in it too.
+struct CommentBox<Content: View>: View {
     var head: CommentHead
     var url: String? = nil
     var bottom: CGFloat = 14
@@ -767,10 +821,12 @@ private struct PullSidebar: View {
             items.append(AnyView(section("Assignees") {
                 if row.assignees.isEmpty { Text("No one").font(Theme.caption).foregroundStyle(Theme.muted) }
                 ForEach(row.assignees, id: \.self) { Text($0).font(Theme.footnoteSemibold).foregroundStyle(Theme.ink).lineLimit(1) }
+                if model.canEdit { editButton("Edit assignees ▾") { model.editAssignees() } }
             }))
             items.append(AnyView(section("Labels") {
                 if row.labels.isEmpty { Text("None yet").font(Theme.caption).foregroundStyle(Theme.muted) }
                 else { LabelChips(labels: row.labels, background: Theme.canvas) }
+                if model.canEdit { editButton("Edit labels…") { model.editLabels() } }
             }))
             if let projects { items.append(projects) }
             if let milestone = row.raw["milestone"].string {
@@ -796,6 +852,11 @@ private struct PullSidebar: View {
             VStack(alignment: .leading, spacing: 4) { content() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The edit button under the assignees or labels.
+    private func editButton(_ title: String, _ action: @escaping () -> Void) -> some View {
+        Button(title, action: action).dashButton(.bordered).disabled(model.editing).padding(.top, 4)
     }
 
     /// The errands as the sidebar's first item: one full-width button per action, the one the state asks for filled.
@@ -864,9 +925,18 @@ private struct PullSidebar: View {
             Text("Successfully merging this pull request may close these issues.").font(Theme.caption).foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true).padding(.bottom, 2)
             ForEach(Array(issues.enumerated()), id: \.offset) { _, link in
-                LinkedRow(link: link, repo: model.repo, action: safeWebURL(link.url) ? { openWebURL(link.url) } : nil)
+                let here = !link.isForeign(model.repo) && Store.shared.supports("issue")
+                LinkedRow(link: link, repo: model.repo, action: here || safeWebURL(link.url) ? { openIssue(link, here: here) } : nil)
             }
         }
+    }
+    /// An issue of this repository opens here, which reads the rest itself; any other on GitHub.
+    private func openIssue(_ link: BoardLink, here: Bool) {
+        if here {
+            var bare: JSON = ["number": JSON(link.number), "title": .string(link.title)]
+            if let url = link.url { bare["url"] = .string(url) }
+            Navigator.shared.push(.issue(repo: model.repo, issue: bare))
+        } else { openWebURL(link.url) }
     }
 }
 

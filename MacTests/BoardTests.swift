@@ -227,6 +227,7 @@ final class BoardTests: XCTestCase {
         let i = issue(#"{"number":2,"author":"bo","assignees":["x"],"labels":["bug"]}"#)!
         r = BoardRow(i)
         XCTAssertEqual(r.author, i.author); XCTAssertEqual(r.reviewers, []); XCTAssertEqual(r.labels, i.labels)
+        XCTAssertEqual(r.assignees, ["x"])
     }
     func testBoardFiltersKeepTheirPicksFolded() {
         var f = BoardFilter()
@@ -234,11 +235,14 @@ final class BoardTests: XCTestCase {
         f[.author] = "TheBot"; XCTAssertEqual(f[.author], "thebot"); XCTAssertTrue(f.isOn)
         f[.reviewer] = "Ana"; XCTAssertEqual(f[.reviewer], "ana")
         f[.label] = "Has-Conflicts"; XCTAssertEqual(f[.label], "has-conflicts")
+        f[.assignee] = "Bo"; XCTAssertEqual(f[.assignee], "bo")
         f.set(.author, nil); XCTAssertEqual(f[.author], "")
         f[.reviewer] = ""; f[.label] = ""
+        XCTAssertTrue(f.isOn); f[.assignee] = ""
         XCTAssertFalse(f.isOn)
         f[.label] = "x"; XCTAssertTrue(f.isOn)
         XCTAssertEqual(FilterKind.author.name, "author"); XCTAssertEqual(FilterKind.reviewer.name, "reviewer"); XCTAssertEqual(FilterKind.label.name, "label")
+        XCTAssertEqual(FilterKind.assignee.name, "assignee")
     }
     func testBoardFilterCopiesCompareEqual() {
         var a = BoardFilter(); a[.author] = "Ana"; a[.label] = "bug"
@@ -248,7 +252,8 @@ final class BoardTests: XCTestCase {
         XCTAssertNotEqual(a, b); XCTAssertEqual(b[.author], "ana")
         b[.author] = "LUIS"; XCTAssertEqual(a, b)
         b[.reviewer] = "x"; XCTAssertNotEqual(a, b)
-        b[.reviewer] = ""; b[.label] = "ui"; XCTAssertNotEqual(a, b)
+        b[.reviewer] = ""; b[.assignee] = "x"; XCTAssertNotEqual(a, b)
+        b[.assignee] = ""; b[.label] = "ui"; XCTAssertNotEqual(a, b)
     }
 
     // Three pull requests and two issues the filter tests share.
@@ -311,6 +316,25 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(options(f, .author, []), "")
         XCTAssertEqual(f.options(.label, rows: []).count, 0)
     }
+    func testIssuesFilterByAssignee() {
+        let rows = IssueSummary.parseList(j(#"[{"number":1,"author":"ana","assignees":["Bo","luis"]},{"number":2,"author":"ana","assignees":["bo"]},{"number":3,"author":"luis"}]"#))
+            .map(BoardRow.init)
+        var f = BoardFilter()
+        XCTAssertEqual(options(f, .assignee, rows), "bo=Bo 2,luis=luis 1,-=No assignee 1")
+        // "No assignee" keeps only the issues nobody has.
+        f[.assignee] = BoardFilter.noAssignee
+        XCTAssertFalse(f.passes(rows[0])); XCTAssertFalse(f.passes(rows[1])); XCTAssertTrue(f.passes(rows[2]))
+        XCTAssertTrue(f.isOn)
+        XCTAssertEqual(options(f, .author, rows), "luis=luis 1")
+        f[.author] = "ana"
+        XCTAssertEqual(options(f, .assignee, rows), "bo=Bo 2,luis=luis 1,-=No assignee 0")
+        f[.author] = ""
+        f[.assignee] = "BO"
+        XCTAssertTrue(f.passes(rows[0])); XCTAssertTrue(f.passes(rows[1])); XCTAssertFalse(f.passes(rows[2]))
+        XCTAssertEqual(options(f, .author, rows), "ana=ana 2")
+        f[.author] = "luis"
+        XCTAssertEqual(options(f, .assignee, rows), "bo=bo 0,-=No assignee 1")
+    }
     func testIssueRowsOfferNoReviewers() {
         let rows = IssueSummary.parseList(j(#"[{"number":1,"author":"ana","labels":["bug"]},{"number":2,"author":"bo"}]"#)).map(BoardRow.init)
         var f = BoardFilter()
@@ -348,7 +372,7 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(feedback.label, "Give feedback")
         XCTAssertEqual(feedback.input, ActionInput(label: "Your feedback", placeholder: "What should change on this pull request?", required: true))
         XCTAssertEqual(known("run")?.label, "Run"); XCTAssertEqual(known("review")?.label, "Code review")
-        XCTAssertEqual(known("test-sheet")?.label, "Test sheet"); XCTAssertEqual(known("test-run")?.label, "Run test sheet")
+        XCTAssertEqual(known("test-sheet")?.label, "Test sheet"); XCTAssertEqual(known("test-run")?.label, "Record QA")
         // QA as an errand of its own was removed (#12); the test sheet and its run came back.
         XCTAssertNil(known("qa"))
     }
@@ -423,7 +447,7 @@ final class BoardTests: XCTestCase {
         // QA stays gone even when the server lists it (#12); the test sheet and its run are errands the app knows.
         XCTAssertEqual(ids(a), "run,review,test-sheet,test-run,zz-last,aa-first")
         guard a.count == 6 else { return }
-        XCTAssertEqual(a[2].label, "Test sheet"); XCTAssertEqual(a[3].label, "Run test sheet"); XCTAssertEqual(a[3].operation, "action")
+        XCTAssertEqual(a[2].label, "Test sheet"); XCTAssertEqual(a[3].label, "Record QA"); XCTAssertEqual(a[3].operation, "action")
         a.removeSubrange(2...3)
         // The app words its own errands; the server's label for one it knows is not used.
         XCTAssertEqual(a[0].label, "Run"); XCTAssertNil(a[0].input)

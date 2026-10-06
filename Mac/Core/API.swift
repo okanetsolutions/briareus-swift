@@ -170,12 +170,15 @@ struct APIRoute: Sendable {
         .init(name: "findings", method: "GET", path: "pulls/{pr}/findings"),
         .init(name: "finding_decision", method: "POST", path: "pulls/{pr}/findings/decision"),
         .init(name: "merge_pull", method: "POST", path: "pulls/{pr}/merge"),
+        .init(name: "update_pull", method: "PATCH", path: "pulls/{pr}"),   // its `title`, `body`, `labels` and `assignees`; a list replaces the old one
+        .init(name: "update_pull_branch", method: "POST", path: "pulls/{pr}/update-branch"),   // merges its base into it, at the `headSha` and `baseRef` read
         .init(name: "serve_pull", method: "POST", path: "pulls/{prNumber}/serve"),
         .init(name: "commit", method: "GET", path: "commits/{sha}"),
         // Issues
         .init(name: "issue", method: "GET", path: "issues/{issue}"),
         .init(name: "issue_timeline", method: "GET", path: "issues/{issue}/timeline"),   // comments and events, 100 a `page`, oldest first
         .init(name: "close_issue", method: "POST", path: "issues/{issue}/close"),   // `reason` completed or not_planned, and an optional `comment`
+        .init(name: "update_issue", method: "PATCH", path: "issues/{issue}"),   // its `title`, `body`, `labels` and `assignees`, as update_pull
         // The project's GitHub Projects board as its view groups it (`fresh` skips the cache), and a card moved to another
         // column: `itemId`, and `columnId` (null for "No <field>").
         .init(name: "project_board", method: "GET", path: "project-board"),

@@ -174,6 +174,8 @@ enum Glyph {
         case 0xE8D7: return "lock"
         case 0xE8E3: return "list.bullet"
         case 0xE8E4: return "text.alignleft"
+        case 0xE8EC: return "tag"
+        case 0xE77B: return "person"
         case 0xE8EE: return "repeat"
         case 0xE8F2: return "bubble.left.and.bubble.right"
         case 0xE8F4: return "folder.badge.plus"
