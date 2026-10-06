@@ -9,6 +9,8 @@ struct PullScreen: View {
     var summary: JSON?
     @ObservedObject private var model: PullModel
     @ObservedObject private var store = Store.shared
+    /// How tall the notices, title block and tabs are, which decides whether they stay pinned at the top.
+    @State private var topHeight: CGFloat = 0
 
     init(repo: String, number: Int, stack: JSON?, summary: JSON?) {
         self.repo = repo; self.number = number; self.stack = stack; self.summary = summary
@@ -29,10 +31,17 @@ struct PullScreen: View {
                             .padding(.bottom, 12)
                     }
                     .padding(.horizontal, Theme.paneMargin)
+                } else if !(model.tab == .files && !model.pr.isNull) && topHeight < geo.size.height / 2 {
+                    // With the sidebar, the title and the tabs stay at the top while the tab's content scrolls beneath
+                    // them, unless they would take most of the view (a long stack overview).
+                    VStack(alignment: .leading, spacing: 0) {
+                        topMeasured(w).padding(.horizontal, Theme.paneMargin)
+                        pinnedColumns(w)
+                    }
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
-                            top(w)
+                            topMeasured(w)
                             columns(w, viewHeight: geo.size.height)
                             Spacer().frame(height: 16)
                         }
@@ -88,6 +97,41 @@ struct PullScreen: View {
         Spacer().frame(height: 12)
         PullTabs(model: model).padding(.horizontal, 4)
         Spacer().frame(height: 18)
+    }
+
+    private func topMeasured(_ w: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) { top(w) }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topHeight = $0 }
+    }
+
+    /// Under the pinned title and tabs: wide, the conversation scrolls on the left and the sidebar beside it stays in
+    /// view, scrolling on its own when it is taller than the window; narrow, the two scroll as one column.
+    @ViewBuilder private func pinnedColumns(_ w: CGFloat) -> some View {
+        if w >= 880 {
+            let side = min(max(w * 26 / 100, 240), 320)
+            // Each column's scroll bar sits in the margin at its right: the gap between them, and the pane's own margin.
+            HStack(alignment: .top, spacing: 0) {
+                ScrollView {
+                    PullMain(model: model).frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(.leading, Theme.paneMargin).padding(.trailing, 28).padding(.bottom, 16)
+                }
+                ScrollView {
+                    PullSidebar(model: model).frame(width: side).padding(.top, -14).padding(.bottom, 12)
+                        .padding(.trailing, Theme.paneMargin)
+                }
+                .frame(width: side + Theme.paneMargin)
+            }
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    PullMain(model: model)
+                    Spacer().frame(height: 6)
+                    PullSidebar(model: model).padding(.horizontal, 4)
+                    Spacer().frame(height: 16)
+                }
+                .padding(.horizontal, Theme.paneMargin)
+            }
+        }
     }
 
     @ViewBuilder private func columns(_ w: CGFloat, viewHeight: CGFloat) -> some View {
