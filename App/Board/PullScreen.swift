@@ -30,7 +30,10 @@ struct PullScreen: View {
         _errands = StateObject(wrappedValue: ErrandRunner(repo: repo))
     }
 
-    var body: some View {
+    // The screen, its polls and its prompts, in three parts the type checker takes one at a time.
+    var body: some View { prompts }
+
+    private var screen: some View {
         Group {
             if model.section == .run {
                 VStack(spacing: 0) {
@@ -60,6 +63,10 @@ struct PullScreen: View {
         }
         .onAppear { model.appeared() }
         .onDisappear { model.disappeared() }
+    }
+
+    private var decisions: some View {
+        screen
         .errandPrompts(errands)
         .alert(model.mergeQuestion.map { "Merge #\(number) into \($0.base)?" } ?? "",
                isPresented: Binding(get: { model.mergeQuestion != nil }, set: { if !$0 { model.mergeQuestion = nil } }), presenting: model.mergeQuestion) { _ in
@@ -81,6 +88,10 @@ struct PullScreen: View {
             Button("Delete", role: .destructive) { Task { await model.delete(s.id) } }
             Button("Cancel", role: .cancel) {}
         } message: { s in Text("\u{201C}\(s.displayTitle)\u{201D}") }
+    }
+
+    private var prompts: some View {
+        decisions
         .alert("Update the branch of #\(number)?", isPresented: $confirmingUpdate) {
             Button("Update branch") { Task { await model.updateBranch() } }
             Button("Cancel", role: .cancel) {}
