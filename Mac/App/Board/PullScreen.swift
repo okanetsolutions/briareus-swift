@@ -492,8 +492,8 @@ private struct PullMain: View {
     }
 }
 
-/// A timeline comment's box: the header strip, then the contents 16px in.
-private struct CommentBox<Content: View>: View {
+/// A timeline comment's box: the header strip, then the contents 16px in. The issue page draws its comments in it too.
+struct CommentBox<Content: View>: View {
     var head: CommentHead
     var url: String? = nil
     var bottom: CGFloat = 14
