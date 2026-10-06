@@ -229,8 +229,8 @@ private struct ForgeSiteRow: View {
             let repo = site["repository"]
             let detail = repo.isObject
                 ? Forge.joined([Forge.fieldText(repo["name"]) ?? Forge.fieldText(repo["url"]), Forge.fieldText(repo["branch"]),
-                                Forge.fieldText(site["php_version"]).map { "PHP \($0)" }])
-                : Forge.joined([Forge.fieldText(repo), Forge.fieldText(site["php_version"]).map { "PHP \($0)" }])
+                                Forge.fieldText(site["php_version"])])
+                : Forge.joined([Forge.fieldText(repo), Forge.fieldText(site["php_version"])])
             if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
         }
         .padding(.vertical, 2)
