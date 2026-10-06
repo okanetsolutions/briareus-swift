@@ -1,7 +1,7 @@
-// A project's settings, as the Mac's project form on a phone: its sections (Project with its setup, Database, Code
-// review, Orchestrator, Checkout .env, Run) on a strip of tabs over one form, a dot on any holding unsaved changes; saved
-// through /settings/projects. The provider, model and effort pickers serve the code review, each errand step and the
-// orchestrator's workers.
+// A project's settings, as the Mac's project form on a phone: its sections (Project with its Active switch, Projects
+// board and setup, Database, Code review with its autonomous loop, Orchestrator, Checkout .env, Run) on a strip of tabs
+// over one form, a dot on any holding unsaved changes; saved through /settings/projects. The provider, model and effort
+// pickers serve the code review, each errand step and the orchestrator's workers.
 import SwiftUI
 
 @MainActor
@@ -301,7 +301,17 @@ struct ProjectSettingsScreen: View {
     @ViewBuilder private var tabContent: some View {
         switch model.tab {
         case .project:
-            Section { field(.repo); field(.label); field(.localDir) }.listRowBackground(Theme.row)
+            Section { field(.repo); field(.label) }.listRowBackground(Theme.row)
+            // Switching a project off keeps it, and its settings, without a session starting on it.
+            if state.offered(.enabled) {
+                Section { check(.enabled) } footer: {
+                    if !state.bool(.enabled) {
+                        Text("Inactive: no session can be started on it and it is left out of the project lists; its settings are kept for when it is switched back on.")
+                    }
+                }
+                .listRowBackground(Theme.row)
+            }
+            Section { field(.localDir); field(.board) }.listRowBackground(Theme.row)
             Section { field(.setup); field(.php) } header: { Text("Setup") } footer: {
                 Text("This project's own prompt wording is kept on the server; saving here keeps it as it is.")
             }
@@ -315,6 +325,14 @@ struct ProjectSettingsScreen: View {
                 Section { runtime(.review) } header: { Text("Runtime") }.listRowBackground(Theme.row)
             }
             Section { field(.publish) }.listRowBackground(Theme.row)
+            if state.offered(.autoLoop) {
+                Section { check(.autoLoop) } footer: {
+                    if state.bool(.autoLoop) {
+                        Text("Every finding of a session's review-loop round, low severity and parked ones too, goes to Implement feedback on its own, and the fix is pushed and reviewed again until a round comes back clean and code-approved. The loop's round limit and repeated-findings check still stop one that cannot converge. Sessions still need their review loop switched on; a standalone Code review keeps its manual findings.")
+                    }
+                }
+                .listRowBackground(Theme.row)
+            }
             // Each step runs as a turn of its own, on the code review's runtime unless it names one; a step switched off has none.
             Section {
                 check(.testSheet)

@@ -37,6 +37,16 @@ final class ProjectBoardTests: XCTestCase {
         XCTAssertEqual(c.cards[1].type, "draft"); XCTAssertNil(c.cards[1].repo); XCTAssertEqual(c.cards[1].number, 0); XCTAssertNil(c.cards[1].parent)
     }
 
+    func testACardOpensItsIssueAsABoardRow() {
+        let k = ProjectBoardCard(j(#"{"id":"i1","type":"issue","repo":"o/r","number":7,"title":"Fix it","url":"https://github.com/o/r/issues/7","#
+            + #""createdAt":"2026-10-01T10:00:00Z","author":"ana","assignees":["ana"],"labels":[{"name":"bug","color":"d73a4a"}],"#
+            + #""parent":{"repo":"o/r","number":3,"title":"Epic","url":"https://github.com/o/r/issues/3"},"fields":[]}"#))!
+        let row = IssueSummary(k.issueJSON)
+        XCTAssertEqual(row?.number, 7); XCTAssertEqual(row?.title, "Fix it"); XCTAssertEqual(row?.author, "ana")
+        XCTAssertEqual(row?.assignees, ["ana"]); XCTAssertEqual(row?.labels.first?.name, "bug"); XCTAssertEqual(row?.parent?.number, 3)
+        XCTAssertEqual(k.issueJSON["createdAt"].string, "2026-10-01T10:00:00Z")
+    }
+
     func testProjectBoardsCarryWhyGitHubRefused() {
         var b = board(#"{"project":null,"view":null,"columns":[],"projectsError":"Resource not accessible"}"#)
         XCTAssertEqual(b.error, "Resource not accessible"); XCTAssertNil(b.title); XCTAssertNil(b.viewName); XCTAssertEqual(b.columns.count, 0); XCTAssertFalse(b.truncated)

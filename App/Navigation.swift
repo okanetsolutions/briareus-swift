@@ -25,6 +25,8 @@ enum Destination: Hashable, Identifiable {
     case providerSettings(row: JSON?, defaults: JSON?)
     case dbServerSettings(row: JSON?, defaults: JSON?)
     case sshServerSettings(row: JSON?, defaults: JSON?)
+    case forgeAccountSettings(row: JSON?, defaults: JSON?)
+    case slackWorkspaceSettings(row: JSON?, defaults: JSON?)
     /// A project's voice conversation, or a hands-free one held to one of its conversations.
     case voice(repo: String, conversation: VoiceConversation? = nil)
     /// The voice mode's OpenAI key and choices.
@@ -44,6 +46,8 @@ enum Destination: Hashable, Identifiable {
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .dbServerSettings(let row, _): return "db-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .sshServerSettings(let row, _): return "ssh-server:\(row?["id"].int.map(String.init) ?? "new")"
+        case .forgeAccountSettings(let row, _): return "forge-account:\(row?["id"].int.map(String.init) ?? "new")"
+        case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
         case .voice(let repo, let held): return "voice:\(repo)" + (held.map { ":\($0.id)" } ?? "")
         case .voiceSettings: return "voice-settings"
         }
@@ -65,6 +69,8 @@ enum Destination: Hashable, Identifiable {
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)
         case .dbServerSettings(let row, let defaults): DBServerSettingsScreen(row: row, defaults: defaults)
         case .sshServerSettings(let row, let defaults): SSHServerSettingsScreen(row: row, defaults: defaults)
+        case .forgeAccountSettings(let row, let defaults): ForgeAccountSettingsScreen(row: row, defaults: defaults)
+        case .slackWorkspaceSettings(let row, let defaults): SlackWorkspaceSettingsScreen(row: row, defaults: defaults)
         case .voice(let repo, let held): VoiceScreen(repo: repo, conversation: held)
         case .voiceSettings: VoiceSettingsScreen()
         }

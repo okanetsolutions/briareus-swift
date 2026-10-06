@@ -1,7 +1,7 @@
 // One pull request on a phone (the Mac's PullScreen): what it is and where it stands at the top, a scrolling section
-// picker in place of GitHub's tabs (description, files, reviews and comments, the issues it closes,
-// findings, the conversations run on it, and ▶ Run), the errands in the toolbar, and a squash merge that says first what
-// stands in its way.
+// picker in place of GitHub's tabs (description, files, reviews and comments, the issues it closes and the project
+// boards they are on, findings, the conversations run on it, and ▶ Run), the errands in the toolbar, and a squash merge
+// that says first what stands in its way.
 import SwiftUI
 
 struct PullScreen: View {
@@ -108,6 +108,7 @@ struct PullScreen: View {
                 case .files: files
                 case .reviews: reviews
                 case .issues: issues
+                case .projects: PullProjectsSection(entries: model.issueProjects.entries)
                 case .findings: findings
                 case .conversations: conversations
                 case .run: EmptyView()
@@ -342,6 +343,7 @@ struct PullScreen: View {
             case .files: return store.supports("pull_files") || safeWebURL(model.url)
             case .reviews: return !model.pr.isNull
             case .issues: return !model.closes.isEmpty
+            case .projects: return store.supports("issue") && !model.linkedIssues().isEmpty
             case .findings: return store.supports("findings")
             case .run: return model.runOffered && (model.isOpen || model.runURL != nil)
             }
@@ -352,6 +354,7 @@ struct PullScreen: View {
         case .files: return model.pr["changedFiles"].int
         case .reviews: return model.commentCount ?? model.pr["reviews"].count
         case .issues: return model.closes.count
+        case .projects: return model.issueProjects.entries.map { $0.reduce(0) { $0 + $1.projects.count } }
         case .findings: return model.findings.count
         case .conversations: return model.runs.count
         default: return nil

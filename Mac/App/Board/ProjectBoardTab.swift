@@ -158,7 +158,7 @@ final class ProjectBoardModel: ObservableObject {
         let here = card.repo.map { foldEqual($0, repo) } ?? false
         if here && card.type == "issue" && card.number > 0 && Store.shared.supports("pulls") {
             // The issue screen reads the rest from the board; the card gives it what to show until it has.
-            Navigator.shared.push(.issue(repo: repo, issue: cardIssueJSON(card)))
+            Navigator.shared.push(.issue(repo: repo, issue: card.issueJSON))
             return
         }
         if here && card.type == "pull" && card.number > 0 && Store.shared.supports("pull") {
@@ -174,18 +174,6 @@ final class ProjectBoardModel: ObservableObject {
         } else if safeWebURL(link.url) { openWebURL(link.url) }
     }
     func openOnGitHub() { if let url = board?.webURL, safeWebURL(url) { openWebURL(url) } }
-
-    /// A card as a board row of the issue, the way the issue screen opens with one.
-    private func cardIssueJSON(_ card: ProjectBoardCard) -> JSON {
-        var j: JSON = ["number": JSON(card.number), "title": JSON(card.title), "url": JSON(card.url), "author": JSON(card.author),
-                       "assignees": JSON(card.assignees),
-                       "labels": .array(card.labels.map { ["name": .string($0.name), "color": JSON($0.color)] })]
-        if let at = card.createdAt { j["createdAt"] = .string(ISO8601DateFormatter().string(from: at)) }
-        if let p = card.parent {
-            j["parent"] = ["number": JSON(p.number), "title": .string(p.title), "url": JSON(p.url), "repo": JSON(p.repo), "state": JSON(p.state)]
-        }
-        return j
-    }
 }
 
 // MARK: - Header

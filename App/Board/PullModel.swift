@@ -6,7 +6,7 @@ import SwiftUI
 
 /// The parts of the pull request screen, as the section picker lists them.
 enum PullSection: String, CaseIterable, Identifiable {
-    case description, files, reviews, issues, findings, conversations, run
+    case description, files, reviews, issues, projects, findings, conversations, run
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -14,6 +14,7 @@ enum PullSection: String, CaseIterable, Identifiable {
         case .files: return "Files"
         case .reviews: return "Reviews"
         case .issues: return "Issues"
+        case .projects: return "Projects"
         case .findings: return "Findings"
         case .conversations: return "Conversations"
         case .run: return "Run"
@@ -25,6 +26,7 @@ enum PullSection: String, CaseIterable, Identifiable {
         case .files: return "doc.on.doc"
         case .reviews: return "text.bubble"
         case .issues: return "link"
+        case .projects: return "rectangle.split.3x1"
         case .findings: return "flag"
         case .conversations: return "bubble.left.and.bubble.right"
         case .run: return "play.fill"
@@ -82,6 +84,9 @@ final class PullScreenModel: ObservableObject {
     private var pullGen = 0
     private var commentTasks: [Task<Void, Never>?] = Array(repeating: nil, count: ConvFeed.allCases.count)
     private var sinks: [AnyCancellable] = []
+    /// The projects of the issues it closes, for the Projects section (IssueProjects.swift).
+    lazy var issueProjects = IssueProjectsReader(repo: repo, linked: { [weak self] in self?.linkedIssues() ?? [] },
+                                                 changed: { [weak self] in self?.objectWillChange.send() })
 
     // The Run tab: opening it serves the pull request (▶ Run) and shows it in an embedded browser. `runSession` is the
     // session serving it, `runProfile` the profile it serves, `runWant` the one picked, `runAsked` the one the request in
@@ -188,7 +193,7 @@ final class PullScreenModel: ObservableObject {
         let store = Store.shared
         if store.supports("pulls") {
             Task {
-                do { try await feed.loadBoard(fresh: fresh); rowRead = true } catch {}
+                do { try await feed.loadBoard(fresh: fresh); rowRead = true; issueProjects.load() } catch {}
             }
         }
         if store.supports("sessions") { Task { try? await feed.loadSessions(fresh: fresh) } }
@@ -207,6 +212,7 @@ final class PullScreenModel: ObservableObject {
         guard gen == pullGen else { return }
         pr = v["pr"]
         error = nil
+        issueProjects.load()
         // The description is its own read, once per visit and on refresh.
         if pr["body"].string == nil && !bodyRead && !readingBody && store.supports("pull_description") { Task { await loadBody() } }
         if store.supports("findings") {
@@ -238,6 +244,7 @@ final class PullScreenModel: ObservableObject {
     func refresh() async {
         if section == .run, let browser { browser.reload(); return }
         bodyRead = false
+        issueProjects.reset()
         if section == .reviews { commentsCancel() }
         _ = await reading { try await load(fresh: true) }
     }
