@@ -216,7 +216,7 @@ struct PullProjectsSection: View {
 
 /// One Projects v2 board an issue is on: its Status and the rest of its fields, under its title (with `from`, the issue it
 /// came through, when given), and Open on GitHub.
-private struct IssueProjectSection: View {
+struct IssueProjectSection: View {
     var project: JSON
     var from: String?
 
