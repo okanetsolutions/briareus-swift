@@ -391,11 +391,18 @@ struct ConversationScreen: View {
         }
     }
 
+    /// The lazy column guesses the height of messages it has not made yet, so the first scroll can stop short of the end;
+    /// it scrolls again until the end is in view.
     private func scrollToEnd(_ proxy: ScrollViewProxy) {
         autoScrolling = true
-        DispatchQueue.main.async {
-            proxy.scrollTo("end", anchor: .bottom)
-            DispatchQueue.main.async { autoScrolling = false }
+        Task { @MainActor in
+            for _ in 0..<6 {
+                await Task.yield()
+                proxy.scrollTo("end", anchor: .bottom)
+                try? await Task.sleep(nanoseconds: 80_000_000)
+                if atBottom { break }
+            }
+            autoScrolling = false
         }
     }
 }

@@ -11,7 +11,8 @@ func isSafeWebURL(_ url: String?) -> Bool {
 }
 
 /// The transcript's column. Its inputs are compared, so typing in the composer or a poll that changed nothing does not
-/// lay it out again.
+/// lay it out again; and it is lazy, so a long conversation makes and measures only the messages near the screen
+/// instead of every one each time the agent adds a line.
 struct TranscriptColumn: View, Equatable {
     unowned let model: ConversationModel
     var blocks: [TranscriptBlock]
@@ -36,7 +37,7 @@ struct TranscriptColumn: View, Equatable {
     private var can: Bool { !busy && !uncertain }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        LazyVStack(alignment: .leading, spacing: 0) {
             if let error { DangerBox { DangerText(error) }.padding(.bottom, 12) }
             if let writeError {
                 DangerBox(bottom: 10) {
