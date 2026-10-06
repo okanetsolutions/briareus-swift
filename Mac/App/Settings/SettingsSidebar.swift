@@ -35,6 +35,8 @@ struct SettingsSidebar: View {
     // MARK: Sections
 
     @ViewBuilder private var content: some View {
+        // This computer's own settings come first: they need no Admin token.
+        MeetingSettingsRow(selected: selected == Screen.meetingSettings.id)
         let why = settingsUnavailable("settings_projects", path: "settings/projects", what: "Project settings", manage: "projects")
         SectionHeader(title: "Projects", onNew: why == nil ? { model.newProject() } : nil)
         if let why {
@@ -350,6 +352,18 @@ private struct MoveArrow: View {
         .buttonStyle(.plain)
         .help(up ? "Move up" : "Move down")
         .onHover { hovered = $0 }
+    }
+}
+
+/// "This computer": the meeting assistant's row, its dot on once an ElevenLabs API key is saved.
+private struct MeetingSettingsRow: View {
+    var selected: Bool
+    @ObservedObject private var meeting = Meeting.shared
+    var body: some View {
+        SectionHeader(title: "This computer", onNew: nil)
+        ItemRow(label: "🎙 Meeting assistant", sub: meeting.hasKey ? "ElevenLabs API key saved" : "add an ElevenLabs API key",
+                enabled: meeting.hasKey, selected: selected) { Navigator.shared.show(.meetingSettings) }
+        Color.clear.frame(height: 16)
     }
 }
 
