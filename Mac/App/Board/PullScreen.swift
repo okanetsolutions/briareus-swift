@@ -860,9 +860,18 @@ private struct PullSidebar: View {
             Text("Successfully merging this pull request may close these issues.").font(Theme.caption).foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true).padding(.bottom, 2)
             ForEach(Array(issues.enumerated()), id: \.offset) { _, link in
-                LinkedRow(link: link, repo: model.repo, action: safeWebURL(link.url) ? { openWebURL(link.url) } : nil)
+                let here = !link.isForeign(model.repo) && Store.shared.supports("issue")
+                LinkedRow(link: link, repo: model.repo, action: here || safeWebURL(link.url) ? { openIssue(link, here: here) } : nil)
             }
         }
+    }
+    /// An issue of this repository opens here, which reads the rest itself; any other on GitHub.
+    private func openIssue(_ link: BoardLink, here: Bool) {
+        if here {
+            var bare: JSON = ["number": JSON(link.number), "title": .string(link.title)]
+            if let url = link.url { bare["url"] = .string(url) }
+            Navigator.shared.push(.issue(repo: model.repo, issue: bare))
+        } else { openWebURL(link.url) }
     }
 }
 
