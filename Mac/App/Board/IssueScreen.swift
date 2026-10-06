@@ -187,7 +187,7 @@ final class IssueModel: ObservableObject {
             case .success(let v):
                 editError = nil
                 if let title = v["issue"]["title"].string { issue.title = title }
-                if let body = v["issue"]["body"].string, !detail.isNull, args["body"].isSet { detail["body"] = .string(body) }
+                if let body = v["issue"]["body"].string, !detail.isNull, args["body"].string != nil { detail["body"] = .string(body) }
                 detailGen += 1; readingDetail = false
                 await load(fresh: true)
             case .failure(let e):

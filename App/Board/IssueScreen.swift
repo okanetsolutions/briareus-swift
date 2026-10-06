@@ -122,7 +122,7 @@ final class IssuePageModel: ObservableObject {
             let v = try await Store.shared.call("update_issue", args)
             if !detail.isNull {
                 if let title = v["issue"]["title"].string { detail["title"] = .string(title) }
-                if let body = v["issue"]["body"].string, args["body"].isSet { detail["body"] = .string(body) }
+                if let body = v["issue"]["body"].string, args["body"].string != nil { detail["body"] = .string(body) }
             }
             detailGen += 1; readingDetail = false
             return true

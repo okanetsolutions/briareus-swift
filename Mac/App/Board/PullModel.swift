@@ -402,7 +402,7 @@ final class PullModel: ObservableObject {
             case .success(let v):
                 editError = nil
                 if let title = v["pr"]["title"].string, pr.object != nil { pr["title"] = .string(title) }
-                if let body = v["pr"]["body"].string, args["body"].isSet {
+                if let body = v["pr"]["body"].string, args["body"].string != nil {
                     descriptionBody = body
                     if pr["body"].string != nil { pr["body"] = .string(body) }
                 }

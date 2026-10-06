@@ -418,7 +418,7 @@ final class PullScreenModel: ObservableObject {
         do {
             let v = try await Store.shared.call("update_pull", a)
             if let title = v["pr"]["title"].string, pr.isObject { pr["title"] = .string(title) }
-            if let body = v["pr"]["body"].string, a["body"].isSet {
+            if let body = v["pr"]["body"].string, a["body"].string != nil {
                 descriptionBody = body
                 if pr["body"].string != nil { pr["body"] = .string(body) }
             }
