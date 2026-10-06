@@ -1,6 +1,6 @@
 // The sidebar's foot (screen_projects.c sidebar_footer_paint, player_paint and the sessions screen's bulk bar): while ☑
 // Select is on, the count, Select all, ⏻ Close, 🗑 Delete and 🗑 Delete all; the player while something plays, with ⏮ ⏯ ⏭;
-// and `⚙`, `☑ Select`, the version and `⎋` above a border.
+// and `⚙`, `☑ Select`, the version (the waiting release's in the accent, opening the updates menu) and `⎋` above a border.
 import SwiftUI
 
 /// A hairline across the sidebar, 10px in from each side.
@@ -28,6 +28,7 @@ struct SidebarFooter: View {
     var settings: () -> Void
     var signOut: () -> Void
     @ObservedObject private var media = Media.shared
+    @ObservedObject private var updater = Updater.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -85,15 +86,14 @@ struct SidebarFooter: View {
 
     // MARK: Foot
 
-    private var version: String { "v" + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") }
-
     private var foot: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: 6)
             FootRule()
             Color.clear.frame(height: 10)
             ZStack {
-                Text(version).font(Theme.caption2).foregroundStyle(Theme.tertiary).frame(height: 18)
+                FootText(text: updater.label, font: Theme.caption2, color: updater.highlight ? Theme.accent : Theme.tertiary) { updater.showMenu() }
+                    .help("Updates")
                 HStack(spacing: 0) {
                     FootText(text: "⚙", font: Theme.footnote, color: Theme.muted, action: settings).help("Settings")
                     Color.clear.frame(width: 12)

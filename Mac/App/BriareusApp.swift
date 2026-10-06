@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
             Store.shared.restore()
+            Updater.shared.start()
             // The app always opens filling the screen.
             if let window = NSApp.windows.first, let screen = window.screen ?? NSScreen.main {
                 window.setFrame(screen.visibleFrame, display: true)
@@ -113,11 +114,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if live > 0 {
             let kind = sftp == 0 ? "SSH" : ssh == 0 ? "SFTP" : "SSH and SFTP"
             let message = "\(live) \(kind) session\(live == 1 ? " is" : "s are") still open; closing Briareus disconnects \(live == 1 ? "it" : "them")."
-            if !Dialogs.confirm("Close Briareus?", message, continueLabel: "Close", destructive: true) { return .terminateCancel }
+            if !Dialogs.confirm("Close Briareus?", message, continueLabel: "Close", destructive: true) {
+                Updater.shared.restartCancelled()
+                return .terminateCancel
+            }
         }
         LiveSessions.shutdown.forEach { $0() }
         return .terminateNow
     }
+
+    @MainActor
+    func applicationWillTerminate(_ notification: Notification) { Updater.shared.relaunchIfAsked() }
 }
 
 struct MainWindow: View {
