@@ -45,15 +45,50 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
-      # Without the team's certificate the Mac app is signed ad hoc, which cannot carry keychain-access-groups (the app
-      # then keeps its token in the login keychain).
+      # The keychain lets a build read the token only when it is signed like the build that saved it. An ad hoc
+      # signature changes with every build, so each release would ask for the Mac's password to reach the token; one
+      # made with the Apple certificate in MAC_CERTIFICATE_P12 (base64) and MAC_CERTIFICATE_PASSWORD keeps its team, and
+      # the token stays readable from one release to the next. Without those secrets the app is signed ad hoc. There is
+      # no provisioning profile here, so keychain-access-groups is dropped either way and the token is kept in the login
+      # keychain.
+      - name: Import the signing certificate
+        id: signing
+        env:
+          CERTIFICATE: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CERTIFICATE" ]; then
+            echo "::warning::MAC_CERTIFICATE_P12 is not set: the Mac app is signed ad hoc, and each release asks for the keychain password to read the token."
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password=$(uuidgen)
+          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/certificate.p12"
+          identity=$(security find-identity -v -p codesigning "$keychain" | awk 'NR == 1 { print $2 }')
+          [ -n "$identity" ] || { echo "::error::MAC_CERTIFICATE_P12 holds no code signing identity."; exit 1; }
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "keychain=$keychain" >> "$GITHUB_OUTPUT"
       - name: Build the Mac app
+        env:
+          IDENTITY: ${{ steps.signing.outputs.identity }}
+          KEYCHAIN: ${{ steps.signing.outputs.keychain }}
         run: |
           plutil -remove keychain-access-groups Mac/Briareus.entitlements
           xcodebuild -project Briareus.xcodeproj -scheme "Briareus Mac" -configuration Release \
             -destination 'generic/platform=macOS' -derivedDataPath MacBuild \
-            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
+            CODE_SIGN_IDENTITY="$IDENTITY" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
+            ${KEYCHAIN:+OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN"} \
             MARKETING_VERSION=${{ steps.version.outputs.version }} CURRENT_PROJECT_VERSION=${{ steps.version.outputs.build }} build
+          codesign --verify --strict --verbose=2 MacBuild/Build/Products/Release/Briareus.app
       - name: Build the iPhone Simulator app
         run: |
           xcodebuild -project Briareus.xcodeproj -scheme Briareus -configuration Release -sdk iphonesimulator \
@@ -69,3 +104,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
         run: gh release create "$TAG" release/Briareus-mac.zip release/Briareus-iphone-simulator.zip --title "Briareus $TAG" --generate-notes --verify-tag
+      - name: Remove the signing keychain
+        if: always() && steps.signing.outputs.keychain != ''
+        run: security delete-keychain "${{ steps.signing.outputs.keychain }}"

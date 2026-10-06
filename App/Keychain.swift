@@ -40,6 +40,17 @@ enum Keychain {
         SecItemUpdate(query(origin, service) as CFDictionary, [kSecAttrAccessible as String: accessible] as CFDictionary)
         return token
     }
+    /// The origins holding a token. Only the attributes are read, so a token outlives the defaults that name its origin.
+    static func origins(service: String = device) -> [String] {
+        var q = query("", service)
+        q.removeValue(forKey: kSecAttrAccount as String)
+        q[kSecReturnAttributes as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitAll
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess,
+              let items = result as? [[String: Any]] else { return [] }
+        return items.compactMap { $0[kSecAttrAccount as String] as? String }.sorted()
+    }
     static func save(_ token: String, origin: String, service: String = device) throws {
         let q = query(origin, service)
         let attributes: [String: Any] = [kSecValueData as String: Data(token.utf8),

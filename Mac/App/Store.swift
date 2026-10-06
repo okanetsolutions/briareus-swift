@@ -25,7 +25,13 @@ final class Store: ObservableObject {
     private init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         cache = DiskCache(directory: base.appendingPathComponent("Okanet/Briareus/Responses", isDirectory: true))
-        server = UserDefaults.standard.string(forKey: Store.originKey) ?? ""
+        // Removing the app with its defaults leaves its keychain items, so the origin is found again from the token
+        // saved under it.
+        if let origin = UserDefaults.standard.string(forKey: Store.originKey) { server = origin }
+        else if let origin = Keychain.origins().first {
+            server = origin
+            UserDefaults.standard.set(origin, forKey: Store.originKey)
+        } else { server = "" }
     }
 
     var connected: Bool { client != nil }
