@@ -4,7 +4,9 @@ import Security
 
 enum Keychain {
     /// The data protection keychain needs the keychain-access-groups entitlement, which only a build signed with the team's
-    /// profile carries. The ad-hoc signed release build has none, so it keeps the token in the login keychain instead.
+    /// profile carries. The release build has none, so it keeps the token in the login keychain instead, where an item is
+    /// readable without a prompt only by builds signed like the one that saved it: by the team's certificate, which
+    /// each release is signed with, not ad hoc.
     private static let dataProtection: Bool = {
         guard let task = SecTaskCreateFromSelf(nil) else { return false }
         return SecTaskCopyValueForEntitlement(task, "keychain-access-groups" as CFString, nil) != nil
@@ -32,6 +34,17 @@ enum Keychain {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = result as? Data, let token = String(data: data, encoding: .utf8) else { throw failure(status) }
         return token
+    }
+    /// The origins holding a token. Only the attributes are read, so a token outlives the defaults that name its origin.
+    static func origins(service: String = device) -> [String] {
+        var q = query("", service)
+        q.removeValue(forKey: kSecAttrAccount as String)
+        q[kSecReturnAttributes as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitAll
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess,
+              let items = result as? [[String: Any]] else { return [] }
+        return items.compactMap { $0[kSecAttrAccount as String] as? String }.sorted()
     }
     static func save(_ token: String, origin: String, service: String = device) throws {
         let q = query(origin, service)

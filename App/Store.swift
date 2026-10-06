@@ -30,7 +30,13 @@ final class Store: ObservableObject {
         cache = DiskCache(directory: base.appendingPathComponent("Client", isDirectory: true),
                           protection: .completeFileProtectionUntilFirstUserAuthentication)
         try? FileManager.default.removeItem(at: base.appendingPathComponent("Responses", isDirectory: true))
-        server = UserDefaults.standard.string(forKey: Store.originKey) ?? ""
+        // Deleting the app clears its defaults but not its Keychain items, so after a reinstall the origin is found
+        // again from the token saved under it.
+        if let origin = UserDefaults.standard.string(forKey: Store.originKey) { server = origin }
+        else if let origin = Keychain.origins().first {
+            server = origin
+            UserDefaults.standard.set(origin, forKey: Store.originKey)
+        } else { server = "" }
     }
 
     var connected: Bool { client != nil }
