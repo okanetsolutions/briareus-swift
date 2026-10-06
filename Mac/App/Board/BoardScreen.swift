@@ -301,6 +301,10 @@ struct BoardScreen: View {
                 buttons.append(HeaderButton(glyph: "person.crop.circle.badge.checkmark", label: "\(f.reviewer.isEmpty ? "All reviewers" : f.reviewer) ▾",
                                             enabled: model.loaded) { model.pick(.reviewer) })
             }
+            if model.tab == .issues {
+                let a = f.assignee.isEmpty ? "All assignees" : f.assignee == BoardFilter.noAssignee ? "No assignee" : f.assignee
+                buttons.append(HeaderButton(glyph: "person.crop.circle", label: "\(a) ▾", enabled: model.loaded) { model.pick(.assignee) })
+            }
             buttons.append(HeaderButton(glyph: "tag", label: "\(f.label.isEmpty ? "All labels" : f.label) ▾",
                                         enabled: model.loaded) { model.pick(.label) })
             buttons.append(refresh)

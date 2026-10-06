@@ -228,26 +228,30 @@ func issueOpenSubIssues(_ issues: [IssueSummary], epic: Int, repo: String?) -> [
 struct BoardRow: Equatable, Sendable {
     var author: String?
     var reviewers: [Reviewer]
+    var assignees: [String]
     var labels: [PullLabel]
 
-    init(author: String?, reviewers: [Reviewer] = [], labels: [PullLabel] = []) { self.author = author; self.reviewers = reviewers; self.labels = labels }
-    init(_ pull: PullSummary) { self.init(author: pull.author, reviewers: pull.reviewers, labels: pull.labels) }
+    init(author: String?, reviewers: [Reviewer] = [], assignees: [String] = [], labels: [PullLabel] = []) {
+        self.author = author; self.reviewers = reviewers; self.assignees = assignees; self.labels = labels
+    }
+    init(_ pull: PullSummary) { self.init(author: pull.author, reviewers: pull.reviewers, assignees: pull.assignees, labels: pull.labels) }
     /// Issues have no reviewers.
-    init(_ issue: IssueSummary) { self.init(author: issue.author, labels: issue.labels) }
+    init(_ issue: IssueSummary) { self.init(author: issue.author, assignees: issue.assignees, labels: issue.labels) }
 
     fileprivate func carried(_ kind: FilterKind) -> [String] {
         switch kind {
         case .author: return author.map { [$0] } ?? []
         case .reviewer: return reviewers.map(\.user)
+        case .assignee: return assignees
         case .label: return labels.map(\.name)
         }
     }
 }
 
 enum FilterKind: Int, CaseIterable, Sendable {
-    case author, reviewer, label
+    case author, reviewer, assignee, label
     var name: String {
-        switch self { case .author: return "author"; case .reviewer: return "reviewer"; case .label: return "label" }
+        switch self { case .author: return "author"; case .reviewer: return "reviewer"; case .assignee: return "assignee"; case .label: return "label" }
     }
 }
 
@@ -259,11 +263,15 @@ struct FilterOption: Equatable, Sendable {
     var count: Int
 }
 
-/// One author, reviewer and label the board is narrowed to; empty means all. Values are kept folded.
+/// One author, reviewer, assignee and label the board is narrowed to; empty means all. Values are kept folded.
 struct BoardFilter: Equatable, Sendable {
     private(set) var author = ""
     private(set) var reviewer = ""
+    private(set) var assignee = ""
     private(set) var label = ""
+
+    /// The assignee picker's pick for the rows nobody has; GitHub logins never start with a hyphen.
+    static let noAssignee = "-"
 
     init() {}
     /// The board opens on the project's configured author, but only while they have something open.
@@ -273,31 +281,37 @@ struct BoardFilter: Equatable, Sendable {
         if rows.contains(where: { foldEqual($0.author, author) }) { f.author = author.asciiFolded }
         return f
     }
-    var isOn: Bool { !(author.isEmpty && reviewer.isEmpty && label.isEmpty) }
+    var isOn: Bool { !(author.isEmpty && reviewer.isEmpty && assignee.isEmpty && label.isEmpty) }
     /// Setting folds the value; nil clears the pick.
     subscript(kind: FilterKind) -> String {
-        get { switch kind { case .author: return author; case .reviewer: return reviewer; case .label: return label } }
+        get {
+            switch kind { case .author: return author; case .reviewer: return reviewer; case .assignee: return assignee; case .label: return label }
+        }
         set { set(kind, newValue) }
     }
     mutating func set(_ kind: FilterKind, _ value: String?) {
         let v = (value ?? "").asciiFolded
-        switch kind { case .author: author = v; case .reviewer: reviewer = v; case .label: label = v }
+        switch kind { case .author: author = v; case .reviewer: reviewer = v; case .assignee: assignee = v; case .label: label = v }
     }
     /// `skipping` leaves one picker out, which is how each counts what it would show without counting itself.
     func passes(_ row: BoardRow, skipping: FilterKind? = nil) -> Bool {
         for kind in FilterKind.allCases where kind != skipping {
             let pick = self[kind]
             if pick.isEmpty { continue }
+            if kind == .assignee && pick == BoardFilter.noAssignee { if !row.carried(kind).isEmpty { return false }; continue }
             if !row.carried(kind).contains(where: { foldEqual($0, pick) }) { return false }
         }
         return true
     }
-    /// What one picker offers, each counted against the other two. A pick they have emptied still lists itself.
+    /// What one picker offers, each counted against the others. A pick they have emptied still lists itself.
     /// Case variants fold into one option named as first seen, a value twice on one row counts once, and options sort
-    /// ignoring case.
+    /// ignoring case. The assignee picker ends with "No assignee" (`noAssignee`) when some row has nobody, which passes
+    /// only those rows.
     func options(_ kind: FilterKind, rows: [BoardRow]) -> [FilterOption] {
         var options: [FilterOption] = []
+        var nobody = 0
         for row in rows where passes(row, skipping: kind) {
+            if row.carried(kind).isEmpty { nobody += 1 }
             var seen: [String] = []
             for value in row.carried(kind) {
                 if seen.contains(where: { foldEqual($0, value) }) { continue }
@@ -307,12 +321,17 @@ struct BoardFilter: Equatable, Sendable {
             }
         }
         let pick = self[kind]
-        if !pick.isEmpty, !options.contains(where: { $0.value == pick }) { options.append(FilterOption(value: pick, text: pick, count: 0)) }
-        return options.sorted { a, b in
+        let noAssignee = kind == .assignee && pick == BoardFilter.noAssignee
+        if !pick.isEmpty, !noAssignee, !options.contains(where: { $0.value == pick }) { options.append(FilterOption(value: pick, text: pick, count: 0)) }
+        options.sort { a, b in
             let fa = a.text.asciiFolded, fb = b.text.asciiFolded
             if !fa.utf8.elementsEqual(fb.utf8) { return fa.bytesPrecede(fb) }
             return a.text.bytesPrecede(b.text)
         }
+        if kind == .assignee && (nobody > 0 || noAssignee) {
+            options.append(FilterOption(value: BoardFilter.noAssignee, text: "No assignee", count: nobody))
+        }
+        return options
     }
 }
 
