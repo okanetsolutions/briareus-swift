@@ -176,6 +176,10 @@ struct APIRoute: Sendable {
         .init(name: "issue", method: "GET", path: "issues/{issue}"),
         .init(name: "issue_timeline", method: "GET", path: "issues/{issue}/timeline"),   // comments and events, 100 a `page`, oldest first
         .init(name: "close_issue", method: "POST", path: "issues/{issue}/close"),   // `reason` completed or not_planned, and an optional `comment`
+        // The project's GitHub Projects board as its view groups it (`fresh` skips the cache), and a card moved to another
+        // column: `itemId`, and `columnId` (null for "No <field>").
+        .init(name: "project_board", method: "GET", path: "project-board"),
+        .init(name: "project_board_move", method: "POST", path: "project-board/move"),
         // Sessions. The list has no project parameter: a `repo` argument cuts the answer down here instead.
         .init(name: "sessions", method: "GET", path: "sessions", filter: "repo", list: "sessions"),
         .init(name: "start_session", method: "POST", path: "sessions"),

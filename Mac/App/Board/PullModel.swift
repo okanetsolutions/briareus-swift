@@ -54,6 +54,9 @@ final class PullModel: ObservableObject {
     private var pullGen = 0
     var dialogOpen = false
     var shown = false
+    /// The projects of the issues it closes, for the sidebar's Projects item (IssueProjects.swift).
+    lazy var issueProjects = IssueProjectsReader(repo: repo, linked: { [weak self] in self?.linkedIssues() ?? [] },
+                                                 changed: { [weak self] in self?.objectWillChange.send() })
     private var convTasks: [Task<Void, Never>?] = Array(repeating: nil, count: ConvFeed.allCases.count)
 
     // The Run tab: opening it serves the pull request (▶ Run) and shows it in an embedded browser. `runSession` is the
@@ -165,6 +168,7 @@ final class PullModel: ObservableObject {
         readingPull = false
         rebuildActions()
         save()
+        if failure == nil { issueProjects.load() }
         return failure
     }
     private func loadBody() async {
@@ -194,6 +198,7 @@ final class PullModel: ObservableObject {
         }
         rowRead = true
         rebuildActions()
+        issueProjects.load()
     }
     private func loadActions() async {
         guard let v = await boardCall("actions").value else { return }
@@ -218,6 +223,7 @@ final class PullModel: ObservableObject {
         // Refreshing is how an uncertain start is checked: its conversation is listed in the Sessions tab if it began.
         uncertain = false; writeError = nil
         bodyRead = false
+        issueProjects.reset()
         pullGen += 1; readingPull = false
         Task { await load() }
         if files.started { files.refresh() }

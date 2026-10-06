@@ -3,7 +3,7 @@
 // the suggested one filled; author, reviewer and label pickers narrow the lists, and are kept per repository.
 import SwiftUI
 
-enum BoardTab: Int { case pulls, issues, ssh, sftp }
+enum BoardTab: Int { case pulls, issues, ssh, sftp, board }
 
 @MainActor
 final class BoardModel: ObservableObject {
@@ -27,6 +27,11 @@ final class BoardModel: ObservableObject {
     @Published var writeError: String?
     @Published private(set) var reading = false
     var dialogOpen = false
+    /// The Board tab's own state (ProjectBoardTab.swift).
+    lazy var projectBoard = ProjectBoardModel(repo: repo)
+    /// The project Status of each linked issue, for the chips on the pull request rows (IssueProjects.swift).
+    lazy var issueStatus = IssueStatusReader(repo: repo, rows: { [weak self] in (self?.pulls ?? [], self?.pullFilter ?? BoardFilter()) },
+                                             changed: { [weak self] in self?.objectWillChange.send() })
     private var hasOpening = false
     private var opening = BoardFilter()
     private var readGen = 0
@@ -78,6 +83,7 @@ final class BoardModel: ObservableObject {
             if saved { opening = f } else { hasOpening = false; opening = BoardFilter() }
         }
         if tab == .issues && issues.isEmpty && !result["issuesError"].isSet { tab = .pulls }
+        issueStatus.restore()
         loaded = true
     }
 
@@ -111,6 +117,7 @@ final class BoardModel: ObservableObject {
             error = nil
             syncedAt = Date()
             Store.shared.cache.store(v, "pulls:\(repo)")
+            issueStatus.next()
             return nil
         case .failure(let e):
             if e.kind == .cancelled { return e }
@@ -137,8 +144,10 @@ final class BoardModel: ObservableObject {
         switch tab {
         case .ssh: RemoteSessions.sshRefresh(repo)
         case .sftp: RemoteSessions.sftpRefresh(repo)
+        case .board: projectBoard.refresh()
         default:
             uncertain = false; writeError = nil
+            issueStatus.reset()
             Task { await load(fresh: true) }
         }
     }
@@ -223,6 +232,8 @@ struct BoardScreen: View {
     var repo: String
     @ObservedObject private var model: BoardModel
     @ObservedObject private var store = Store.shared
+    /// Which projects name a board (`hasBoard`), for the Board tab.
+    @ObservedObject private var projects = ProjectsModel.shared
     @State private var remoteRevision = 0
 
     init(repo: String) {
@@ -235,8 +246,15 @@ struct BoardScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            if model.tab == .board { ProjectBoardHeader(model: model.projectBoard, title: model.title) } else { header }
             switch model.tab {
+            case .board:
+                VStack(alignment: .leading, spacing: 0) {
+                    tabs.padding(.horizontal, Theme.paneMargin)
+                    Spacer().frame(height: 14)
+                    ProjectBoardTab(model: model.projectBoard, issues: model.issues.map(\.summary), pulls: model.pulls)
+                        .padding(.horizontal, Theme.paneMargin)
+                }
             case .ssh, .sftp:
                 VStack(alignment: .leading, spacing: 0) {
                     tabs.padding(.horizontal, Theme.paneMargin)
@@ -315,6 +333,8 @@ struct BoardScreen: View {
         _ = remoteRevision
         let open = RemoteSessions.sshCount(repo), files = RemoteSessions.sftpCount(repo)
         var labels: [(BoardTab, String)] = [(.pulls, "⇅ Pull requests"), (.issues, "⊙ Issues")]
+        // Board, after Issues, for a project that names a GitHub Projects board.
+        if ProjectBoardModel.offered(repo) { labels.append((.board, "▦ Board")) }
         if remoteOffered {
             labels.append((.ssh, open > 0 ? "❯ SSH sessions \(open)" : "❯ SSH sessions"))
             labels.append((.sftp, files > 0 ? "⇵ SFTP sessions \(files)" : "⇵ SFTP sessions"))
@@ -328,7 +348,7 @@ struct BoardScreen: View {
         }
     }
     private func select(_ tab: BoardTab) {
-        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) ? tab : .pulls
+        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) ? tab : .pulls
     }
 
     // MARK: Lists
@@ -361,7 +381,8 @@ struct BoardScreen: View {
     @ViewBuilder private func pullList(filter: BoardFilter, shown: Int) -> some View {
         ForEach(Array(model.pulls.enumerated()), id: \.element.number) { _, pull in
             if filter.passes(BoardRow(pull)) {
-                PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number), action: { model.openPull(pull) }) {
+                PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number),
+                        issueStatus: model.issueStatus.statuses(pull), action: { model.openPull(pull) }) {
                     rowButtons(pull)
                 }
                 .padding(.bottom, 8)

@@ -48,6 +48,24 @@ final class SettingsLogicTests: XCTestCase {
         } else { XCTFail() }
     }
 
+    func testTheProjectsBoardIsEditedAsItsAddress() throws {
+        var s = ProjectFormState(row: ["repo": "o/r", "projectBoard": ["owner": "hq", "ownerType": "organization", "number": 1, "view": 42]])
+        XCTAssertEqual(s.text(.board), "https://github.com/orgs/hq/projects/1/views/42")
+        XCTAssertFalse(s.tabChanged(.project))
+        s.texts[.board] = " https://github.com/users/ana/projects/3 "
+        XCTAssertTrue(s.tabChanged(.project))
+        XCTAssertEqual(try s.body().get()["projectBoard"], ["owner": "ana", "ownerType": "user", "number": 3, "view": nil])
+        s.texts[.board] = ""
+        XCTAssertTrue(try s.body().get()["projectBoard"].isNull)
+        s.texts[.board] = "https://github.com/hq/projects/1"
+        if case .failure(let p) = s.body() {
+            XCTAssertEqual(p.tab, ProjectTab.project.rawValue)
+            XCTAssertTrue(p.message.hasPrefix("GitHub Projects board must be the board's address on GitHub"))
+        } else { XCTFail() }
+        // A server whose projects name no board has no such field.
+        XCTAssertFalse(ProjectFormState(row: ["repo": "o/r"]).offered(.board))
+    }
+
     func testStepRuntimesLeftOnTheReviewAreNoEntry() throws {
         var s = ProjectFormState(row: ["repo": "o/r", "stepRuntimes": ["testSheet": ["providerId": 3, "model": "x", "effort": ""]]])
         XCTAssertEqual(s.pick(.testSheet).providerId, 3)

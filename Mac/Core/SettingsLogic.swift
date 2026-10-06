@@ -5,7 +5,8 @@ import Foundation
 
 // MARK: - Shared
 
-enum SettingsFieldKind: Sendable { case text, list, area, number, bool }
+/// `board`: the Projects board, edited as its address on GitHub and saved as the setting that names it.
+enum SettingsFieldKind: Sendable { case text, list, area, number, bool, board }
 
 /// One of a form's fields: the key it edits (nil for one that is not part of the row), how, and the words around it.
 /// `rows` sizes a multi-line box.
@@ -77,7 +78,7 @@ enum ProjectTab: Int, CaseIterable, Sendable {
 }
 
 enum ProjectField: Int, CaseIterable, Sendable {
-    case repo, label, localDir
+    case repo, label, localDir, board
     case setup, php
     case dbName, dbExt, dbPool, dbRestore
     case reviewAuthor, publish, testSheet, testRun, qaNotes, sheetSteps, feedbackSteps
@@ -91,6 +92,8 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .label: return SettingsField(key: "label", kind: .text, label: "Label", cue: "shown in the project dropdown")
         case .localDir: return SettingsField(key: "localDir", kind: .text, label: "Local checkout", cue: "/home/you/www/your-checkout",
             hint: "This machine's own checkout of the repo. A session started in Local mode works directly in it: no clone, no setup steps, no pooled database, and the tree is used exactly as it stands. Leave empty to keep Local mode off for this project.", mono: true)
+        case .board: return SettingsField(key: "projectBoard", kind: .board, label: "GitHub Projects board", cue: "https://github.com/orgs/acme/projects/1/views/2",
+            hint: "The board the project's ▦ Board tab shows: its address on GitHub, with the view whose filter and columns it follows. The server's GitHub token needs Projects: read. Leave empty for no Board tab.", mono: true)
         case .setup: return SettingsField(key: "setupCommands", kind: .list, label: "Setup commands",
             hint: "One shell command per line, run in the checkout in order before the session starts. The first failure aborts the session.", rows: 6, mono: true)
         case .php: return SettingsField(key: "phpBinDir", kind: .text, label: "PHP bin directory", cue: "/usr/bin (or ~/.phpenv/versions/8.4/bin)",
@@ -128,7 +131,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
     /// The project and how a checkout of it is set up share the first tab.
     var tab: ProjectTab {
         switch self {
-        case .repo, .label, .localDir, .setup, .php: return .project
+        case .repo, .label, .localDir, .board, .setup, .php: return .project
         case .dbName, .dbExt, .dbPool, .dbRestore: return .database
         case .reviewAuthor, .publish, .testSheet, .testRun, .qaNotes, .sheetSteps, .feedbackSteps: return .review
         case .budget, .isSelf: return .orchestrator
@@ -209,6 +212,7 @@ struct ProjectFormState: Equatable, Sendable {
         switch f.def.kind {
         case .list: return SettingsText.listText(v)
         case .number: return SettingsText.numberText(v)
+        case .board: return projectBoardSettingURL(v) ?? ""
         default: return v.string ?? ""
         }
     }
@@ -245,6 +249,12 @@ struct ProjectFormState: Equatable, Sendable {
             case .text: body[key] = .string(text(f).cTrimmed)
             case .area: body[key] = .string(text(f))
             case .list: body[key] = JSON(SettingsText.list(from: text(f)))
+            case .board:
+                let t = text(f).cTrimmed
+                guard let board = t.isEmpty ? JSON.null : projectBoardSetting(fromURL: t) else {
+                    return .failure(FormProblem(message: "\(f.def.label) must be the board's address on GitHub, such as https://github.com/orgs/acme/projects/1/views/2, or empty for none.", tab: f.tab.rawValue))
+                }
+                body[key] = board
             case .number:
                 let t = text(f).cTrimmed
                 if t.isEmpty { body[key] = .null }
