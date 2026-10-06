@@ -183,6 +183,9 @@ final class ProjectBoardModel: ObservableObject {
 struct ProjectBoardHeader: View {
     @ObservedObject var model: ProjectBoardModel
     var title: String
+    /// The project header's own lead: 🎙 Meet first, and a meeting's line before the board's.
+    var lead: HeaderButton? = nil
+    var status: String? = nil
 
     var body: some View {
         var sub = model.repo
@@ -198,6 +201,8 @@ struct ProjectBoardHeader: View {
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE8A7), tip: "Open the board on GitHub") { model.openOnGitHub() })
         }
         buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the board from GitHub again", enabled: !model.reading && !model.moving) { model.refresh() })
+        if let lead { buttons.insert(lead, at: 0) }
+        if let status { sub = "\(status) · \(sub)" }
         return PaneHeader(title: title, subtitle: sub, buttons: buttons)
     }
 }

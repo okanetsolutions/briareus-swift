@@ -133,11 +133,14 @@ final class ForgeSiteModel: ObservableObject {
             switch r {
             case .failure(let err): texts[e.rawValue].error = err.description
             case .success(let v):
+                // Forge's .env answer carries `ok`; false is a refusal, said as one.
+                if v["ok"].bool == false { texts[e.rawValue].error = "Forge did not accept the .env."; return }
                 texts[e.rawValue].error = nil
                 // What was sent is what Forge now holds; the script's answer is Forge's own word on it.
                 let content = e == .script ? (v["content"].string ?? sent) : sent
+                // What was typed while the save ran stays in the editor, unsaved.
+                if texts[e.rawValue].edit == sent { texts[e.rawValue].edit = content }
                 texts[e.rawValue].saved = content
-                texts[e.rawValue].edit = content
                 if e == .script { autoSource = v["autoSource"].bool ?? sentAuto; savedAutoSource = autoSource }
                 texts[e.rawValue].notice = e == .script ? "Deploy script saved to Forge."
                     : "Forge accepted the .env and writes it to the server shortly. Clear the config cache and restart the queue workers for running code to pick it up."

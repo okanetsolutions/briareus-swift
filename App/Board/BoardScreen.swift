@@ -80,7 +80,7 @@ struct BoardScreen: View {
     private var pulls: [PullSummary] { PullSummary.parseList(board["pulls"]) }
     private var issues: [(summary: IssueSummary, raw: JSON)] { board["issues"].items.compactMap { j in IssueSummary(j).map { ($0, j) } } }
     private var loaded: Bool { feed.boardLoaded || error != nil }
-    private var filter: Binding<BoardFilter> { tab == .pulls ? $filters.pulls : $filters.issues }
+    private var filter: Binding<BoardFilter> { shownTab == .pulls ? $filters.pulls : $filters.issues }
     /// The project names a GitHub Projects board this token can read.
     private var boardOffered: Bool { ProjectBoardModel.offered(repo) }
     /// The tab shown: the Board tab falls back to the pull requests once the project no longer names a board.

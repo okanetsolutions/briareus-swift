@@ -549,7 +549,8 @@ final class BrowserCanvas: NSView {
         guard pressing else { return }
         pressing = false
         if dragging {
-            model?.send(pointer("up", convert(event.locationInWindow, from: nil), event) ?? ["type": "up"])
+            let at = convert(event.locationInWindow, from: nil), c = drawn.clamped(x: at.x, y: at.y)
+            model?.send(pointer("up", at, event) ?? pointer("up", NSPoint(x: c.x, y: c.y), event) ?? ["type": "up"])
             return
         }
         guard var click = pointer("click", pressAt, event) else { return }

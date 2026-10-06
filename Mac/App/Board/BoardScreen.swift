@@ -304,7 +304,9 @@ struct BoardScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if model.tab == .board { ProjectBoardHeader(model: model.projectBoard, title: model.title) } else { header }
+            if model.tab == .board {
+                ProjectBoardHeader(model: model.projectBoard, title: model.title, lead: meetButton, status: meeting.isFor(repo) ? meeting.status : nil)
+            } else { header }
             switch model.tab {
             case .board:
                 VStack(alignment: .leading, spacing: 0) {
@@ -312,6 +314,10 @@ struct BoardScreen: View {
                     Spacer().frame(height: 14)
                     ProjectBoardTab(model: model.projectBoard, issues: model.issues.map(\.summary), pulls: model.pulls)
                         .padding(.horizontal, Theme.paneMargin)
+                }
+                // A project that no longer names a board falls back to its pull requests, as the tab's button goes.
+                .onReceive(projects.objectWillChange) { _ in
+                    DispatchQueue.main.async { if model.tab == .board && !ProjectBoardModel.offered(repo) { model.tab = .pulls } }
                 }
             case .ssh, .sftp, .run, .db, .forge:
                 VStack(alignment: .leading, spacing: 0) {
@@ -408,13 +414,15 @@ struct BoardScreen: View {
         }
         // 🎙 Meet: the meeting assistant, on this project, on every tab; a meeting about it leads the line with its time,
         // cost and what it is doing.
-        let here = meeting.isFor(repo)
-        if here { sub = "\(meeting.status) · \(sub)" }
-        buttons.insert(HeaderButton(glyph: "mic", label: here ? "🎙 Meeting ●" : "🎙 Meet",
-                                    tip: "Join a meeting with an assistant that can look up this project") {
-            MeetingMenu.show(repo: repo, title: model.title)
-        }, at: 0)
+        if meeting.isFor(repo) { sub = "\(meeting.status) · \(sub)" }
+        buttons.insert(meetButton, at: 0)
         return PaneHeader(title: model.title, subtitle: sub, status: status, buttons: buttons)
+    }
+    private var meetButton: HeaderButton {
+        HeaderButton(glyph: "mic", label: meeting.isFor(repo) ? "🎙 Meeting ●" : "🎙 Meet",
+                     tip: "Join a meeting with an assistant that can look up this project") {
+            MeetingMenu.show(repo: repo, title: model.title)
+        }
     }
 
     // MARK: Tabs

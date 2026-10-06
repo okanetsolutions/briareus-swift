@@ -443,7 +443,8 @@ final class BrowserCanvas: UIView, UIKeyInput, UIGestureRecognizerDelegate {
         case .ended, .cancelled, .failed:
             if dragging {
                 dragging = false
-                model?.send(pointer("up", g.location(in: self)) ?? ["type": "up"])
+                let at = g.location(in: self), c = drawn.clamped(x: at.x, y: at.y)
+                model?.send(pointer("up", at) ?? pointer("up", CGPoint(x: c.x, y: c.y)) ?? ["type": "up"])
             }
         default: break
         }

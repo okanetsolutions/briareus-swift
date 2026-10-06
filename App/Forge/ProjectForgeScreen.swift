@@ -47,6 +47,8 @@ final class ProjectForgeModel: ObservableObject {
             // Only an account with a token can be read; the server answers the others with a refusal.
             accounts = v["accounts"].items.filter { !$0["hasToken"].is(false) }
         } catch {
+            // A cancelled read leaves the screen to read again, not to say there is no account.
+            if error.isCancellation { return }
             if let text = failure(error) { self.error = text }
             loaded = true
             return

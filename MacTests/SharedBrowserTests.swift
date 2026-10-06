@@ -176,4 +176,11 @@ final class SharedBrowserTests: XCTestCase {
             XCTAssertNil(browserAddress(refused), refused ?? "nil")
         }
     }
+
+    func testClampedKeepsADragsReleaseInsideThePicture() {
+        let r = BrowserRect(left: 10, top: 20, right: 110, bottom: 70)
+        XCTAssertEqual(r.clamped(x: 5, y: 100).x, 10); XCTAssertEqual(r.clamped(x: 5, y: 100).y, 69)
+        XCTAssertEqual(r.clamped(x: 50, y: 30).x, 50); XCTAssertEqual(r.clamped(x: 500, y: 0).x, 109)
+        XCTAssertEqual(BrowserRect().clamped(x: 7, y: 7).x, 0)
+    }
 }

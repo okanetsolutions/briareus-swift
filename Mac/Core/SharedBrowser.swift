@@ -127,6 +127,11 @@ struct BrowserRect: Equatable, Sendable {
     var left = 0, top = 0, right = 0, bottom = 0
     var width: Int { right - left }
     var height: Int { bottom - top }
+
+    /// `(x, y)` moved inside the rectangle, for a drag let go outside it: its `up` still needs a place on the page.
+    func clamped(x: Double, y: Double) -> (x: Double, y: Double) {
+        (min(max(x, Double(left)), Double(max(left, right - 1))), min(max(y, Double(top)), Double(max(top, bottom - 1))))
+    }
 }
 
 /// Where a `frameW` × `frameH` picture goes inside a `viewW` × `viewH` area: as large as fits without stretching, never
