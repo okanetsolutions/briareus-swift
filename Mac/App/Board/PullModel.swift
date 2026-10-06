@@ -333,10 +333,12 @@ final class PullModel: ObservableObject {
         }
     }
     func act(_ action: BoardAction) {
-        dialogOpen = true
-        let answer = actionPrompt(action, number: number)
-        dialogOpen = false
-        if let input = answer { startAction(action, input: input) }
+        afterThisEvent { [self] in
+            dialogOpen = true
+            let answer = actionPrompt(action, number: number)
+            dialogOpen = false
+            if let input = answer { startAction(action, input: input) }
+        }
     }
 
     /// Solve findings is the board's implement-feedback errand started from the findings themselves: offered on an open
@@ -422,10 +424,12 @@ final class PullModel: ObservableObject {
     func editDetails() {
         guard !editing, let body = pullBody else { return }
         let title = pr["title"].string ?? boardRow?.title ?? ""
-        dialogOpen = true
-        let fields = BoardEdits.details("pull request", number: number, title: title, body: body)
-        dialogOpen = false
-        edit(fields)
+        afterThisEvent { [self] in
+            dialogOpen = true
+            let fields = BoardEdits.details("pull request", number: number, title: title, body: body)
+            dialogOpen = false
+            edit(fields)
+        }
     }
     func editAssignees() {
         guard !editing, let row = boardRow else { return }
