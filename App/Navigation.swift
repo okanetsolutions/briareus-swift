@@ -4,10 +4,12 @@ import SwiftUI
 
 /// A screen another one can open. Each case's `id` names what it shows, so a repeated choice is not reopened.
 enum Destination: Hashable, Identifiable {
-    /// A project's conversations, with its findings and a new conversation above them.
+    /// A project's conversations, with its board, findings and a new conversation above them.
     case project(repo: String)
     /// A conversation; `session` is the record the list had, shown until the server answers.
     case conversation(id: String, session: JSON?)
+    /// A project's board: pull requests and issues.
+    case board(repo: String)
     /// A pull request; `stack` is its StackPosition JSON and `summary` its board row, either nil when unknown.
     case pull(repo: String, number: Int, stack: JSON?, summary: JSON?)
     /// ▶ Run on the project's default branch, served in an embedded browser.
@@ -42,6 +44,7 @@ enum Destination: Hashable, Identifiable {
         switch self {
         case .project(let repo): return "project:\(repo)"
         case .conversation(let id, _): return "conversation:\(id)"
+        case .board(let repo): return "pulls:\(repo)"
         case .pull(let repo, let n, _, _): return "pull:\(repo)#\(n)"
         case .pullFiles(let repo, let n): return "files:\(repo)#\(n)"
         case .branchRun(let repo): return "branch-run:\(repo)"
@@ -69,6 +72,7 @@ enum Destination: Hashable, Identifiable {
         switch self {
         case .project(let repo): ProjectView(repo: repo)
         case .conversation(let id, let session): ConversationScreen(sessionID: id, initial: session)
+        case .board(let repo): BoardScreen(repo: repo)
         case .pull(let repo, let number, let stack, let summary): PullScreen(repo: repo, number: number, stack: stack, summary: summary)
         case .pullFiles(let repo, let number): PullFilesScreen(repo: repo, number: number)
         case .branchRun(let repo): BranchRunScreen(repo: repo)
