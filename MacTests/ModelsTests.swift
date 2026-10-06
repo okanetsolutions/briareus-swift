@@ -338,6 +338,31 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(c.firstAvailable(), RuntimeChoice(providerId: 5, model: "b"))
         XCTAssertNil(RuntimeCatalog(j(#"{"providers":[{"id":1,"label":"A","available":false,"models":[]}]}"#))!.firstAvailable())
     }
+    func testRuntimeOfferedKeepsOnlyWhatTheCatalogStillHas() {
+        let c = RuntimeCatalog(j(Self.catalog))!
+        XCTAssertEqual(c.offered(RuntimeChoice(providerId: 2, model: "sonnet", effort: "medium")), RuntimeChoice(providerId: 2, model: "sonnet", effort: "medium"))
+        // An effort the model no longer offers falls to its default, else its first.
+        XCTAssertEqual(c.offered(RuntimeChoice(providerId: 2, model: "opus", effort: "max")), RuntimeChoice(providerId: 2, model: "opus", effort: "high"))
+        XCTAssertEqual(c.offered(RuntimeChoice(providerId: 2, model: "sonnet")), RuntimeChoice(providerId: 2, model: "sonnet", effort: "low"))
+        XCTAssertEqual(c.offered(RuntimeChoice(providerId: 3)), RuntimeChoice(providerId: 3))
+        // A gone model or provider, an unavailable provider, or no model where the provider lists some, offers nothing.
+        XCTAssertNil(c.offered(RuntimeChoice(providerId: 2, model: "gone")))
+        XCTAssertNil(c.offered(RuntimeChoice(providerId: 9, model: "opus")))
+        XCTAssertNil(c.offered(RuntimeChoice(providerId: 1, model: "gpt")))
+        XCTAssertNil(c.offered(RuntimeChoice(providerId: 2)))
+    }
+    func testLastRuntimeRoundTripsAndForgets() {
+        let d = UserDefaults(suiteName: "LastRuntimeTests")!
+        d.removePersistentDomain(forName: "LastRuntimeTests")
+        XCTAssertNil(LastRuntime.load(d))
+        LastRuntime.save(RuntimeChoice(providerId: 2, model: "sonnet", effort: "medium"), d)
+        XCTAssertEqual(LastRuntime.load(d), RuntimeChoice(providerId: 2, model: "sonnet", effort: "medium"))
+        XCTAssertEqual(LastRuntime.restore(RuntimeCatalog(j(Self.catalog))!, d), RuntimeChoice(providerId: 2, model: "sonnet", effort: "medium"))
+        XCTAssertNil(LastRuntime.restore(RuntimeCatalog(j(#"{"providers":[]}"#))!, d))
+        LastRuntime.save(nil, d)
+        XCTAssertNil(LastRuntime.load(d))
+        d.removePersistentDomain(forName: "LastRuntimeTests")
+    }
     func testRuntimeEffortsAndLabelsForKnownAndUnknownChoices() {
         let c = RuntimeCatalog(j(Self.catalog))!
         let opus = RuntimeChoice(providerId: 2, model: "opus", effort: "high"), haiku = RuntimeChoice(providerId: 2, model: "haiku"),

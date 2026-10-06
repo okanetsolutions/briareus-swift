@@ -9,8 +9,12 @@ final class NewConversationModel: ObservableObject {
     @Published private(set) var projects: [Project] = []
     @Published var repo: String?
     @Published private(set) var catalog: RuntimeCatalog?
-    /// The pick; nil starts on the project's default.
-    @Published var runtime: RuntimeChoice?
+    /// The pick; nil starts on the project's default. Picking one (or the default) remembers it for the next new session.
+    @Published var runtime: RuntimeChoice? {
+        didSet { if remembers { LastRuntime.save(runtime) } }
+    }
+    /// Off while the sheet sets the pick itself, so only what was picked by hand is remembered.
+    private var remembers = true
     @Published private(set) var branches: [String] = []
     @Published private(set) var defaultBranch: String?
     /// Nil: a new branch off the default.
@@ -52,7 +56,7 @@ final class NewConversationModel: ObservableObject {
     /// Reads what the picked project offers: its runtimes and branches, the saved answer first.
     func loadChoices() {
         choicesTask?.cancel()
-        catalog = nil; runtime = nil; branches = []; defaultBranch = nil; branch = nil
+        catalog = nil; quietly { runtime = nil }; branches = []; defaultBranch = nil; branch = nil
         guard let p = project else { return }
         let store = Store.shared
         if store.supports("runtimes"), let saved = store.cache.value("runtimes:\(p.repo)") { adopt(RuntimeCatalog(saved)) }
@@ -80,8 +84,13 @@ final class NewConversationModel: ObservableObject {
     private func adopt(_ c: RuntimeCatalog?) {
         guard let c else { return }
         catalog = c
-        // Without a project default a start needs a provider.
-        if c.defaultChoice == nil && runtime == nil { runtime = c.firstAvailable() }
+        // The last pick where this project offers it; without a project default a start needs a provider.
+        quietly { if runtime == nil { runtime = LastRuntime.restore(c) ?? (c.defaultChoice == nil ? c.firstAvailable() : nil) } }
+    }
+    private func quietly(_ change: () -> Void) {
+        remembers = false
+        change()
+        remembers = true
     }
     private func adoptBranches(_ value: JSON) {
         branches = value["branches"].items.compactMap(\.string)
