@@ -30,6 +30,8 @@ enum Screen: Hashable, Identifiable {
     case providerSettings(row: JSON?, defaults: JSON?)
     case dbServerSettings(row: JSON?, defaults: JSON?)
     case sshServerSettings(row: JSON?, defaults: JSON?)
+    /// A session's ⚡ Webhook, pushed over its conversation; `session` is the conversation's record.
+    case webhook(session: JSON)
 
     var id: String {
         switch self {
@@ -47,6 +49,7 @@ enum Screen: Hashable, Identifiable {
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .dbServerSettings(let row, _): return "db-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .sshServerSettings(let row, _): return "ssh-server:\(row?["id"].int.map(String.init) ?? "new")"
+        case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
         }
     }
     static func == (a: Screen, b: Screen) -> Bool { a.id == b.id }
@@ -98,6 +101,8 @@ final class Navigator: ObservableObject {
     }
     func pop() {
         if stack.count > 1 {
+            // A pushed form with unsaved changes (⚡ Webhook) asks first.
+            guard mayLeave() else { return }
             if top.id.hasPrefix("conversation:") { panelSession = nil }
             stack.removeLast()
         } else { narrowShowsDetail = false }

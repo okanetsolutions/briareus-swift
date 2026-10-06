@@ -248,6 +248,7 @@ struct ScreenView: View {
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)
         case .dbServerSettings(let row, let defaults): DBServerSettingsScreen(row: row, defaults: defaults)
         case .sshServerSettings(let row, let defaults): SSHServerSettingsScreen(row: row, defaults: defaults)
+        case .webhook(let session): WebhookScreen(session: session)
         }
     }
 }
