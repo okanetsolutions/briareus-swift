@@ -22,7 +22,7 @@ A native SwiftUI client for [Briareus](https://github.com/nadinyamaui/briareus),
 
 ## What it does
 
-The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out for a phone: **Projects** (the projects, their conversations and boards), **Findings** (the review rounds waiting across every project, with their count on the tab), **Usage** and **Settings**. It runs on the Mac app's core (`Mac/Core`), so both apps read the server the same way. The screen stays on while the app is open.
+The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out for a phone: **Projects** (the projects and their conversations), **Findings** (the review rounds waiting across every project, with their count on the tab), **Usage** and **Settings**. It runs on the Mac app's core (`Mac/Core`), so both apps read the server the same way. The screen stays on while the app is open.
 
 **Conversations**
 
@@ -49,17 +49,16 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 - Goes on with the phone locked, and ends on its own after a silence (3 minutes by default), as GPT-Realtime bills the audio it hears and says.
 - Shows what the conversation has cost under its controls, ticking while it runs: each response's and each transcription's tokens, as OpenAI reports them, at gpt-realtime-2.1-mini's and gpt-4o-mini-transcribe's published prices. Each finished conversation's time and cost is kept on the phone, and Settings › Voice adds them up: time, cost and cost per minute. An estimate; OpenAI's bill is the reference.
 
-**Project board**
+**Pull requests and issues**
 
-- Shows open pull requests: labels, whether they conflict with their base, the state of their checks, “assignee @a | author @b | reviewers @c”, linked issues with their project Status (not their open or closed state), and stack position, narrowed by author, reviewer or label.
+The iPhone and iPad app has no project board: a pull request opens from its conversation or from Findings.
+
 - Opens a pull request on its description, file changes with diffs, reviews, the issues it closes (this repository's open on the app's issue screen), the project boards those issues are on with their Status and fields, findings, the conversations already run on it and its ▶ Run preview in an embedded browser.
-- Records fix, optional or dismiss decisions on findings, and merges when the server offers it, saying first what stands in the way. A pull request on the board's list merges from its row too (swipe it left, or hold it): the row's conflicts and checks are named first, and the head the pull request is read at is the one merged.
+- Records fix, optional or dismiss decisions on findings, and merges when the server offers it, saying first what stands in the way.
 - Serves a project's default branch from its screen (Run default branch), as a pull request's ▶ Run does: in a fresh workspace with the project's run commands, its setup's log until the page is up, then the page in an embedded browser, with the run profile, Reload, Safari and Delete this run in its menu.
-- Starts the board's errands on a pull request: run, code review, solve conflicts, fix failing checks, implement feedback, feedback in your own words, test sheet, record QA, PR body and delete my comments. The one the pull request's state asks for is marked as suggested, named on its row in the list and offered as a button above Squash and merge.
-- Lists the repository's open issues, sub-issues nested under their epic, with the pull requests answering each, narrowed by author, assignee (No assignee among them) or label, starts a session on an issue and closes one as completed or not planned.
+- Starts errands on a pull request: run, code review, solve conflicts, fix failing checks, implement feedback, feedback in your own words, test sheet, record QA, PR body and delete my comments. The one the pull request's state asks for is marked as suggested and offered as a button above Squash and merge.
 - Opens an issue as the Mac does: its state and who opened it, the body, every sub-issue of an epic, the sessions started on it, its assignees, labels, type, project fields, milestone, parent and, under Development, the pull requests linked to close it, then its timeline, a page at a time with Show more activity. A session starts on it at a tap: the page already says it is paid and whether one is at work.
 - Edits an issue or a pull request on GitHub: its title and Markdown description, its labels as a comma-separated list, and its assignees, Assign me included (the GitHub login you give the first time is kept on the phone). A pull request's Update branch merges its base into it at the head that was read, once you confirm.
-- Shows the project's GitHub Projects board, when its settings name one, as its view filters and groups it: a column at a time with its count and Story Points, each card with its fields, labels, assignees and the pull requests closing it, narrowed to one assignee. A card opens its issue or pull request, and moves to another column from its menu, saying why when GitHub refuses.
 - With an Admin token, lists the Laravel Forge servers the project may use from the project screen's menu, each with its sites, the project's own first. A site opens on its overview, its deploy script and its `.env`, which is read only on Show .env; both are edited and saved to Forge, and replacing the `.env` asks first.
 
 **Usage and Settings**
@@ -315,7 +314,7 @@ Manual acceptance with a deployed test project:
 - Background/foreground and leave/reopen the conversation; verify it opens at once on the saved transcript, then shows incremental updates and no duplicate events.
 - Quit and relaunch the app; verify projects appear before the server answers and refresh afterwards.
 - Test a question, queued follow-up, stop, rename, close and reopen; confirm before deleting a disposable session.
-- Open the pull requests and compare labels, conflicts, checks and filters against the Mac app's board; open a pull request and compare checks, reviews and findings. The actions start paid agents and may write to GitHub.
+- Open a pull request from a conversation and compare checks, reviews and findings. The actions start paid agents and may write to GitHub.
 - Triage a round of findings from the project's Findings button and toggle the review loop from a conversation; verify the Mac app shows the same state.
 - Revoke the token on the server (`npm run create-token -- --revoke`) during polling and verify pairing appears; also test self-revocation and local-only forgetting.
 - Record a voice note in a conversation and in a new one; verify its text lands at the end of the box, that discarding sends nothing, that a Read-only token shows no microphone, and that a server without transcription explains what it is missing when the microphone is pressed.
