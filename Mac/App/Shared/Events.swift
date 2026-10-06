@@ -17,6 +17,10 @@ extension Notification.Name {
     static let settingsDBServersChanged = Notification.Name("BriareusSettingsDBServersChanged")
     /// The SSH servers changed: the settings sidebar and the SSH and SFTP sessions tabs read them again.
     static let sshServersChanged = Notification.Name("BriareusSSHServersChanged")
+    /// The settings sidebar reads the Forge accounts again.
+    static let forgeAccountsChanged = Notification.Name("BriareusForgeAccountsChanged")
+    /// The settings sidebar reads the Slack workspaces again.
+    static let slackWorkspacesChanged = Notification.Name("BriareusSlackWorkspacesChanged")
     /// The project list changed (a project saved, cloned, deleted or reordered): the sidebar reads it again.
     static let projectsChanged = Notification.Name("BriareusProjectsChanged")
     /// Runs a session operation (`compact`, `clear`, `rename` with compaction settings) through its open conversation, which

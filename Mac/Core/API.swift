@@ -233,6 +233,17 @@ struct APIRoute: Sendable {
         .init(name: "delete_ssh_server", method: "DELETE", path: "settings/ssh/servers/{id}"),
         // The database login stored with one, opened, for a tunnel over it to its database.
         .init(name: "ssh_server_db_credentials", method: "GET", path: "settings/ssh/servers/{id}/db-credentials"),
+        // The Laravel Forge accounts: an organization, its token (write-only) and the projects it serves; admin as well.
+        .init(name: "settings_forge_accounts", method: "GET", path: "settings/forge/accounts"),
+        .init(name: "create_forge_account", method: "POST", path: "settings/forge/accounts"),
+        .init(name: "update_forge_account", method: "PUT", path: "settings/forge/accounts/{id}"),
+        .init(name: "delete_forge_account", method: "DELETE", path: "settings/forge/accounts/{id}"),
+        // The Slack workspaces sessions send messages through: a user token and signing secret (write-only), and the
+        // projects it serves with their channels; admin as well.
+        .init(name: "settings_slack_workspaces", method: "GET", path: "settings/slack/workspaces"),
+        .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
+        .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
+        .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),
     ]
     private static let table: [String: APIRoute] = Dictionary(uniqueKeysWithValues: all.map { ($0.name, $0) })
 }

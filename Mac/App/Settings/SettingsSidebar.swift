@@ -1,6 +1,6 @@
-// Settings, as the Windows client's settings page: a sidebar of its own (← Back to sessions, the projects,
-// the providers, the database pool and the SSH servers, each with ＋ New) whose rows open their forms across the detail
-// pane. Those routes need an Admin token; any other token gets a sentence saying so.
+// Settings, as the Windows client's settings page: a sidebar of its own (← Back to sessions, the projects, the providers,
+// the database pool, the SSH servers, the Forge accounts and the Slack workspaces, each with ＋ New) whose rows open their
+// forms across the detail pane. Those routes need an Admin token; any other token gets a sentence saying so.
 import SwiftUI
 
 struct SettingsSidebar: View {
@@ -59,8 +59,11 @@ struct SettingsSidebar: View {
                               onNew: store.supports("create_db_server") ? { model.newServer() } : nil)
                 servers
             }
-            // The SSH servers agents may run commands on, last, as on the Windows client.
+            // The SSH servers agents may run commands on, as on the Windows client, then the Forge accounts and the Slack
+            // workspaces on a server that has them.
             ssh
+            if store.supports("settings_forge_accounts") { forge }
+            if store.supports("settings_slack_workspaces") { slack }
         }
     }
 
@@ -147,6 +150,42 @@ struct SettingsSidebar: View {
             }
             if !s.loaded { LoadingNote(text: "Loading SSH servers…") }
         }
+    }
+
+    /// The Forge accounts under the SSH servers: each with its dot (a token is stored), label, organization and projects.
+    @ViewBuilder private var forge: some View {
+        Color.clear.frame(height: 8)
+        SectionHeader(title: "Forge accounts", onNew: store.supports("create_forge_account") ? { model.newForge() } : nil)
+        let s = model.forge
+        if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
+        ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
+            ItemRow(label: row["label"].nonEmpty ?? row["organization"].nonEmpty ?? "Forge account", sub: ForgeAccountFormState.sidebarLine(row),
+                    enabled: row["hasToken"].is(true), selected: selected == Screen.forgeAccountSettings(row: row, defaults: nil).id) { model.openForge(i) }
+        }
+        // An account being added shows as its own row until it is saved.
+        if selected == "forge-account:new" { ItemRow(label: "New Forge account", sub: "not saved yet", enabled: false, selected: true) {} }
+        if s.loaded && s.list.isEmpty && s.error == nil {
+            Explanation(text: "No Forge accounts yet. ＋ New adds a Laravel Forge organization and the projects that may use it.")
+        }
+        if !s.loaded { LoadingNote(text: "Loading Forge accounts…") }
+    }
+
+    /// The Slack workspaces under the Forge accounts: each with its dot (a token is stored), label, workspace and projects.
+    @ViewBuilder private var slack: some View {
+        Color.clear.frame(height: 8)
+        SectionHeader(title: "Slack workspaces", onNew: store.supports("create_slack_workspace") ? { model.newSlack() } : nil)
+        let s = model.slack
+        if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
+        ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
+            ItemRow(label: row["label"].nonEmpty ?? row["team"].nonEmpty ?? "Slack workspace", sub: SlackWorkspaceFormState.sidebarLine(row),
+                    enabled: row["hasToken"].is(true), selected: selected == Screen.slackWorkspaceSettings(row: row, defaults: nil).id) { model.openSlack(i) }
+        }
+        // A workspace being added shows as its own row until it is saved.
+        if selected == "slack-workspace:new" { ItemRow(label: "New Slack workspace", sub: "not saved yet", enabled: false, selected: true) {} }
+        if s.loaded && s.list.isEmpty && s.error == nil {
+            Explanation(text: "No Slack workspaces yet. ＋ New lets a project's sessions send Slack messages as you and hear the replies.")
+        }
+        if !s.loaded { LoadingNote(text: "Loading Slack workspaces…") }
     }
 
     // MARK: Foot

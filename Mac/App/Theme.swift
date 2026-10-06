@@ -134,6 +134,7 @@ enum Glyph {
         case 0xE74B: return "arrow.down"
         case 0xE74D: return "trash"
         case 0xE74E: return "square.and.arrow.down"
+        case 0xE753: return "cloud"
         case 0xE756: return "terminal"
         case 0xE768: return "play.fill"
         case 0xE769: return "pause.fill"

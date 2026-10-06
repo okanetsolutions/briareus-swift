@@ -1,5 +1,5 @@
 // What the settings page's sidebar and its forms share, as screen_settings.c keeps it: the lists the sidebar read (the
-// projects, providers, database pool and SSH servers, which the forms also read), the menus the pickers pop up, and the
+// projects, providers, database pool, SSH servers, Forge accounts and Slack workspaces, which the forms also read), the menus the pickers pop up, and the
 // form's pieces: labelled boxes, check rows, select boxes, notes and the tab row.
 import AppKit
 import Combine
@@ -23,6 +23,8 @@ final class SettingsModel: ObservableObject {
     @Published var providers = Section()
     @Published var servers = Section()
     @Published var ssh = Section()
+    @Published var forge = Section()
+    @Published var slack = Section()
     /// A Move up or Move down is on its way.
     @Published private(set) var ordering = false
 
@@ -47,6 +49,12 @@ final class SettingsModel: ObservableObject {
         center.addObserver(forName: .sshServersChanged, object: nil, queue: .main) { _ in
             Task { @MainActor in SettingsModel.shared.loadSSH() }
         }
+        center.addObserver(forName: .forgeAccountsChanged, object: nil, queue: .main) { _ in
+            Task { @MainActor in SettingsModel.shared.loadForge() }
+        }
+        center.addObserver(forName: .slackWorkspacesChanged, object: nil, queue: .main) { _ in
+            Task { @MainActor in SettingsModel.shared.loadSlack() }
+        }
         // Each time the sidebar turns into the settings page, it reads everything afresh, as a new settings screen does.
         modeWatch = Navigator.shared.$sidebarMode.removeDuplicates().sink { mode in
             guard mode == .settings else { return }
@@ -58,12 +66,12 @@ final class SettingsModel: ObservableObject {
     func start() {
         tasks.values.forEach { $0.cancel() }
         tasks = [:]
-        projects = Section(); providers = Section(); servers = Section(); ssh = Section()
+        projects = Section(); providers = Section(); servers = Section(); ssh = Section(); forge = Section(); slack = Section()
         ordering = false
         openFirstProvider = false; openFirstServer = false
         refresh()
     }
-    func refresh() { loadProjects(); loadSSH(); loadProviders(); loadServers() }
+    func refresh() { loadProjects(); loadSSH(); loadProviders(); loadServers(); loadForge(); loadSlack() }
 
     private func load(_ section: ReferenceWritableKeyPath<SettingsModel, Section>, _ call: String, _ listKey: String, done: @escaping () -> Void = {}) {
         tasks[call]?.cancel()
@@ -91,6 +99,9 @@ final class SettingsModel: ObservableObject {
         }
     }
     func loadSSH() { load(\.ssh, "settings_ssh_servers", "servers") }
+    func loadForge() { load(\.forge, "settings_forge_accounts", "accounts") }
+    /// The open Slack form marks the projects another workspace already serves from this list.
+    func loadSlack() { load(\.slack, "settings_slack_workspaces", "workspaces") }
     func loadProviders() {
         load(\.providers, "settings_providers", "providers") { [weak self] in
             // After a delete the first provider left opens in its place, as a project's delete opens the first project left.
@@ -112,7 +123,7 @@ final class SettingsModel: ObservableObject {
     /// A settings form in the detail pane.
     static func isSettingsScreen(_ screen: Screen) -> Bool {
         switch screen {
-        case .projectSettings, .providerSettings, .dbServerSettings, .sshServerSettings: return true
+        case .projectSettings, .providerSettings, .dbServerSettings, .sshServerSettings, .forgeAccountSettings, .slackWorkspaceSettings: return true
         default: return false
         }
     }
@@ -139,6 +150,16 @@ final class SettingsModel: ObservableObject {
         Navigator.shared.show(.sshServerSettings(row: ssh.list[i], defaults: ssh.defaults))
     }
     func newSSH() { Navigator.shared.show(.sshServerSettings(row: nil, defaults: ssh.defaults)) }
+    func openForge(_ i: Int) {
+        guard forge.list.indices.contains(i), forge.list[i].isObject else { return }
+        Navigator.shared.show(.forgeAccountSettings(row: forge.list[i], defaults: forge.defaults))
+    }
+    func newForge() { Navigator.shared.show(.forgeAccountSettings(row: nil, defaults: forge.defaults)) }
+    func openSlack(_ i: Int) {
+        guard slack.list.indices.contains(i), slack.list[i].isObject else { return }
+        Navigator.shared.show(.slackWorkspaceSettings(row: slack.list[i], defaults: slack.defaults))
+    }
+    func newSlack() { Navigator.shared.show(.slackWorkspaceSettings(row: nil, defaults: slack.defaults)) }
 
     // MARK: Order
 
@@ -462,11 +483,13 @@ struct SettingsTextArea: NSViewRepresentable {
     }
 }
 
-/// A check box and its label on a 26px row (36px beside boxes), as the forms' paint_check.
+/// A check box and its label on a 26px row (36px beside boxes), as the forms' paint_check; `muted` greys the label of a
+/// choice that is gone or taken.
 struct SettingsCheck: View {
     var label: String
     var on: Bool
     var height: CGFloat = 26
+    var muted = false
     var action: () -> Void
     @State private var hovered = false
     var body: some View {
@@ -478,7 +501,7 @@ struct SettingsCheck: View {
                     if on { Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.onAccent) }
                 }
                 .frame(width: 15, height: 15)
-                Text(label).font(Theme.footnote).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
+                Text(label).font(Theme.footnote).foregroundStyle(muted ? Theme.muted : Theme.ink).lineLimit(1).truncationMode(.tail)
             }
             .frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
             .contentShape(Rectangle())
