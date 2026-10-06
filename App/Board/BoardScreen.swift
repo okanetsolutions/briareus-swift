@@ -2,8 +2,8 @@
 // for a project that names one, its GitHub Projects board (ProjectBoardTab.swift); the author, reviewer (pull requests),
 // assignee (issues, No assignee among them) and label pickers in the toolbar's filter menu, kept per repository. Each pull
 // request row names the errand its state asks for and offers the errands in its context menu, and its linked issues end
-// with their project Status. The Mac's SSH and SFTP tabs are left out: they drive local ssh and sftp processes a phone
-// does not have.
+// with their project Status, and a swipe to its right merges it, once confirmed with what stands in the way. The Mac's
+// SSH and SFTP tabs are left out: they drive local ssh and sftp processes a phone does not have.
 import SwiftUI
 
 /// The board's pickers, kept on disk per repository as the Mac keeps them. A board never filtered opens on the project's
@@ -62,6 +62,10 @@ struct BoardScreen: View {
     @StateObject private var issueStatus: IssueStatusReader
     @State private var tab = Tab.pulls
     @State private var error: String?
+    /// The pull request whose Merge waits for a yes, the one being merged from its row, and what the last merge left to say.
+    @State private var mergeAsked: PullSummary?
+    @State private var mergingNumber = 0
+    @State private var mergeNote: String?
 
     init(repo: String) {
         self.repo = repo
@@ -89,6 +93,7 @@ struct BoardScreen: View {
         List {
             if let error { Section { ErrorNotice(message: error) }.listRowBackground(Theme.row) }
             ErrandNotice(runner: errands, place: "in the project")
+            if let note = mergeNote { Section { ErrorNotice(message: note) }.listRowBackground(Theme.row) }
             Picker("Show", selection: $tab) {
                 // Three segments share a phone's width, so the pull requests go by their short name beside the board.
                 Text("\(boardOffered ? "PRs" : "Pull requests") (\(pulls.count))").tag(Tab.pulls)
@@ -166,6 +171,13 @@ struct BoardScreen: View {
         }
         .onChange(of: issues.isEmpty) { _, empty in if empty && tab == .issues && !board["issuesError"].isSet && feed.boardLoaded { self.tab = .pulls } }
         .errandPrompts(errands)
+        .alert(mergeAsked.map { "Merge #\($0.number)?" } ?? "",
+               isPresented: Binding(get: { mergeAsked != nil }, set: { if !$0 { mergeAsked = nil } }), presenting: mergeAsked) { pull in
+            Button("Merge") { merge(pull) }
+            Button("Cancel", role: .cancel) {}
+        } message: { pull in
+            Text(mergeQuestion(pull))
+        }
     }
 
     private func load(fresh: Bool = false) async throws {
@@ -194,6 +206,12 @@ struct BoardScreen: View {
                                  suggested: actions.first { $0.id == pull.recommended }?.label, issueStatus: issueStatus.statuses(pull))
                 }
                 .contextMenu { rowMenu(pull, actions: actions) }
+                .swipeActions(edge: .trailing) {
+                    if mergeOffered(pull) {
+                        Button { mergeAsked = pull } label: { Label("Merge", systemImage: "arrow.triangle.merge") }
+                            .tint(Theme.accent).disabled(mergingNumber != 0)
+                    }
+                }
             }
         } footer: {
             if let at = boardDateParse(board["syncedAt"].string), !shown.isEmpty { Text("Synced with GitHub \(formatRelative(at)).") }
@@ -219,12 +237,59 @@ struct BoardScreen: View {
                 }
             }
         }
+        if mergeOffered(pull) {
+            Button { mergeAsked = pull } label: { Label(mergingNumber == pull.number ? "Merging…" : "Merge…", systemImage: "arrow.triangle.merge") }
+                .disabled(mergingNumber != 0)
+        }
         if safeWebURL(pull.url) {
             Button { boardOpenWeb(pull.url) } label: { Label("Open on GitHub", systemImage: "safari") }
             Button { Pasteboard.copy(pull.url ?? "") } label: { Label("Copy link", systemImage: "link") }
         }
         if !pull.branch.isEmpty {
             Button { Pasteboard.copy(pull.branch) } label: { Label("Copy branch name", systemImage: "arrow.triangle.branch") }
+        }
+    }
+
+    // MARK: Merge
+
+    /// Merge is offered on every pull request that is not a draft, to a token that may write on a server that reads and
+    /// merges one.
+    private func mergeOffered(_ pull: PullSummary) -> Bool {
+        !pull.draft && store.canManage && store.supports("pull") && store.supports("merge_pull")
+    }
+    /// What the row says stands in the way: its conflicts, and checks failing or still running.
+    private func mergeQuestion(_ pull: PullSummary) -> String {
+        var message = "\u{201C}\(pull.title)\u{201D} is squash-merged into \(pull.baseBranch.isEmpty ? "its base branch" : pull.baseBranch) on GitHub."
+        if pull.conflicting { message += "\n\nThis branch has conflicts that must be resolved before it can merge." }
+        if pull.checksFailed { message += "\n\nSome checks failed." }
+        else if pull.checks == "pending" || pull.checks == "expected" { message += "\n\nSome checks are still running." }
+        return message
+    }
+    /// The row carries no head commit, and the server merges only the head that was read, so the pull request is read
+    /// first and squash-merged at the head that read returns. Then the list is read again.
+    private func merge(_ pull: PullSummary) {
+        guard mergingNumber == 0 else { return }
+        let number = pull.number
+        mergingNumber = number; mergeNote = nil
+        Task {
+            defer { mergingNumber = 0 }
+            let pr: JSON
+            do { pr = try await store.call("pull", ["repo": .string(repo), "pr": JSON(number)])["pr"] }
+            catch { mergeNote = failure(error); return }
+            guard pr["state"].string == "open" else { mergeNote = "This pull request is no longer open."; return }
+            guard let head = pr["headSha"].string, let base = pr["baseRef"].string else { mergeNote = "The server did not say which commit to merge."; return }
+            do {
+                let v = try await store.call("merge_pull", ["repo": .string(repo), "pr": JSON(number), "headSha": .string(head), "baseRef": .string(base), "method": "squash"])
+                mergeNote = v["status"].string == "pending"
+                    ? "GitHub accepted the merge and is still finishing it; the pull request leaves the list once it lands." : nil
+            } catch {
+                if let said = failure(error) {
+                    mergeNote = (error as? APIError)?.isRefusal == true ? said : "\(said) The merge may still have completed; pull down to refresh before trying again."
+                }
+            }
+            // The other rows' Merge is back while the list is read again.
+            mergingNumber = 0
+            await read(fresh: true)
         }
     }
 
