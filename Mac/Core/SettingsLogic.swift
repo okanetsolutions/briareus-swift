@@ -77,10 +77,10 @@ enum ProjectTab: Int, CaseIterable, Sendable {
 }
 
 enum ProjectField: Int, CaseIterable, Sendable {
-    case repo, label, localDir
+    case repo, label, enabled, localDir
     case setup, php
     case dbName, dbExt, dbPool, dbRestore
-    case reviewAuthor, publish, testSheet, testRun, qaNotes, sheetSteps, feedbackSteps
+    case reviewAuthor, publish, autoLoop, testSheet, testRun, qaNotes, sheetSteps, feedbackSteps
     case budget, isSelf
     case env
     case run, profiles
@@ -89,6 +89,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
         switch self {
         case .repo: return SettingsField(key: "repo", kind: .text, label: "Repository", cue: "owner/name", hint: "Cloned over HTTPS with the machine's own git credentials.")
         case .label: return SettingsField(key: "label", kind: .text, label: "Label", cue: "shown in the project dropdown")
+        case .enabled: return SettingsField(key: "enabled", kind: .bool, label: "Active: sessions can be started on this project")
         case .localDir: return SettingsField(key: "localDir", kind: .text, label: "Local checkout", cue: "/home/you/www/your-checkout",
             hint: "This machine's own checkout of the repo. A session started in Local mode works directly in it: no clone, no setup steps, no pooled database, and the tree is used exactly as it stands. Leave empty to keep Local mode off for this project.", mono: true)
         case .setup: return SettingsField(key: "setupCommands", kind: .list, label: "Setup commands",
@@ -105,6 +106,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .reviewAuthor: return SettingsField(key: "reviewAuthor", kind: .text, label: "PR author", cue: "github-username", mono: true)
         case .publish: return SettingsField(key: "reviewPublishInstructions", kind: .area, label: "Publish steps",
             hint: "Sent to the agent as its own turn after a ⌕ Code review: this text and nothing else. Leave empty to run no turn after the review.", rows: 4)
+        case .autoLoop: return SettingsField(key: "autonomousReviewLoop", kind: .bool, label: "Autonomous review loop: fix every finding and review again")
         case .testSheet: return SettingsField(key: "reviewTestSheet", kind: .bool, label: "Write a test sheet when the 🎬 QA errand is started")
         case .testRun: return SettingsField(key: "reviewTestRun", kind: .bool, label: "Execute the test sheet and record a video of each scenario")
         case .qaNotes: return SettingsField(key: "qaNotes", kind: .area, label: "QA notes",
@@ -128,9 +130,9 @@ enum ProjectField: Int, CaseIterable, Sendable {
     /// The project and how a checkout of it is set up share the first tab.
     var tab: ProjectTab {
         switch self {
-        case .repo, .label, .localDir, .setup, .php: return .project
+        case .repo, .label, .enabled, .localDir, .setup, .php: return .project
         case .dbName, .dbExt, .dbPool, .dbRestore: return .database
-        case .reviewAuthor, .publish, .testSheet, .testRun, .qaNotes, .sheetSteps, .feedbackSteps: return .review
+        case .reviewAuthor, .publish, .autoLoop, .testSheet, .testRun, .qaNotes, .sheetSteps, .feedbackSteps: return .review
         case .budget, .isSelf: return .orchestrator
         case .env: return .env
         case .run, .profiles: return .run
