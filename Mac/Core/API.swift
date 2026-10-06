@@ -174,6 +174,10 @@ struct APIRoute: Sendable {
         .init(name: "update_pull_branch", method: "POST", path: "pulls/{pr}/update-branch"),   // merges its base into it, at the `headSha` and `baseRef` read
         .init(name: "serve_pull", method: "POST", path: "pulls/{prNumber}/serve"),
         .init(name: "commit", method: "GET", path: "commits/{sha}"),
+        // The repository at a branch, for the Files tab: every path (pinned to the commit `sha` it answers), and one file's
+        // text at a `ref`, or only its size when it is binary or over 1 MB.
+        .init(name: "repo_tree", method: "GET", path: "repo/tree"),
+        .init(name: "repo_file", method: "GET", path: "repo/file"),
         // Issues
         .init(name: "issue", method: "GET", path: "issues/{issue}"),
         .init(name: "issue_timeline", method: "GET", path: "issues/{issue}/timeline"),   // comments and events, 100 a `page`, oldest first
