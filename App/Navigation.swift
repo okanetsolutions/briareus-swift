@@ -12,6 +12,8 @@ enum Destination: Hashable, Identifiable {
     case board(repo: String)
     /// A pull request; `stack` is its StackPosition JSON and `summary` its board row, either nil when unknown.
     case pull(repo: String, number: Int, stack: JSON?, summary: JSON?)
+    /// ▶ Run on the project's default branch, served in an embedded browser.
+    case branchRun(repo: String)
     /// A pull request's changed files on their own.
     case pullFiles(repo: String, number: Int)
     /// An issue, with its board row.
@@ -45,6 +47,7 @@ enum Destination: Hashable, Identifiable {
         case .board(let repo): return "pulls:\(repo)"
         case .pull(let repo, let n, _, _): return "pull:\(repo)#\(n)"
         case .pullFiles(let repo, let n): return "files:\(repo)#\(n)"
+        case .branchRun(let repo): return "branch-run:\(repo)"
         case .issue(let repo, let issue): return "issue:\(repo)#\(issue["number"].int ?? 0)"
         case .findings(let repo): return "findings:\(repo ?? "")"
         case .usage: return "usage"
@@ -72,6 +75,7 @@ enum Destination: Hashable, Identifiable {
         case .board(let repo): BoardScreen(repo: repo)
         case .pull(let repo, let number, let stack, let summary): PullScreen(repo: repo, number: number, stack: stack, summary: summary)
         case .pullFiles(let repo, let number): PullFilesScreen(repo: repo, number: number)
+        case .branchRun(let repo): BranchRunScreen(repo: repo)
         case .issue(let repo, let issue): IssueScreen(repo: repo, issue: issue)
         case .findings(let repo): FindingsScreen(repo: repo)
         case .usage: UsageScreen()

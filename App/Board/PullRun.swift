@@ -105,7 +105,7 @@ final class RunBrowser: NSObject, ObservableObject, WKNavigationDelegate, WKUIDe
 }
 
 /// The browser's view, edge to edge.
-private struct RunBrowserView: UIViewRepresentable {
+struct RunBrowserView: UIViewRepresentable {
     @ObservedObject var browser: RunBrowser
     func makeUIView(context: Context) -> WKWebView { browser.webView }
     func updateUIView(_ view: WKWebView, context: Context) {}

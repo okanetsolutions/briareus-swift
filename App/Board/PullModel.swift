@@ -1,6 +1,6 @@
 // What the pull request screen reads and writes (the Mac's PullModel): the pull request itself, its description, findings
-// and conversation, its board row and conversations through the project's feed, the merge, and the Run tab that serves
-// it in an embedded browser.
+// and conversation, its board row and conversations through the project's feed, the merge, the edits of its title,
+// description, labels and assignees, Update branch, and the Run tab that serves it in an embedded browser.
 import Combine
 import SwiftUI
 
@@ -76,6 +76,12 @@ final class PullScreenModel: ObservableObject {
     @Published var mergeError: String?
     @Published private(set) var merging = false
     @Published var mergeQuestion: MergeQuestion?
+    /// Its title, description, labels or assignees are being saved, and why the last edit failed.
+    @Published private(set) var editing = false
+    @Published var editError: String?
+    /// Update branch is under way, and what GitHub was asked to do once it took the request.
+    @Published private(set) var updatingBranch = false
+    @Published var branchNote: String?
     @Published private(set) var deciding: String?
     @Published private(set) var readingPull = false
     @Published private(set) var deletingRun: String?
@@ -243,6 +249,7 @@ final class PullScreenModel: ObservableObject {
     /// Pulling down reads everything again, GitHub included; on the Run tab it reloads the page, as in a browser.
     func refresh() async {
         if section == .run, let browser { browser.reload(); return }
+        editError = nil; branchNote = nil
         bodyRead = false
         issueProjects.reset()
         if section == .reviews { commentsCancel() }
@@ -389,6 +396,57 @@ final class PullScreenModel: ObservableObject {
         merging = false
         // The board still lists what was just merged until GitHub is asked again.
         _ = await reading { try await load(fresh: true) }
+    }
+
+    // MARK: Edits
+
+    /// Edits on an open pull request, when the server takes `update_pull`.
+    var canEdit: Bool { Store.shared.supports("update_pull") && isOpen }
+    /// The description as last read, nil until it is: an edit starts from it.
+    var pullBody: String? { pr["body"].string ?? descriptionBody }
+    var canUpdateBranch: Bool {
+        Store.shared.supports("update_pull_branch") && pr["state"].string == "open" && pr["headSha"].string != nil && pr["baseRef"].string != nil
+    }
+
+    /// Sends `fields` as an edit of this pull request. The title and description show as saved at once; the labels and
+    /// assignees come back with the board's row, read again with the pull request.
+    func edit(_ fields: JSON) async {
+        guard !editing else { return }
+        editing = true; editError = nil
+        var a = fields
+        a["repo"] = .string(repo); a["pr"] = JSON(number)
+        do {
+            let v = try await Store.shared.call("update_pull", a)
+            if let title = v["pr"]["title"].string, pr.isObject { pr["title"] = .string(title) }
+            if let body = v["pr"]["body"].string, a["body"].isSet {
+                descriptionBody = body
+                if pr["body"].string != nil { pr["body"] = .string(body) }
+            }
+            save()
+        } catch {
+            // An edit sets what it names, so trying again is safe.
+            if let said = failure(error) { editError = said }
+        }
+        editing = false
+        _ = await reading { try await load(fresh: true) }
+    }
+
+    /// Merges the base into the branch on GitHub, at the head and base last read, once confirmed.
+    func updateBranch() async {
+        guard !updatingBranch, !merging, let head = pr["headSha"].string, let base = pr["baseRef"].string else { return }
+        updatingBranch = true; mergeError = nil; branchNote = nil
+        var a = args
+        a["headSha"] = .string(head); a["baseRef"] = .string(base)
+        do {
+            try await Store.shared.call("update_pull_branch", a)
+            branchNote = "GitHub is merging \(base) into this branch; its new commit and checks show once it has."
+        } catch {
+            if let said = failure(error) {
+                mergeError = (error as? APIError)?.isRefusal == true ? said : "\(said) The update may still have been made; pull down to refresh before trying again."
+            }
+        }
+        updatingBranch = false
+        _ = await reading { try await load() }
     }
 
     // MARK: Conversations
