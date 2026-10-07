@@ -4,7 +4,7 @@
 import Combine
 import SwiftUI
 
-enum BoardTab: Int { case pulls, issues, ssh, sftp, board, run, db, forge, meeting, files }
+enum BoardTab: Int { case pulls, issues, ssh, sftp, board, run, db, forge, meeting, review, files }
 
 @MainActor
 final class BoardModel: ObservableObject {
@@ -88,8 +88,10 @@ final class BoardModel: ObservableObject {
 
     private func show(_ result: JSON, saved: Bool) {
         board = result
-        pulls = PullSummary.parseList(result["pulls"])
-        issues = result["issues"].items.compactMap { j in IssueSummary(j).map { ($0, j) } }
+        // A poll mostly answers what is already shown; unchanged rows are left as they are.
+        let parsed = PullSummary.parseList(result["pulls"])
+        if parsed != pulls { pulls = parsed }
+        if result["issues"] != JSON.array(issues.map(\.raw)) { issues = result["issues"].items.compactMap { j in IssueSummary(j).map { ($0, j) } } }
         // A saved board may be out of date about who has something open, so the server's first answer opens the board
         // again, unless the pickers were touched meanwhile.
         if hasOpening {
@@ -174,6 +176,10 @@ final class BoardModel: ObservableObject {
     func runsOn(_ number: Int) -> Int { runs.filter { $0.pullNumber == number }.count }
     func runActiveOn(_ number: Int) -> Bool { runs.contains { $0.pullNumber == number && $0.isActive } }
     func stack(of pull: PullSummary) -> StackPosition? { StackPosition(pull.raw["stack"], stacks: board["stacks"]) }
+    /// Whose review the Review List waits on: the saved GitHub login, else the project's author.
+    var reviewer: String? { BoardEdits.login ?? board["author"].nonEmpty }
+    /// The Review List tab's rows (reviewList).
+    var reviewPulls: [PullSummary] { reviewList(pulls, stacks: board["stacks"], me: reviewer) }
 
     // MARK: Errands
 
@@ -347,7 +353,8 @@ struct BoardScreen: View {
                 .onChange(of: meeting.logRepo) { _, _ in if meeting.transcript(for: repo) == nil { model.tab = .pulls } }
             default:
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
+                    // Lazy: a busy repository lists a hundred pull requests, and only the rows in view are built and redrawn.
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         tabs
                         Spacer().frame(height: 14)
                         lists
@@ -402,6 +409,17 @@ struct BoardScreen: View {
             buttons = model.forge.headerButtons
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read it from Forge again") { model.refresh() })
         case .meeting: break
+        case .review:
+            sub = repo
+            if model.loaded { sub += " · \(model.reviewPulls.count) waiting on \(model.reviewer ?? "you")" }
+            if let at = model.syncedAt { sub += " · synced \(formatRelative(at))" }
+            buttons.append(HeaderButton(glyph: "person.crop.circle", label: BoardEdits.login.map { "Reviewing as \($0)" } ?? "Set my GitHub login…",
+                                        tip: "The GitHub login whose reviews the Review List shows") {
+                model.dialogOpen = true
+                if BoardEdits.askLogin() { model.objectWillChange.send() }
+                model.dialogOpen = false
+            })
+            buttons.append(refresh)
         default:
             // The pickers, as the Windows client's selects, and ⟳. C gives them no glyph; the SF Symbol stands in only when the
             // header is too narrow for labels, where C would draw an empty square.
@@ -442,6 +460,8 @@ struct BoardScreen: View {
         var labels: [(BoardTab, String)] = [(.pulls, "⇅ Pull requests"), (.issues, "⊙ Issues")]
         // Board, after Issues, for a project that names a GitHub Projects board.
         if ProjectBoardModel.offered(repo) { labels.append((.board, "▦ Board")) }
+        // Review List, the pull requests waiting on the user's review, after the board.
+        labels.append((.review, model.loaded ? "✓ Review List \(model.reviewPulls.count)" : "✓ Review List"))
         // Files, the repository's tree at a branch, for a server that lists it.
         if ProjectFilesModel.offered { labels.append((.files, "🗂 Files")) }
         // Run, on the default branch, for a token that may serve one.
@@ -463,7 +483,7 @@ struct BoardScreen: View {
         }
     }
     private func select(_ tab: BoardTab) {
-        model.tab = tab == .issues || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) || projectTabOffered(tab) || tab == .meeting ? tab : .pulls
+        model.tab = tab == .issues || tab == .review || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) || projectTabOffered(tab) || tab == .meeting ? tab : .pulls
         if model.tab == .run { model.run.open() }
     }
 
@@ -501,6 +521,11 @@ struct BoardScreen: View {
             }
             Spacer().frame(height: 10)
         }
+        if model.tab == .review { reviewList } else { filteredLists }
+        if !model.loaded { LoadingNote(text: "Loading pull requests…").padding(.horizontal, -8) }
+    }
+
+    @ViewBuilder private var filteredLists: some View {
         let filter = model.filter
         let rows = model.rows
         let shown = rows.filter { filter.passes($0) }.count
@@ -513,18 +538,32 @@ struct BoardScreen: View {
             .frame(height: 20).padding(.bottom, 8)
         }
         if model.tab == .pulls { pullList(filter: filter, shown: shown) } else { issueList(filter: filter, shown: shown) }
-        if !model.loaded { LoadingNote(text: "Loading pull requests…").padding(.horizontal, -8) }
+    }
+
+    /// The pull requests waiting on the user's review: labelled required-dev-review, not theirs, and not stacked on
+    /// another, or labelled feedback-implemented on one they review.
+    @ViewBuilder private var reviewList: some View {
+        let shown = model.reviewPulls
+        ForEach(shown, id: \.number) { pull in
+            PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number),
+                    issueStatus: model.issueStatus.statuses(pull), action: { model.openPull(pull) }) {
+                rowButtons(pull)
+            }
+            .padding(.bottom, 8)
+        }
+        if model.loaded && shown.isEmpty && model.error == nil {
+            Text(model.reviewer == nil ? "Set your GitHub login to see the pull requests waiting on your review." : "Nothing is waiting on your review.")
+                .font(Theme.footnote).foregroundStyle(Theme.muted)
+        }
     }
 
     @ViewBuilder private func pullList(filter: BoardFilter, shown: Int) -> some View {
-        ForEach(Array(model.pulls.enumerated()), id: \.element.number) { _, pull in
-            if filter.passes(BoardRow(pull)) {
-                PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number),
-                        issueStatus: model.issueStatus.statuses(pull), action: { model.openPull(pull) }) {
-                    rowButtons(pull)
-                }
-                .padding(.bottom, 8)
+        ForEach(model.pulls.filter { filter.passes(BoardRow($0)) }, id: \.number) { pull in
+            PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number),
+                    issueStatus: model.issueStatus.statuses(pull), action: { model.openPull(pull) }) {
+                rowButtons(pull)
             }
+            .padding(.bottom, 8)
         }
         if model.loaded && shown == 0 && model.error == nil {
             Text(model.pulls.isEmpty ? "No open pull requests." : "No pull requests match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)

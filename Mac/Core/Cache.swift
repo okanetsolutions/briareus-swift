@@ -8,6 +8,12 @@ final class DiskCache: @unchecked Sendable {
     /// pocket, so its app passes `.completeFileProtectionUntilFirstUserAuthentication`.
     let protection: Data.WritingOptions
     private let lock = NSLock()
+    /// Saves waiting for the writer, by key: a read sees them at once, and only the newest of a key is written.
+    private var pending: [String: JSON] = [:]
+    /// Bumped by every save and removal of a key, so a write overtaken meanwhile is dropped.
+    private var revision: [String: Int] = [:]
+    private var epoch = 0
+    private let writer = DispatchQueue(label: "DiskCache.writer", qos: .utility)
 
     init(directory: URL, protection: Data.WritingOptions = .completeFileProtection) {
         self.directory = directory; self.protection = protection
@@ -42,19 +48,40 @@ final class DiskCache: @unchecked Sendable {
     /// The saved document, or nil.
     func value(_ key: String) -> JSON? {
         lock.lock(); defer { lock.unlock() }
+        if let saved = pending[key] { return saved }
         guard let data = try? Data(contentsOf: url(key)) else { return nil }
         return JSON.parse(data)
     }
-    /// Sorted keys make equal values equal bytes, so an unchanged poll result costs no write.
-    @discardableResult
-    func store(_ value: JSON, _ key: String) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        let data = value.data, u = url(key)
-        if let existing = try? Data(contentsOf: u), existing == data {
-            try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: u.path)
-            return true
+    /// Saves a document off the calling thread: a board's answer runs to hundreds of kilobytes, and turning it into text
+    /// and comparing it with the file took the main thread with it on every poll. Reads see it at once.
+    func store(_ value: JSON, _ key: String) {
+        lock.lock()
+        pending[key] = value
+        let mine = bump(key)
+        lock.unlock()
+        writer.async { [self] in
+            // Only the newest save of a key is written; one overtaken meanwhile leaves it to the later one.
+            lock.lock()
+            guard revision[key] == mine, let value = pending[key] else { lock.unlock(); return }
+            lock.unlock()
+            // Sorted keys make equal values equal bytes, so an unchanged poll result costs no write.
+            let data = value.data, u = url(key)
+            lock.lock(); defer { lock.unlock() }
+            guard revision[key] == mine else { return }
+            pending[key] = nil
+            if let existing = try? Data(contentsOf: u), existing == data {
+                try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: u.path)
+            } else {
+                _ = write(data, to: u)
+            }
         }
-        return write(data, to: u)
+    }
+    /// Waits for the saves made so far to reach the disk.
+    func flush() { writer.sync {} }
+    private func bump(_ key: String) -> Int {
+        epoch += 1
+        revision[key] = epoch
+        return epoch
     }
 
     /// A log of values, one JSON document per line, that grows without being rewritten. Returns an array.
@@ -79,15 +106,20 @@ final class DiskCache: @unchecked Sendable {
     @discardableResult
     func replace(_ values: [JSON], _ key: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
+        pending[key] = nil; _ = bump(key)
         return write(Data(values.map { $0.serialized() + "\n" }.joined().utf8), to: url(key))
     }
 
     func remove(_ key: String) {
         lock.lock(); defer { lock.unlock() }
+        pending[key] = nil; _ = bump(key)
         try? FileManager.default.removeItem(at: url(key))
     }
     func removeAll() {
         lock.lock(); defer { lock.unlock() }
+        // A save still waiting is dropped with the rest: its revision no longer matches.
+        for key in pending.keys { _ = bump(key) }
+        pending = [:]
         try? FileManager.default.removeItem(at: directory)
     }
     /// Drops entries nothing has written for a while, such as transcripts of conversations never reopened.

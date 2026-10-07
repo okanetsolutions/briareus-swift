@@ -171,8 +171,8 @@ struct IssueScreen: View {
     }
 
     private var number: Int { issue["number"].truncatedInt ?? 0 }
-    private var boardIssues: [(summary: IssueSummary, raw: JSON)] { feed.board["issues"].items.compactMap { j in IssueSummary(j).map { ($0, j) } } }
-    private var boardPulls: [PullSummary] { PullSummary.parseList(feed.board["pulls"]) }
+    private var boardIssues: [(summary: IssueSummary, raw: JSON)] { feed.issues }
+    private var boardPulls: [PullSummary] { feed.pulls }
     /// The issue's own read, else the board's row when it lists it, else what the screen was opened with.
     private var row: IssueSummary {
         model.summary ?? boardIssues.first { $0.summary.number == number }?.summary ?? IssueSummary(issue) ?? IssueSummary(["number": JSON(max(number, 1))])!

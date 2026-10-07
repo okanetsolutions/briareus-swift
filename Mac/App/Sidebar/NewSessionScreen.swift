@@ -8,8 +8,12 @@ final class NewSessionModel: ObservableObject {
     @Published private(set) var projects: [Project] = []
     @Published private(set) var chosen = 0
     @Published private(set) var catalog: RuntimeCatalog?
-    /// The pick; none starts on the project default.
-    @Published private(set) var runtime: RuntimeChoice?
+    /// The pick; none starts on the project default. Picking one remembers it for the next new session.
+    @Published private(set) var runtime: RuntimeChoice? {
+        didSet { if remembers { LastRuntime.save(runtime) } }
+    }
+    /// Off while the screen sets the pick itself, so only what was picked by hand is remembered.
+    private var remembers = true
     @Published private(set) var branches: [String] = []
     @Published private(set) var defaultBranch: String?
     /// Nil: a new branch off the default.
@@ -71,10 +75,10 @@ final class NewSessionModel: ObservableObject {
     /// Reads what the picked project offers: its runtimes and branches, the saved answer first.
     func loadChoices() {
         choicesTask?.cancel()
-        catalog = nil; runtime = nil; branches = []; defaultBranch = nil; branch = nil
+        catalog = nil; quietly { runtime = nil }; branches = []; defaultBranch = nil; branch = nil
         guard let p = project else { return }
         let store = Store.shared
-        if store.supports("runtimes"), let saved = store.cache.value("runtimes:\(p.repo)") { catalog = RuntimeCatalog(saved) }
+        if store.supports("runtimes"), let saved = store.cache.value("runtimes:\(p.repo)") { adopt(RuntimeCatalog(saved)) }
         if store.supports("branches"), let saved = store.cache.value("branches:\(p.repo)") { adoptBranches(saved) }
         choicesTask = Task {
             await withTaskGroup(of: Void.self) { group in
@@ -82,8 +86,7 @@ final class NewSessionModel: ObservableObject {
                     group.addTask { @MainActor in
                         guard let answer = try? await store.call("runtimes", ["repo": .string(p.repo)]), !Task.isCancelled,
                               self.project?.repo == p.repo, let c = RuntimeCatalog(answer) else { return }
-                        self.catalog = c
-                        if c.defaultChoice == nil && self.runtime == nil { self.runtime = c.firstAvailable() }
+                        self.adopt(c)
                         store.cache.store(answer, "runtimes:\(p.repo)")
                     }
                 }
@@ -97,6 +100,17 @@ final class NewSessionModel: ObservableObject {
                 }
             }
         }
+    }
+    private func adopt(_ c: RuntimeCatalog?) {
+        guard let c else { return }
+        catalog = c
+        // The last pick where this project offers it; without a project default a start needs a provider.
+        quietly { if runtime == nil { runtime = LastRuntime.restore(c) ?? (c.defaultChoice == nil ? c.firstAvailable() : nil) } }
+    }
+    private func quietly(_ change: () -> Void) {
+        remembers = false
+        change()
+        remembers = true
     }
     private func adoptBranches(_ value: JSON) {
         branches = value["branches"].items.compactMap(\.string)

@@ -11,7 +11,8 @@ func isSafeWebURL(_ url: String?) -> Bool {
 }
 
 /// The transcript's column. Its inputs are compared, so typing in the composer or a poll that changed nothing does not
-/// lay it out again.
+/// lay it out again; and it is lazy, so a long conversation makes and measures only the messages near the screen
+/// instead of every one each time the agent adds a line.
 struct TranscriptColumn: View, Equatable {
     unowned let model: ConversationModel
     var blocks: [TranscriptBlock]
@@ -28,15 +29,20 @@ struct TranscriptColumn: View, Equatable {
     var canMessage: Bool
 
     static func == (a: TranscriptColumn, b: TranscriptColumn) -> Bool {
-        a.blocks == b.blocks && a.session == b.session && a.expanded == b.expanded && a.decisions == b.decisions
+        a.blocks == b.blocks && sameShown(a.session, b.session) && a.expanded == b.expanded && a.decisions == b.decisions
             && a.triageNote == b.triageNote && a.loaded == b.loaded && a.error == b.error && a.writeError == b.writeError
             && a.busy == b.busy && a.loading == b.loading && a.uncertain == b.uncertain && a.canMessage == b.canMessage
+    }
+
+    /// The parts of the session the column shows: a poll that changed only the rest does not lay it out again.
+    private static func sameShown(_ a: Session, _ b: Session) -> Bool {
+        a.raw["error"] == b.raw["error"] && a.status == b.status && a.queued == b.queued && a.heldTriage == b.heldTriage
     }
 
     private var can: Bool { !busy && !uncertain }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        LazyVStack(alignment: .leading, spacing: 0) {
             if let error { DangerBox { DangerText(error) }.padding(.bottom, 12) }
             if let writeError {
                 DangerBox(bottom: 10) {
