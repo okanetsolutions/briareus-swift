@@ -1,8 +1,13 @@
 // A project's Files tab, beside its pull requests and issues, laid out as PhpStorm's project view: the repository's tree
-// at a branch down the left, with Go to File (⇧⌘O) over it, and the files opened from it as editor tabs on the right,
-// each read-only with line numbers, its language's colours and the find bar (⌘F). The server reads GitHub with its own
-// token (`repo_tree`, `repo_file`), so no checkout or token is needed on this Mac; the tree is pinned to the commit the
-// branch pointed at when it was read, and every file is read at that commit, so what opens matches the tree.
+// at a branch down the left, and the files opened from it as editor tabs on the right, each read-only with line numbers,
+// its language's colours and the find bar (⌘F). The server reads GitHub with its own token (`repo_tree`, `repo_file`),
+// so no checkout or token is needed on this Mac; the tree is pinned to the commit the branch pointed at when it was read,
+// and every file is read at that commit, so what opens matches the tree.
+//
+// Once the tree is read, the repository at that commit is downloaded (`repo_archive`) and indexed on this Mac, vendor/
+// and node_modules/ left out (FilesNavigator.swift), for PhpStorm's navigation: Search Everywhere (⇧⇧), Go to File
+// (⇧⌘O), Go to Class (⌘O), Go to Symbol (⌥⌘O), Find Action (⇧⌘A), Find in Files (⇧⌘F), File Structure (⌘F12), and in
+// the editor Go to Declaration (⌘-click, ⌘B), the declaration on hover, and Find Usages (⌥F7).
 import AppKit
 import SwiftUI
 
@@ -32,6 +37,27 @@ final class ProjectFilesModel: ObservableObject {
     @Published var query = ""
     private var reading: Task<Void, Never>?
     private var gen = 0
+
+    enum IndexState {
+        case none, downloading, unpacking, reading
+        case ready(RepoIndex)
+        case failed(String)
+    }
+    @Published private(set) var indexState = IndexState.none
+    private var indexing: Task<Void, Never>?
+    private var indexedSha: String?
+    /// A line of a file to show once it is open, and select; `id` tells one request from the next to the same line.
+    struct Target: Equatable { var path: String; var line: Int; var id = UUID() }
+    @Published private(set) var target: Target?
+    /// The navigation popup on show (Search Everywhere and its tabs, File Structure, a choice of declarations).
+    @Published var navigator: NavigatorMode?
+    /// Find in Files, or Find Usages' results, over the editor.
+    @Published var findPanel: FindPanel?
+    /// A short note over the editor ("No declaration of x found"), gone after a few seconds.
+    @Published private(set) var note: String?
+    private var noteGen = 0
+    /// The editor on show, for the caret's word (⌘B, ⌥F7) and its find bar.
+    weak var editor: CodeEditorView?
 
     init(repo: String) { self.repo = repo }
 
@@ -99,7 +125,105 @@ final class ProjectFilesModel: ObservableObject {
             self.tabs = self.tabs.filter { tree.entries[$0]?.folder == false }
             if let a = self.active, !self.tabs.contains(a) { self.active = self.tabs.last }
             if let a = self.active { self.readFile(a) }
+            self.buildIndex()
         }
+    }
+
+    // MARK: The index
+
+    var index: RepoIndex? { if case .ready(let i) = indexState { return i }; return nil }
+    static var indexOffered: Bool { Store.shared.supports("repo_archive") }
+    var indexStatus: String? {
+        switch indexState {
+        case .none: return Self.indexOffered ? nil : "Go to Class, Find in Files and Go to Declaration need a server that sends the repository’s archive."
+        case .downloading: return "Indexing: downloading the repository…"
+        case .unpacking: return "Indexing: unpacking…"
+        case .reading: return "Indexing: reading the files…"
+        case .ready(let i): return "Indexed \(i.fileCount) files · \(i.symbols.count) symbols"
+        case .failed(let e): return "Indexing failed: \(e)"
+        }
+    }
+
+    /// Downloads and reads the repository at the tree's commit, unless that commit is indexed already. The archive is
+    /// kept on disk per commit, so a commit indexed before is only read again.
+    private func buildIndex(again: Bool = false) {
+        guard Self.indexOffered, let tree, let sha = tree.sha else { return }
+        if sha == indexedSha && !again { return }
+        indexing?.cancel()
+        indexedSha = sha
+        indexState = .downloading
+        let repo = repo
+        indexing = Task { [weak self] in
+            do {
+                let dir = try RepoIndexStore.directory(repo: repo, sha: sha)
+                if again { try? FileManager.default.removeItem(at: dir) }
+                if !RepoIndexStore.complete(dir) {
+                    let archive = try await Store.shared.download("repo_archive", ["repo": .string(repo), "ref": .string(sha)], timeout: 900)
+                    guard let self, self.indexedSha == sha, !Task.isCancelled else { try? FileManager.default.removeItem(at: archive); return }
+                    self.indexState = .unpacking
+                    try await Task.detached(priority: .utility) { try RepoIndexStore.unpack(archive, into: dir) }.value
+                }
+                guard let self, self.indexedSha == sha, !Task.isCancelled else { return }
+                self.indexState = .reading
+                let index = await Task.detached(priority: .utility) { RepoIndexStore.read(dir) }.value
+                guard self.indexedSha == sha, !Task.isCancelled else { return }
+                self.indexState = .ready(index)
+            } catch {
+                guard let self, self.indexedSha == sha, !error.isCancellation else { return }
+                self.indexState = .failed(errorText(error))
+            }
+        }
+    }
+    func reindex() { buildIndex(again: true) }
+
+    func flash(_ text: String) {
+        noteGen += 1
+        let gen = noteGen
+        note = text
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if self?.noteGen == gen { self?.note = nil }
+        }
+    }
+    /// Says why an index-backed action cannot run yet; true when it can.
+    func needsIndex() -> RepoIndex? {
+        if let index { return index }
+        flash(indexStatus ?? "The project is not indexed yet.")
+        return nil
+    }
+
+    // MARK: Navigation
+
+    func open(_ path: String, line: Int) {
+        open(path)
+        reveal(path)
+        target = Target(path: path, line: line)
+    }
+    func go(to symbol: CodeSymbol) { open(symbol.path, line: symbol.line) }
+
+    /// Go to Declaration (⌘-click, ⌘B): the one place the name is declared, or a choice of them.
+    func goToDeclaration(_ word: String, member: Bool, from path: String) {
+        guard let index = needsIndex() else { return }
+        let found = index.declarations(of: word, from: path, member: member)
+        switch found.count {
+        case 0: flash("No declaration of \(word) found.")
+        case 1: go(to: found[0])
+        default: navigator = .choose(title: "Declarations of \(word)", found)
+        }
+    }
+    /// What hovering a name shows: where it is declared.
+    func quickInfo(_ word: String, member: Bool, from path: String) -> CodeSymbol? {
+        index?.declarations(of: word, from: path, member: member).first
+    }
+    /// Find Usages (⌥F7): every line the name is used on, in the find panel.
+    func findUsages(_ word: String) {
+        guard let index = needsIndex() else { return }
+        findPanel = FindPanel(query: TextQuery(text: word, matchCase: true, wholeWord: true), title: "Usages of \(word)",
+                              results: index.usages(of: word), usages: true)
+    }
+    func caretAction(_ run: (String, Bool, String) -> Void) {
+        guard let path = active, let word = editor?.caretWord() else { flash("Put the caret on a name first."); return }
+        run(word.word, word.member, path)
     }
 
     private func readFile(_ path: String) {
@@ -109,6 +233,17 @@ final class ProjectFilesModel: ObservableObject {
         files[path] = .loading
         let sha = tree.sha ?? tree.ref
         let gen = gen
+        // A file the index holds opens from this Mac, without a round trip.
+        if let text = index?.texts[path] {
+            let file = RepoFile(path: path, ref: sha, size: text.utf8.count, content: text)
+            let language = CodeLanguage.of(path)
+            Task { [weak self] in
+                let lines = await Task.detached(priority: .userInitiated) { codeHighlight(text, language: language) }.value
+                guard let self, gen == self.gen else { return }
+                self.files[path] = .loaded(file, lines, language)
+            }
+            return
+        }
         Task { [weak self] in
             guard let self else { return }
             let r = await boardCall("repo_file", ["repo": .string(self.repo), "ref": .string(sha), "path": .string(path)], timeout: 60)
@@ -200,9 +335,13 @@ struct ProjectFilesTab: View {
                 .frame(minWidth: 320, maxWidth: .infinity)
         }
         .onAppear { model.load() }
-        .background {
-            // ⇧⌘O, as in PhpStorm: Go to File.
-            Button("") { searching = true }.keyboardShortcut("o", modifiers: [.command, .shift]).hidden()
+        // The shortcuts while the tab is on show, and the popups they open over it.
+        .background(FilesKeyMonitor(model: model))
+        .overlay(alignment: .top) {
+            if model.navigator != nil { NavigatorPanel(model: model).padding(.top, 30) }
+        }
+        .overlay {
+            if model.findPanel != nil { FindPanelView(model: model) }
         }
     }
 
@@ -212,7 +351,7 @@ struct ProjectFilesTab: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Theme.muted)
-                TextField("Go to file  ⇧⌘O", text: $model.query)
+                TextField("Filter files", text: $model.query)
                     .textFieldStyle(.plain).font(Theme.footnote)
                     .focused($searching)
                     .onSubmit { if let first = model.matches.first { pick(first) } }
@@ -237,6 +376,17 @@ struct ProjectFilesTab: View {
                 searchResults
             } else {
                 treeList
+            }
+            if let status = model.indexStatus {
+                HStack(spacing: 6) {
+                    if case .ready = model.indexState { Image(systemName: "checkmark.circle").foregroundStyle(Theme.ok) }
+                    else if case .failed = model.indexState { Image(systemName: "exclamationmark.triangle").foregroundStyle(Theme.danger) }
+                    else if case .none = model.indexState {} else { ProgressView().controlSize(.mini) }
+                    Text(status).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    if case .failed = model.indexState { Button("Retry") { model.reindex() }.buttonStyle(.plain).font(Theme.caption).foregroundStyle(Theme.accent) }
+                }
+                .padding(.top, 6).padding(.trailing, 10)
             }
             if model.tree?.truncated == true {
                 Text("This repository is larger than GitHub lists in one tree; some files are missing.")
@@ -331,7 +481,7 @@ struct ProjectFilesTab: View {
                 VStack(spacing: 8) {
                     Image(systemName: "doc.text.magnifyingglass").font(.system(size: 30)).foregroundStyle(Theme.tertiary)
                     Text("Open a file from the tree").font(Theme.subheadline).foregroundStyle(Theme.muted)
-                    Text("Go to File  ⇧⌘O    ·    Find in the file  ⌘F").font(Theme.caption).foregroundStyle(Theme.tertiary)
+                    Text("Search Everywhere  ⇧⇧    ·    Go to File  ⇧⌘O    ·    Go to Class  ⌘O    ·    Find in Files  ⇧⌘F").font(Theme.caption).foregroundStyle(Theme.tertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -339,6 +489,15 @@ struct ProjectFilesTab: View {
                 if let a = model.active {
                     breadcrumb(a)
                     content(a)
+                        .overlay(alignment: .bottom) {
+                            if let note = model.note {
+                                Text(note).font(Theme.caption).foregroundStyle(Theme.ink)
+                                    .padding(.horizontal, 12).padding(.vertical, 7)
+                                    .background(Capsule().fill(Theme.raise))
+                                    .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 1))
+                                    .padding(.bottom, 16)
+                            }
+                        }
                 }
             }
         }
@@ -385,7 +544,7 @@ struct ProjectFilesTab: View {
         switch model.files[path] {
         case .loaded(let f, let lines, _):
             if let _ = f.content {
-                CodeTextView(lines: lines, identity: "\(path)@\(f.ref)")
+                CodeTextView(lines: lines, identity: "\(path)@\(f.ref)", path: path, target: model.target, model: model)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.line, lineWidth: 1))
             } else {
@@ -515,21 +674,33 @@ private enum FileIcon {
 // MARK: - The code view
 
 /// The file's text in an NSTextView, as an editor shows it: read-only, monospaced, not wrapped, line numbers in a gutter,
-/// the language's colours, and the find bar (⌘F, ⌘G).
+/// the language's colours, and the find bar (⌘F, ⌘G); ⌘-click goes to a name's declaration and hovering one shows it.
 private struct CodeTextView: NSViewRepresentable {
     var lines: [[CodeToken]]
     /// The file and its revision: the text is set again only when it changes.
     var identity: String
+    var path: String
+    var target: ProjectFilesModel.Target?
+    var model: ProjectFilesModel
 
-    final class Coordinator { var identity: String? }
+    final class Coordinator { var identity: String?; var target: UUID? }
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> CodeEditorView { CodeEditorView() }
 
     func updateNSView(_ view: CodeEditorView, context: Context) {
-        guard context.coordinator.identity != identity else { return }
-        context.coordinator.identity = identity
-        view.show(Self.attributed(lines), lineCount: lines.count)
+        view.model = model
+        view.path = path
+        model.editor = view
+        if context.coordinator.identity != identity {
+            context.coordinator.identity = identity
+            view.show(Self.attributed(lines), lineCount: lines.count)
+        }
+        if let target, target.path == path, target.id != context.coordinator.target {
+            context.coordinator.target = target.id
+            // After this pass's layout, so the line has a place to scroll to.
+            DispatchQueue.main.async { view.reveal(line: target.line) }
+        }
     }
 
     static func attributed(_ lines: [[CodeToken]]) -> NSAttributedString {
@@ -558,10 +729,12 @@ private struct CodeTextView: NSViewRepresentable {
 /// The gutter and the scrolling text side by side. The gutter is a view of its own rather than the scroll view's ruler:
 /// macOS floats a ruler over the text behind content insets it sets after layout, which a file wider than the view then
 /// starts under.
-private final class CodeEditorView: NSView {
-    let scroll = NSScrollView()
-    let text = NSTextView(usingTextLayoutManager: false)
-    let gutter = LineGutter()
+final class CodeEditorView: NSView {
+    fileprivate let scroll = NSScrollView()
+    fileprivate let text = CodeNSTextView(usingTextLayoutManager: false)
+    fileprivate let gutter = LineGutter()
+    weak var model: ProjectFilesModel?
+    var path = ""
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -582,6 +755,7 @@ private final class CodeEditorView: NSView {
         text.textContainer?.widthTracksTextView = false
         text.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         text.textContainer?.lineFragmentPadding = 4
+        text.editor = self
 
         scroll.documentView = text
         scroll.hasVerticalScroller = true
@@ -598,7 +772,10 @@ private final class CodeEditorView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
     deinit { NotificationCenter.default.removeObserver(self) }
 
-    @objc private func scrolled() { gutter.needsDisplay = true }
+    @objc private func scrolled() {
+        gutter.needsDisplay = true
+        text.hoverEnded()
+    }
 
     override func layout() {
         super.layout()
@@ -620,6 +797,7 @@ private final class CodeEditorView: NSView {
     }
 
     func show(_ string: NSAttributedString, lineCount: Int) {
+        text.hoverEnded()
         text.textStorage?.setAttributedString(string)
         text.setSelectedRange(NSRange(location: 0, length: 0))
         gutter.lineCount = lineCount
@@ -631,10 +809,198 @@ private final class CodeEditorView: NSView {
         scroll.reflectScrolledClipView(scroll.contentView)
         gutter.needsDisplay = true
     }
+
+    /// Puts the caret at the start of a line (1-based), scrolls it to the middle of the view and flashes it.
+    func reveal(line: Int) {
+        let string = text.string as NSString
+        guard let layout = text.layoutManager, let container = text.textContainer else { return }
+        var location = 0, current = 1
+        while current < line && location < string.length {
+            location = NSMaxRange(string.lineRange(for: NSRange(location: location, length: 0)))
+            current += 1
+        }
+        let lineRange = string.length == 0 ? NSRange(location: 0, length: 0) : string.lineRange(for: NSRange(location: min(location, string.length - 1), length: 0))
+        // The line's text, leading spaces and the newline left out, is what is selected.
+        var body = lineRange
+        while body.length > 0, let c = Unicode.Scalar(string.character(at: body.location)), c == " " || c == "\t" { body.location += 1; body.length -= 1 }
+        while body.length > 0, string.character(at: NSMaxRange(body) - 1) == 10 || string.character(at: NSMaxRange(body) - 1) == 13 { body.length -= 1 }
+        window?.makeFirstResponder(text)
+        text.setSelectedRange(NSRange(location: body.location, length: 0))
+        layout.ensureLayout(for: container)
+        let glyphs = layout.glyphRange(forCharacterRange: lineRange, actualCharacterRange: nil)
+        let rect = layout.boundingRect(forGlyphRange: glyphs, in: container).offsetBy(dx: 0, dy: text.textContainerInset.height)
+        let visible = scroll.contentView.bounds
+        let y = max(0, min(rect.midY - visible.height / 2, text.frame.height - visible.height))
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: y))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        gutter.needsDisplay = true
+        if body.length > 0 { text.showFindIndicator(for: body) }
+    }
+
+    /// The name under the caret, for ⌘B and ⌥F7.
+    func caretWord() -> (word: String, member: Bool)? {
+        word(atCharacter: text.selectedRange().location).map { ($0.word, $0.member) }
+    }
+
+    /// The name at a character of the text: the word, whether a member operator is just before it, and its range.
+    fileprivate func word(atCharacter index: Int) -> (word: String, member: Bool, range: NSRange)? {
+        let string = text.string as NSString
+        guard string.length > 0 else { return nil }
+        let lineRange = string.lineRange(for: NSRange(location: min(index, string.length - 1), length: 0))
+        let line = string.substring(with: lineRange)
+        guard let w = codeWord(in: line, at: index - lineRange.location) else { return nil }
+        return (w.word, w.member, NSRange(location: lineRange.location + w.range.location, length: w.range.length))
+    }
+
+    /// What is selected in the text, if anything.
+    func selectedText() -> String? {
+        let r = text.selectedRange()
+        guard r.length > 0 else { return nil }
+        return (text.string as NSString).substring(with: r)
+    }
+
+    /// Opens the find bar, as ⌘F does in the text.
+    func showFindBar() {
+        window?.makeFirstResponder(text)
+        let item = NSMenuItem()
+        item.tag = NSTextFinder.Action.showFindInterface.rawValue
+        text.performTextFinderAction(item)
+    }
+}
+
+/// The editor's text view: ⌘ over a name it can follow underlines it and ⌘-click goes to its declaration, as in
+/// PhpStorm; resting the mouse on a name shows where it is declared.
+final class CodeNSTextView: NSTextView {
+    weak var editor: CodeEditorView?
+    private var underlined: NSRange?
+    private var hoverTimer: Timer?
+    private var hovered: NSRange?
+    private var popover: NSPopover?
+    private var lastPoint: NSPoint?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas where area.owner === self && area.userInfo?["code"] != nil { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self, userInfo: ["code": true]))
+    }
+
+    /// The name under a point in this view, only when the point is over its glyphs.
+    private func word(at point: NSPoint) -> (word: String, member: Bool, range: NSRange)? {
+        guard let layout = layoutManager, let container = textContainer else { return nil }
+        let p = NSPoint(x: point.x - textContainerInset.width, y: point.y - textContainerInset.height)
+        var fraction: CGFloat = 0
+        let glyph = layout.glyphIndex(for: p, in: container, fractionOfDistanceThroughGlyph: &fraction)
+        guard layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container).insetBy(dx: -1, dy: 0).contains(p) else { return nil }
+        return editor?.word(atCharacter: layout.characterIndexForGlyph(at: glyph))
+    }
+    private func rect(of range: NSRange) -> NSRect? {
+        guard let layout = layoutManager, let container = textContainer else { return nil }
+        let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        return layout.boundingRect(forGlyphRange: glyphs, in: container).offsetBy(dx: textContainerInset.width, dy: textContainerInset.height)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        let point = convert(event.locationInWindow, from: nil)
+        lastPoint = point
+        update(at: point, command: event.modifierFlags.contains(.command))
+    }
+    override func flagsChanged(with event: NSEvent) {
+        super.flagsChanged(with: event)
+        if let lastPoint { update(at: lastPoint, command: event.modifierFlags.contains(.command)) }
+    }
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        lastPoint = nil
+        hoverEnded()
+    }
+    override func scrollWheel(with event: NSEvent) {
+        hoverEnded()
+        super.scrollWheel(with: event)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.command), let editor, let model = editor.model,
+           let w = word(at: convert(event.locationInWindow, from: nil)) {
+            hoverEnded()
+            setSelectedRange(NSRange(location: w.range.location, length: 0))
+            model.goToDeclaration(w.word, member: w.member, from: editor.path)
+            return
+        }
+        hoverEnded()
+        super.mouseDown(with: event)
+    }
+
+    private func update(at point: NSPoint, command: Bool) {
+        let w = word(at: point)
+        let followable = w.flatMap { w in editor?.model?.quickInfo(w.word, member: w.member, from: editor?.path ?? "") } != nil
+        // ⌘ held over a name with a declaration: underlined, as a link.
+        let underline = command && followable ? w?.range : nil
+        if underline != underlined {
+            if let old = underlined { layoutManager?.removeTemporaryAttribute(.underlineStyle, forCharacterRange: old) }
+            if let new = underline {
+                layoutManager?.addTemporaryAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, forCharacterRange: new)
+            }
+            underlined = underline
+        }
+        if underline != nil { NSCursor.pointingHand.set() } else { NSCursor.iBeam.set() }
+        // Resting on a name shows its declaration after a moment.
+        guard let w, followable else { if hovered != nil { hoverEnded(keepUnderline: true) }; return }
+        if hovered == w.range { return }
+        hoverEnded(keepUnderline: true)
+        hovered = w.range
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.showQuickInfo(w.word, member: w.member, range: w.range) }
+        }
+    }
+
+    private func showQuickInfo(_ word: String, member: Bool, range: NSRange) {
+        guard hovered == range, let editor, let model = editor.model, let symbol = model.quickInfo(word, member: member, from: editor.path),
+              let rect = rect(of: range), window != nil else { return }
+        let pop = NSPopover()
+        pop.behavior = .semitransient
+        pop.animates = false
+        pop.contentViewController = NSHostingController(rootView: QuickInfoView(symbol: symbol))
+        pop.show(relativeTo: rect, of: self, preferredEdge: .maxY)
+        popover = pop
+    }
+
+    func hoverEnded(keepUnderline: Bool = false) {
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        hovered = nil
+        popover?.close()
+        popover = nil
+        if !keepUnderline, let old = underlined {
+            layoutManager?.removeTemporaryAttribute(.underlineStyle, forCharacterRange: old)
+            underlined = nil
+        }
+    }
+}
+
+/// What hovering a name shows: its kind and qualified name, its declaration, the comment above it, and where it is.
+private struct QuickInfoView: View {
+    var symbol: CodeSymbol
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                SymbolIcon(kind: symbol.kind)
+                Text(symbol.qualified).font(Theme.captionSemibold).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.head)
+            }
+            Text(symbol.signature).font(Theme.monoSmall).foregroundStyle(Theme.ink).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+            if let doc = symbol.doc {
+                Text(doc).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(8).fixedSize(horizontal: false, vertical: true)
+            }
+            Text("\(symbol.path):\(symbol.line)  ·  ⌘-click to go there").font(Theme.caption2).foregroundStyle(Theme.tertiary).lineLimit(1)
+        }
+        .padding(10)
+        .frame(maxWidth: 520, alignment: .leading)
+    }
 }
 
 /// The gutter: each line's number beside it, for the lines in view, following the text as it scrolls.
-private final class LineGutter: NSView {
+final class LineGutter: NSView {
     weak var textView: NSTextView?
     var lineCount = 0 {
         didSet { if width != oldValue.gutterWidth { superview?.needsLayout = true } }

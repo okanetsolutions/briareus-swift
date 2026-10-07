@@ -178,6 +178,8 @@ struct APIRoute: Sendable {
         // text at a `ref`, or only its size when it is binary or over 1 MB.
         .init(name: "repo_tree", method: "GET", path: "repo/tree"),
         .init(name: "repo_file", method: "GET", path: "repo/file"),
+        // The repository at a commit as a gzipped tarball, downloaded to a file (`APIClient.download`) for the local index.
+        .init(name: "repo_archive", method: "GET", path: "repo/archive"),
         // Issues
         .init(name: "issue", method: "GET", path: "issues/{issue}"),
         .init(name: "issue_timeline", method: "GET", path: "issues/{issue}/timeline"),   // comments and events, 100 a `page`, oldest first
@@ -292,6 +294,19 @@ struct HTTPResponse: Sendable {
 /// One round trip. Throws only when nothing was received, with the reason as the error's message.
 protocol HTTPTransport: Sendable {
     func send(method: String, url: URL, headers: [String: String], body: Data?, timeout: TimeInterval) async throws -> HTTPResponse
+    /// A GET whose body goes to a temporary file instead of memory; `body` is empty and the file is the caller's to move.
+    func download(url: URL, headers: [String: String], timeout: TimeInterval) async throws -> (response: HTTPResponse, file: URL)
+}
+
+extension HTTPTransport {
+    /// For a transport with no file downloads of its own (the tests'): the body read whole, then written out.
+    func download(url: URL, headers: [String: String], timeout: TimeInterval) async throws -> (response: HTTPResponse, file: URL) {
+        var r = try await send(method: "GET", url: url, headers: headers, body: nil, timeout: timeout)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try r.body.write(to: file)
+        r.body = Data()
+        return (r, file)
+    }
 }
 
 /// URLSession with no cookies, no cache, no stored credentials and no redirects.
@@ -324,6 +339,24 @@ final class URLSessionTransport: NSObject, HTTPTransport, URLSessionTaskDelegate
             guard let http = response as? HTTPURLResponse else { throw APIError(.network, message: "The server could not be reached.") }
             return HTTPResponse(status: http.statusCode, contentType: http.value(forHTTPHeaderField: "Content-Type"),
                                 retryAfter: http.value(forHTTPHeaderField: "Retry-After"), body: data)
+        } catch let error as URLError {
+            if error.code == .cancelled { throw APIError(.cancelled) }
+            throw APIError(.network, message: URLSessionTransport.text(error))
+        }
+    }
+
+    func download(url: URL, headers: [String: String], timeout: TimeInterval) async throws -> (response: HTTPResponse, file: URL) {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
+        request.httpShouldHandleCookies = false
+        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
+        do {
+            let (temp, response) = try await session.download(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIError(.network, message: "The server could not be reached.") }
+            // URLSession deletes its file once this returns; it is moved somewhere that lasts.
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.moveItem(at: temp, to: file)
+            return (HTTPResponse(status: http.statusCode, contentType: http.value(forHTTPHeaderField: "Content-Type"),
+                                 retryAfter: http.value(forHTTPHeaderField: "Retry-After"), body: Data()), file)
         } catch let error as URLError {
             if error.code == .cancelled { throw APIError(.cancelled) }
             throw APIError(.network, message: URLSessionTransport.text(error))
@@ -440,17 +473,7 @@ final class APIClient: @unchecked Sendable {
         let t = timeout ?? APIClient.requestTimeout
         var result: JSON
         if reads {
-            var sep = "?"
-            for key in rest.keys.sorted() {
-                // An array is a repeatable parameter: `project=a&project=b`.
-                let arg = rest[key]!
-                let values = arg.array ?? [arg]
-                for v in values {
-                    guard let value = APIClient.urlValue(v, inPath: false) else { continue }
-                    path += "\(sep)\(APIClient.encode(key))=\(value)"
-                    sep = "&"
-                }
-            }
+            path += APIClient.query(rest)
             result = try await request(path, method: route.method, body: nil, timeout: t)
         } else {
             if let set = route.set { rest[set] = .bool(true) }
@@ -460,6 +483,35 @@ final class APIClient: @unchecked Sendable {
             result[list] = .array(result[list].items.filter { $0[filter].string == kept })
         }
         return result
+    }
+
+    /// A GET's arguments as a query string, "" when there are none. An array is a repeatable parameter: `project=a&project=b`.
+    static func query(_ arguments: [String: JSON]) -> String {
+        var out = "", sep = "?"
+        for key in arguments.keys.sorted() {
+            let arg = arguments[key]!
+            for v in arg.array ?? [arg] {
+                guard let value = APIClient.urlValue(v, inPath: false) else { continue }
+                out += "\(sep)\(APIClient.encode(key))=\(value)"
+                sep = "&"
+            }
+        }
+        return out
+    }
+
+    /// A GET whose answer is a file (`repo_archive`), downloaded to a temporary file the caller then owns. A refusal
+    /// throws as `call` does, with the server's `error` when it sent one.
+    func download(_ name: String, _ arguments: JSON = [:], timeout: TimeInterval) async throws -> URL {
+        guard let route = APIRoute.named(name), route.method == "GET" else { throw APIError(.http, status: 400, message: "Unknown call") }
+        let (path, rest) = try APIClient.resolve(route, arguments)
+        guard let u = URL(string: address.baseURL + path + APIClient.query(rest)) else { throw APIError(.invalidAddress) }
+        let (r, file) = try await transport.download(url: u, headers: ["Authorization": "Bearer \(token)"], timeout: timeout)
+        if r.status >= 200 && r.status < 300 { return file }
+        defer { try? FileManager.default.removeItem(at: file) }
+        if r.status >= 300 && r.status < 400 { throw APIError(.redirected, status: r.status) }
+        let payload = (try? Data(contentsOf: file)).flatMap { JSON.parse($0) }
+        throw APIError(.http, status: r.status, message: payload?["error"].nonEmpty ?? APIError.statusText(r.status),
+                       retryAfter: retryAfterSeconds(r.retryAfter))
     }
 
     /// The text of a recorded voice note, sent with the content type it was recorded in.
