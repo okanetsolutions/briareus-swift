@@ -71,7 +71,11 @@ final class PullModel: ObservableObject {
     @Published var runURL: String?
     @Published var runSession: String?
     @Published var runProfile: String?
-    @Published var runWant: String?
+    /// Kept per pull request, so the tab opened again shows (and serves) the profile last picked.
+    @Published var runWant: String? {
+        didSet { UserDefaults.standard.set(runWant, forKey: runWantKey) }
+    }
+    private var runWantKey: String { "runProfile.\(repo)#\(number)" }
     @Published var runAsked: String?
     @Published var serveError: String?
     @Published var runBusy = false
@@ -97,6 +101,7 @@ final class PullModel: ObservableObject {
         files = PullFilesModel(repo: repo, number: number)
         // The profiles the sidebar already read stand in until this screen reads them.
         profiles = runProfilesParse(ProjectsModel.shared.raw, repo: repo)
+        runWant = UserDefaults.standard.string(forKey: runWantKey)
     }
 
     var id: String { "pull:\(repo)#\(number)" }
