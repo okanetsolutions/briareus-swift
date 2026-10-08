@@ -218,6 +218,11 @@ struct APIRoute: Sendable {
         .init(name: "rotate_session_webhook", method: "POST", path: "sessions/{sessionId}/webhook/rotate"),
         // The Cloudflare Access service token the Run tab's browser sends to ▶ Run preview hosts; a manage token.
         .init(name: "preview_access", method: "GET", path: "preview/access"),
+        // The prompts kept for the composer: a project's own (`repo`) and those offered everywhere.
+        .init(name: "prompts", method: "GET", path: "prompts"),
+        .init(name: "create_prompt", method: "POST", path: "prompts"),
+        .init(name: "update_prompt", method: "PUT", path: "prompts/{id}"),
+        .init(name: "delete_prompt", method: "DELETE", path: "prompts/{id}"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),

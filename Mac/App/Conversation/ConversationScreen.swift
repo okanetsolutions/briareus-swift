@@ -508,6 +508,12 @@ private struct ConversationFooter: View {
                 if files.supported {
                     AttachButton(enabled: files.count < attachmentsMax) { files.pick() }
                 }
+                if SavedPrompts.offered {
+                    PromptsButton(repo: model.session.repo, text: composer.text) { body in
+                        composer.text = composer.text.cTrimmed.isEmpty ? body : composer.text + "\n\n" + body
+                        composer.focusNow()
+                    }
+                }
                 if store.canTranscribe {
                     MicButton(voice: voice)
                     if voice.state == .recording || voice.state == .transcribing {

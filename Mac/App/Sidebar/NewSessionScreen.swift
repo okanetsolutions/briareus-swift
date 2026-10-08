@@ -299,6 +299,12 @@ private struct NewSessionFooter: View {
                     if files.supported {
                         AttachButton(enabled: !model.busy && files.count < attachmentsMax) { if !model.busy { files.pick() } }
                     }
+                    if SavedPrompts.offered {
+                        PromptsButton(repo: model.project?.repo, text: composer.text) { body in
+                            composer.text = composer.text.cTrimmed.isEmpty ? body : composer.text + "\n\n" + body
+                            composer.focusNow()
+                        }
+                    }
                     if store.canTranscribe {
                         MicButton(voice: voice, showsWait: false)
                         VoiceClock(voice: voice).padding(.leading, 2)
