@@ -58,7 +58,7 @@ struct TranscriptColumn: View, Equatable {
             if blocks.isEmpty && error == nil {
                 SelectableText(loaded ? "No messages yet." : "Waiting for the conversation\u{2026}", font: SelectableFont.system(13), color: Theme.muted)
             }
-            ForEach(blocks, id: \.seq) { block in blockView(block) }
+            ForEach(blocks, id: \.seq) { block in blockView(block).environment(\.findBlock, block.seq) }
             // Why the session failed: the Windows client's `⚠ error` in the head, said where the transcript stops.
             if let failure = session.raw["error"].nonEmpty {
                 DangerBox { DangerText("\u{26A0} \(failure)") }.padding(.top, 10)
