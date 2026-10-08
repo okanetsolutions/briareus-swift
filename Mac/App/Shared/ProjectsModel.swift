@@ -105,6 +105,8 @@ final class ProjectsModel: ObservableObject {
         error = nil
         Store.shared.cache.store(answer, "projects")
         recount()
+        // The approvals agents wait on count on the ⚑ too.
+        _ = await AttentionModel.shared.load()
         guard Store.shared.supports("sessions") else { return nil }
         do {
             let all = try await Store.shared.call("sessions")

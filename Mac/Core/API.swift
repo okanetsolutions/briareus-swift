@@ -218,6 +218,13 @@ struct APIRoute: Sendable {
         .init(name: "rotate_session_webhook", method: "POST", path: "sessions/{sessionId}/webhook/rotate"),
         // The Cloudflare Access service token the Run tab's browser sends to ▶ Run preview hosts; a manage token.
         .init(name: "preview_access", method: "GET", path: "preview/access"),
+        // What waits on the operator, an Admin token's: questions, failures, stopped loops, and the SSH commands and Slack
+        // messages agents ask approval for, each approved or denied.
+        .init(name: "attention", method: "GET", path: "attention"),
+        .init(name: "ssh_requests", method: "GET", path: "ssh/requests"),
+        .init(name: "ssh_decision", method: "POST", path: "ssh/requests/{id}/decision"),
+        .init(name: "slack_requests", method: "GET", path: "slack/requests"),
+        .init(name: "slack_decision", method: "POST", path: "slack/requests/{id}/decision"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),

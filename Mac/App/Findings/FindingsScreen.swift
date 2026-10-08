@@ -408,17 +408,20 @@ final class FindingsModel: ObservableObject {
 
 struct FindingsScreen: View {
     @StateObject private var model = FindingsModel.kept()
+    @ObservedObject private var attention = AttentionModel.shared
     @ObservedObject private var store = Store.shared
 
     var body: some View {
         let groups = model.groups
         VStack(spacing: 0) {
-            PaneHeader(title: "\u{2691} Findings", subtitle: findingsSubtitle(rounds: model.rounds.count, pullRequests: groups.count))
+            PaneHeader(title: "\u{2691} Findings", subtitle: findingsSubtitle(rounds: model.rounds.count, pullRequests: groups.count)
+                       + (attention.items.isEmpty ? "" : " · \(attention.items.count) waiting on you"))
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Color.clear.frame(height: 14)
                     if let error = model.error { Notice(message: error); Color.clear.frame(height: 10) }
                     ForEach(model.outcomes) { OutcomeBox(model: model, outcome: $0) }
+                    AttentionSection(model: attention)
                     if !model.rounds.isEmpty {
                         ForEach(groups, id: \.rounds) { g in GroupView(model: model, group: g) }
                     } else if model.loaded {
@@ -433,6 +436,7 @@ struct FindingsScreen: View {
             }
         }
         .task { await poll(every: 7) { await model.tick() } }
+        .task { await poll(every: 10) { await attention.load() } }
         .onDisappear { model.hide() }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in model.cycleNow() }
     }
@@ -748,5 +752,115 @@ private struct FindingView: View {
             }
             .padding(.top, 4)
         }
+    }
+}
+
+// MARK: - Waiting on you
+
+/// What the server says waits on the operator, besides the rounds: approvals to rule on at once, and questions, failures
+/// and stopped loops to open.
+@MainActor
+final class AttentionModel: ObservableObject {
+    static let shared = AttentionModel()
+    @Published private(set) var items: [AttentionItem] = []
+    @Published private(set) var error: String?
+    /// The approvals a decision is on its way for, and what each came back with.
+    @Published private(set) var deciding: Set<String> = []
+    @Published private(set) var results: [String: String] = [:]
+
+    static var offered: Bool { Store.shared.isAdmin && Store.shared.supports("attention") }
+    /// The approvals waiting, which the ⚑ counts beside the held rounds.
+    var approvals: Int { items.filter(\.isApproval).count }
+
+    func load() async -> APIError? {
+        guard Self.offered else { return nil }
+        let r = await boardCall("attention")
+        switch r {
+        case .success(let v):
+            items = AttentionItem.parse(v)
+            error = nil
+            return nil
+        case .failure(let e):
+            if e.kind != .cancelled { error = e.description }
+            return e
+        }
+    }
+
+    /// Approves (the command runs, the message goes out) or denies an agent's request.
+    func decide(_ item: AttentionItem, approve: Bool) {
+        let op = item.kind == "ssh" ? "ssh_decision" : "slack_decision"
+        guard let rid = item.requestID, Store.shared.supports(op), !deciding.contains(item.id) else { return }
+        if approve && item.kind == "slack" {
+            guard Dialogs.confirm("Send this Slack message as you?", item.summary, continueLabel: "Send") else { return }
+        }
+        deciding.insert(item.id)
+        Task {
+            let r = await boardCall(op, ["id": .string(rid), "decision": .string(approve ? "approve" : "deny")])
+            deciding.remove(item.id)
+            switch r {
+            case .success(let v):
+                let status = v["request"]["status"].string ?? (approve ? "approved" : "denied")
+                results[item.id] = v["request"]["error"].nonEmpty.map { "\(status): \($0)" } ?? status
+            case .failure(let e):
+                results[item.id] = e.description
+            }
+            _ = await load()
+        }
+    }
+}
+
+private struct AttentionSection: View {
+    @ObservedObject var model: AttentionModel
+    @ObservedObject private var store = Store.shared
+
+    var body: some View {
+        if AttentionModel.offered && (!model.items.isEmpty || model.error != nil) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Waiting on you").font(Theme.bodySemibold).foregroundStyle(Theme.ink)
+                if let e = model.error { Notice(message: e) }
+                ForEach(model.items) { item in row(item) }
+            }
+            .padding(.bottom, 22)
+        }
+    }
+
+    private func row(_ item: AttentionItem) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(item.label).font(Theme.caption2).foregroundStyle(item.isApproval ? Theme.onAccent : Theme.ink)
+                    .padding(.horizontal, 6).frame(height: 18)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(item.isApproval ? Theme.accent : Theme.raise))
+                Text(item.title).font(Theme.footnoteSemibold).foregroundStyle(Theme.ink).lineLimit(1)
+                Spacer(minLength: 4)
+                if let at = item.at { Text(formatRelative(at)).font(Theme.caption).foregroundStyle(Theme.muted) }
+            }
+            if !item.detail.isEmpty { Text(item.detail).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(2) }
+            if item.kind == "ssh" {
+                Text(item.summary).font(Theme.mono).foregroundStyle(Theme.ink).textSelection(.enabled)
+                    .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.sunken))
+            } else {
+                Text(item.summary).font(Theme.footnote).foregroundStyle(Theme.ink).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 8) {
+                if item.isApproval {
+                    let op = item.kind == "ssh" ? "ssh_decision" : "slack_decision"
+                    let busy = model.deciding.contains(item.id)
+                    Button(item.kind == "ssh" ? "Run it" : "Send it") { model.decide(item, approve: true) }
+                        .dashButton(.prominent).disabled(busy || !store.supports(op))
+                    Button("Deny") { model.decide(item, approve: false) }.dashButton(.destructive).disabled(busy || !store.supports(op))
+                    if let exp = item.expiresAt { Text("expires \(formatEventTime(exp))").font(Theme.caption).foregroundStyle(Theme.muted) }
+                }
+                if let sid = item.sessionID {
+                    Button("Open the conversation") { Navigator.shared.push(.conversation(id: sid, session: nil)) }
+                        .buttonStyle(.plain).font(Theme.footnote).foregroundStyle(Theme.accent)
+                }
+                if let r = model.results[item.id] { Text(r).font(Theme.caption).foregroundStyle(Theme.muted) }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.raise))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(item.isApproval ? Theme.accentDim : Theme.line, lineWidth: 1))
     }
 }
