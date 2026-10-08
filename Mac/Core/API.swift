@@ -258,6 +258,14 @@ struct APIRoute: Sendable {
         // The Slack workspaces sessions send messages through: a user token and signing secret (write-only), and the
         // projects it serves with their channels; admin as well.
         .init(name: "settings_slack_workspaces", method: "GET", path: "settings/slack/workspaces"),
+        // The MCP servers whose tools sessions get beside Briareus's own: checked on save, and signed in to with OAuth in the
+        // browser (`connect` starts a sign-in; a loopback one is finished with the address it ended on).
+        .init(name: "settings_mcp_servers", method: "GET", path: "settings/mcp/servers"),
+        .init(name: "create_mcp_server", method: "POST", path: "settings/mcp/servers"),
+        .init(name: "update_mcp_server", method: "PUT", path: "settings/mcp/servers/{id}"),
+        .init(name: "delete_mcp_server", method: "DELETE", path: "settings/mcp/servers/{id}"),
+        .init(name: "connect_mcp_server", method: "POST", path: "settings/mcp/servers/{id}/connect"),
+        .init(name: "finish_mcp_sign_in", method: "POST", path: "settings/mcp/servers/{id}/finish-sign-in"),
         .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
         .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
         .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),
