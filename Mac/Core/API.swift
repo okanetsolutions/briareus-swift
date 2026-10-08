@@ -153,6 +153,10 @@ struct APIRoute: Sendable {
         .init(name: "projects", method: "GET", path: "projects"),
         .init(name: "branches", method: "GET", path: "branches"),
         .init(name: "runtimes", method: "GET", path: "runtimes"),
+        // The providers sessions start on, with every account's login and quota (`fresh` reads them again).
+        .init(name: "providers", method: "GET", path: "providers"),
+        // Whether the server can transcribe voice notes.
+        .init(name: "transcribe_status", method: "GET", path: "transcribe"),
         .init(name: "usage", method: "GET", path: "usage"),
         .init(name: "usage_all", method: "GET", path: "usage/all"),   // every project's spend; a filter given as an array repeats
         .init(name: "actions", method: "GET", path: "actions"),
