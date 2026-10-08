@@ -325,6 +325,9 @@ struct ConversationScreen: View {
             PaneHeader(title: model.session.displayTitle, subtitle: conversationStatusLine(model.session), buttons: headerButtons,
                        titleAction: store.supports("rename") ? { model.rename() } : nil)
             transcript
+            if RecoveryReport.offered(status: model.session.status) && store.isAdmin && store.supports("session_recovery") {
+                RecoveryBox(sessionID: model.id) { Task { await model.refresh(full: true) } }.id(model.id)
+            }
             ConversationFooter(model: model, composer: model.composer, files: model.files, voice: model.voice)
         }
         .task(id: store.active) { await model.run() }
@@ -547,5 +550,80 @@ private struct ConversationFooter: View {
         .background(RoundedRectangle(cornerRadius: 16).fill(Theme.raise))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.line, lineWidth: 1))
         .padding(.bottom, 36)
+    }
+}
+
+// MARK: - Recovery
+
+/// A session that stopped mid-work (the server restarted, or it failed): what it left in its workspace, read on request,
+/// and Resume from that, which picks the conversation up where it was with its commits and files.
+private struct RecoveryBox: View {
+    var sessionID: String
+    var resumed: () -> Void
+    @State private var report: RecoveryReport?
+    @State private var reading = false
+    @State private var resuming = false
+    @State private var error: String?
+    @ObservedObject private var store = Store.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("This session stopped before finishing.").font(Theme.footnoteSemibold).foregroundStyle(Theme.ink)
+                Spacer()
+                Button(reading ? "Checking…" : report == nil ? "Check what it left" : "Check again") { Task { await read() } }
+                    .dashButton(.bordered).disabled(reading || resuming)
+                if let r = report, r.canResume, store.supports("resume_session") {
+                    Button(resuming ? "Resuming…" : "Resume") { Task { await resume(r) } }.dashButton(.prominent).disabled(reading || resuming)
+                }
+            }
+            if let e = error { Notice(message: e) }
+            if let r = report {
+                Text(r.reason).font(Theme.footnote).foregroundStyle(r.canResume ? Theme.muted : Theme.danger).fixedSize(horizontal: false, vertical: true)
+                if r.available {
+                    let branch = r.branch ?? "no branch"
+                    let expected = r.expectedBranch.map { $0 == r.branch ? "" : " (expected \($0))" } ?? ""
+                    Text("Branch \(branch)\(expected)\(r.shortHead.map { " at \($0)" } ?? "") · \(r.changeCount == 0 ? "no uncommitted changes" : "\(r.changeCount) file\(r.changeCount == 1 ? "" : "s") changed")")
+                        .font(Theme.caption).foregroundStyle(Theme.muted)
+                    if !r.changes.isEmpty {
+                        ScrollView {
+                            Text(r.changes).font(Theme.monoSmall).foregroundStyle(Theme.ink).textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 120)
+                        .padding(8).background(RoundedRectangle(cornerRadius: 6).fill(Theme.sunken))
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.raise))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.accentDim, lineWidth: 1))
+        .padding(.horizontal, 24).padding(.bottom, 6)
+        .frame(maxWidth: 860)
+    }
+
+    private func read() async {
+        reading = true; error = nil
+        let r = await boardCall("session_recovery", ["sessionId": .string(sessionID)])
+        reading = false
+        switch r {
+        case .success(let v): report = RecoveryReport(v); if report == nil { error = "The server sent an unexpected report." }
+        case .failure(let e): if e.kind != .cancelled { error = e.description }
+        }
+    }
+    /// Resumes from the report just read: the server refuses it when the workspace changed since.
+    private func resume(_ r: RecoveryReport) async {
+        resuming = true; error = nil
+        let result = await boardCall("resume_session", ["sessionId": .string(sessionID), "fingerprint": .string(r.fingerprint)])
+        resuming = false
+        switch result {
+        case .success:
+            report = nil
+            post(.sessionsChanged, [:])
+            resumed()
+        case .failure(let e):
+            if e.kind != .cancelled { error = e.status == 409 ? "The workspace changed since it was checked: check again before resuming." : e.description }
+        }
     }
 }
