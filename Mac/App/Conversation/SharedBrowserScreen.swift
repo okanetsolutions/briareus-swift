@@ -42,9 +42,9 @@ final class BrowserDock: ObservableObject {
     }
 
     /// The main window has room for the column and is on show.
-    var dockable: Bool { !Navigator.shared.isNarrow && !(BrowserWindows.mainWindow?.isMiniaturized ?? false) }
+    var dockable: Bool { !Navigator.main.isNarrow && !(BrowserWindows.mainWindow?.isMiniaturized ?? false) }
     /// Whether the session's conversation is the page in the detail, which the browser can dock beside.
-    static func conversationShown(_ id: String) -> Bool { Navigator.shared.root.id == "conversation:\(id)" }
+    static func conversationShown(_ id: String) -> Bool { Navigator.main.root.id == "conversation:\(id)" }
 
     /// The browser's width beside the detail in a window `total` wide, the divider not counted (main.c browser_split).
     nonisolated static func columnWidth(total: CGFloat, expanded: Bool, width: CGFloat?) -> CGFloat {
@@ -77,7 +77,9 @@ final class BrowserWindows: NSObject, NSWindowDelegate {
 
     /// The main window: the one that is neither a browser's nor a panel.
     static var mainWindow: NSWindow? {
-        let others = NSApp.windows.filter { w in !(w is NSPanel) && !shared.windows.values.contains { $0 === w } && w.contentView != nil }
+        let others = NSApp.windows.filter { w in
+            !(w is NSPanel) && !shared.windows.values.contains { $0 === w } && !DetachedWindows.shared.owns(w) && w.contentView != nil
+        }
         return others.first { $0.identifier?.rawValue.hasPrefix("main") == true } ?? others.first
     }
 
@@ -101,7 +103,7 @@ final class BrowserWindows: NSObject, NSWindowDelegate {
         w.minSize = NSSize(width: 420, height: 320)
         w.title = "Browser"
         w.contentView = NSHostingView(rootView: SharedBrowserScreen(session: session, detached: true)
-            .environmentObject(Store.shared).environmentObject(Navigator.shared)
+            .environmentObject(Store.shared).environmentObject(Navigator.main)
             .foregroundStyle(Theme.ink))
         w.delegate = self
         if let at, at.width > 0, at.height > 0 {
@@ -629,7 +631,7 @@ struct SharedBrowserScreen: View {
     @StateObject private var model: SharedBrowserModel
     @ObservedObject private var store = Store.shared
     @ObservedObject private var dock = BrowserDock.shared
-    @ObservedObject private var navigator = Navigator.shared
+    @ObservedObject private var navigator = Navigator.main
     @FocusState private var addressFocused: Bool
 
     init(session: JSON, detached: Bool, visible: Bool = true) {

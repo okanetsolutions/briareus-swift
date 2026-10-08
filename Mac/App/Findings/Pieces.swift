@@ -45,9 +45,9 @@ final class Keeper<Model: AnyObject> {
         if let model { return model }
         let made = make()
         model = made
-        watch = Navigator.shared.$stack.sink { [weak self] stack in
+        watch = Navigator.stacksChanged.sink { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, !stack.contains(self.screen), let kept = self.model else { return }
+                guard let self, !Navigator.anyHas(self.screen), let kept = self.model else { return }
                 self.model = nil
                 self.watch = nil
                 release(kept)
