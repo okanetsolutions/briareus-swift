@@ -4,7 +4,7 @@
 import Combine
 import SwiftUI
 
-enum BoardTab: Int { case pulls, issues, ssh, sftp, board, run, db, forge, meeting, review }
+enum BoardTab: Int { case pulls, issues, ssh, sftp, board, run, db, forge, meeting, review, memories }
 
 @MainActor
 final class BoardModel: ObservableObject {
@@ -44,6 +44,7 @@ final class BoardModel: ObservableObject {
     private(set) lazy var run = adoptTab(ProjectRunModel(repo: repo))
     private(set) lazy var db = adoptTab(ProjectDBModel(repo: repo))
     private(set) lazy var forge = adoptTab(ProjectForgeModel(repo: repo))
+    private(set) lazy var memories = adoptTab(ProjectMemoriesModel(repo: repo))
     private var tabSinks: [AnyCancellable] = []
     private func adoptTab<T: ObservableObject>(_ m: T) -> T where T.ObjectWillChangePublisher == ObservableObjectPublisher {
         tabSinks.append(m.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() })
@@ -327,7 +328,7 @@ struct BoardScreen: View {
                 .onReceive(projects.objectWillChange) { _ in
                     DispatchQueue.main.async { if model.tab == .board && !ProjectBoardModel.offered(repo) { model.tab = .pulls } }
                 }
-            case .ssh, .sftp, .run, .db, .forge:
+            case .ssh, .sftp, .run, .db, .forge, .memories:
                 VStack(alignment: .leading, spacing: 0) {
                     tabs.padding(.horizontal, Theme.paneMargin)
                     Spacer().frame(height: 14)
@@ -403,6 +404,9 @@ struct BoardScreen: View {
             buttons = model.forge.headerButtons
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read it from Forge again") { model.refresh() })
         case .meeting: break
+        case .memories:
+            sub = "\(repo) · \(model.memories.memories.filter { !$0.archived }.count) memories"
+            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the memories again") { Task { await model.memories.load() } })
         case .review:
             sub = repo
             if model.loaded { sub += " · \(model.reviewPulls.count) waiting on \(model.reviewer ?? "you")" }
@@ -464,6 +468,7 @@ struct BoardScreen: View {
         }
         if ProjectDBModel.offered { labels.append((.db, "⛁ Database")) }
         if ProjectForgeModel.offered { labels.append((.forge, "☁ Forge")) }
+        if ProjectMemoriesModel.offered { labels.append((.memories, "🧠 Memories")) }
         // The meeting's transcript, while one runs on this project and after it.
         if meeting.transcript(for: repo) != nil { labels.append((.meeting, meeting.isFor(repo) ? "🎙 Meeting ●" : "🎙 Meeting")) }
         return VStack(spacing: 0) {
@@ -486,6 +491,7 @@ struct BoardScreen: View {
         case .run: return ProjectRunModel.offered
         case .db: return ProjectDBModel.offered
         case .forge: return ProjectForgeModel.offered
+        case .memories: return ProjectMemoriesModel.offered
         default: return false
         }
     }
@@ -495,6 +501,7 @@ struct BoardScreen: View {
         case .run: ProjectRunTab(model: model.run)
         case .db: ProjectDBTab(model: model.db)
         case .forge: ProjectForgeTab(model: model.forge)
+        case .memories: ProjectMemoriesTab(model: model.memories)
         default: EmptyView()
         }
     }
