@@ -142,6 +142,8 @@ func retryAfterSeconds(_ value: String?, now: Date = Date()) -> Double? {
 struct APIRoute: Sendable {
     let name: String, method: String, path: String
     var set: String? = nil, filter: String? = nil, list: String? = nil
+    /// Arguments of a write that go in its query string, not its body.
+    var query: [String] = []
 
     static func named(_ name: String) -> APIRoute? { table[name] }
 
@@ -218,6 +220,13 @@ struct APIRoute: Sendable {
         .init(name: "rotate_session_webhook", method: "POST", path: "sessions/{sessionId}/webhook/rotate"),
         // The Cloudflare Access service token the Run tab's browser sends to ▶ Run preview hosts; a manage token.
         .init(name: "preview_access", method: "GET", path: "preview/access"),
+        // A project's deployments through a GitHub workflow, an Admin token's (`repo` in the query): what GitHub records,
+        // the workflow's settings, a plan (the commit and its checks), running it, and acknowledging the last request.
+        .init(name: "deployments", method: "GET", path: "deployments"),
+        .init(name: "configure_deployments", method: "POST", path: "deployments/config", query: ["repo"]),
+        .init(name: "plan_deployment", method: "POST", path: "deployments/plan", query: ["repo"]),
+        .init(name: "dispatch_deployment", method: "POST", path: "deployments/dispatch", query: ["repo"]),
+        .init(name: "acknowledge_deployment", method: "POST", path: "deployments/acknowledge", query: ["repo"]),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
@@ -449,6 +458,12 @@ final class APIClient: @unchecked Sendable {
             }
             result = try await request(path, method: route.method, body: nil, timeout: t)
         } else {
+            var sep = "?"
+            for key in route.query {
+                guard let arg = rest.removeValue(forKey: key), let value = APIClient.urlValue(arg, inPath: false) else { continue }
+                path += "\(sep)\(APIClient.encode(key))=\(value)"
+                sep = "&"
+            }
             if let set = route.set { rest[set] = .bool(true) }
             result = try await request(path, method: route.method, body: .object(rest), timeout: t)
         }
