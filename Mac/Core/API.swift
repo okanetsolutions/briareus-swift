@@ -229,6 +229,8 @@ struct APIRoute: Sendable {
         .init(name: "whatsapp_messages", method: "GET", path: "whatsapp/accounts/{id}/conversations/{chat}/messages"),
         .init(name: "whatsapp_send", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/messages"),
         .init(name: "whatsapp_read", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/read"),
+        // An attachment's bytes, through the server (fetched by APIClient.serverFile, with the token).
+        .init(name: "whatsapp_media", method: "GET", path: "whatsapp/accounts/{id}/conversations/{chat}/messages/{message}/media"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
@@ -397,6 +399,16 @@ final class APIClient: @unchecked Sendable {
             if data!.count > APIClient.maxRequestBytes { throw APIError(.oversizedRequest) }
         }
         return try await send(method: method, url: address.baseURL + path, contentType: body != nil ? "application/json" : nil, body: data, timeout: timeout)
+    }
+
+    /// A file this server serves under its API that needs the token: its bytes, up to `limit`. Nil when `url` is not under
+    /// this server's API at `prefix`.
+    func serverFile(_ url: String, under prefix: String, limit: Int = 512 * 1024 * 1024) async throws -> Data? {
+        guard url.hasPrefix(address.baseURL + prefix), let u = URL(string: url) else { return nil }
+        let r = try await transport.send(method: "GET", url: u, headers: ["Authorization": "Bearer \(token)"], body: nil, timeout: 300)
+        if r.status < 200 || r.status >= 300 { throw APIError(.http, status: r.status, message: APIError.statusText(r.status)) }
+        if r.body.count > limit { throw APIError(.http, status: 413, message: "The file is too large to open here.") }
+        return r.body
     }
 
     /// `GET /`: the token's own record and what the server can do.

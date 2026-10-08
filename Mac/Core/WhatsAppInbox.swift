@@ -113,6 +113,19 @@ enum WhatsAppText {
         let person = parts.count < 2 || parts[1] == "c.us" || parts[1] == "s.whatsapp.net"
         return person && !user.isEmpty && user.allSatisfy(\.isNumber) ? "+" + user : user
     }
+    /// A file name's extension for a media type, when the name has none.
+    static func fileExtension(_ mime: String?) -> String {
+        switch mime?.split(separator: ";").first.map(String.init) {
+        case "image/jpeg": return ".jpg"
+        case "image/png": return ".png"
+        case "image/webp": return ".webp"
+        case "video/mp4": return ".mp4"
+        case "audio/ogg": return ".ogg"
+        case "audio/mpeg": return ".mp3"
+        case "application/pdf": return ".pdf"
+        default: return ""
+        }
+    }
     /// The QR code's image from `{ mimetype, data }`, decoded; nil unless it is a PNG or JPEG.
     static func qrImage(_ j: JSON) -> Data? {
         guard let type = j["mimetype"].string, type == "image/png" || type == "image/jpeg", let data = j["data"].string else { return nil }
