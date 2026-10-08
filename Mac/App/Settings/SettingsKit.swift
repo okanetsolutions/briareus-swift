@@ -124,7 +124,7 @@ final class SettingsModel: ObservableObject {
     static func isSettingsScreen(_ screen: Screen) -> Bool {
         switch screen {
         case .projectSettings, .providerSettings, .dbServerSettings, .sshServerSettings, .forgeAccountSettings, .slackWorkspaceSettings: return true
-        case .meetingSettings: return true
+        case .meetingSettings, .mailSettings: return true
         default: return false
         }
     }

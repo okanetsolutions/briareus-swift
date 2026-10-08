@@ -66,6 +66,12 @@ struct SettingsSidebar: View {
             ssh
             if store.supports("settings_forge_accounts") { forge }
             if store.supports("settings_slack_workspaces") { slack }
+            if MailSettingsModel.offered {
+                Color.clear.frame(height: 8)
+                SectionHeader(title: "Mail", onNew: nil)
+                ItemRow(label: "✉ Mail accounts", sub: "Gmail and Outlook mailboxes", enabled: true,
+                        selected: selected == Screen.mailSettings.id) { Navigator.shared.show(.mailSettings) }
+            }
         }
     }
 

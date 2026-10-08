@@ -34,6 +34,7 @@ enum SidebarCommon {
         case .usage: nav.show(.usage)
         case .whatsapp: nav.show(.webApp(.whatsapp))
         case .slack: nav.show(.webApp(.slack))
+        case .mail: nav.show(MailInboxModel.offered ? .mail : .mailSettings)
         case .findings: nav.show(.findings)
         }
     }
