@@ -16,6 +16,8 @@ final class Browser: NSObject, ObservableObject, WKNavigationDelegate, WKUIDeleg
     @Published private(set) var title: String?
     @Published private(set) var url: String?
     @Published private(set) var loading = false
+    @Published private(set) var canGoBack = false
+    @Published private(set) var canGoForward = false
     @Published private(set) var ready = false
     @Published private(set) var error: String?
     var access: WebAccess?
@@ -42,6 +44,8 @@ final class Browser: NSObject, ObservableObject, WKNavigationDelegate, WKUIDeleg
             webView.observe(\.title) { [weak self] wv, _ in Task { @MainActor in self?.title = wv.title } },
             webView.observe(\.url) { [weak self] wv, _ in Task { @MainActor in self?.url = wv.url?.absoluteString } },
             webView.observe(\.isLoading) { [weak self] wv, _ in Task { @MainActor in self?.loading = wv.isLoading } },
+            webView.observe(\.canGoBack) { [weak self] wv, _ in Task { @MainActor in self?.canGoBack = wv.canGoBack } },
+            webView.observe(\.canGoForward) { [weak self] wv, _ in Task { @MainActor in self?.canGoForward = wv.canGoForward } },
         ]
     }
 
@@ -63,6 +67,8 @@ final class Browser: NSObject, ObservableObject, WKNavigationDelegate, WKUIDeleg
     func reload() {
         if webView.url == nil, let address = url ?? requested { load(address) } else { webView.reload() }
     }
+    func goBack() { webView.goBack() }
+    func goForward() { webView.goForward() }
 
     private func request(for r: URLRequest) -> URLRequest {
         guard let access, let u = r.url?.absoluteString, previewAccessApplies(url: u, hostSuffix: access.hostSuffix) else { return r }
@@ -123,4 +129,89 @@ struct BrowserView: NSViewRepresentable {
     @ObservedObject var browser: Browser
     func makeNSView(context: Context) -> WKWebView { browser.webView }
     func updateNSView(_ view: WKWebView, context: Context) {}
+}
+
+/// The address bar over a Run tab's browser (the Windows client's run_browser_bar): back, forward and reload, the page's
+/// address, which can be edited and opened with Enter once the browser is up, and Open in your browser. Until the browser
+/// starts (its Cloudflare Access token is being read) the served address shows, greyed controls around it.
+struct RunBrowserBar: View {
+    var browser: Browser?
+    var url: String?
+
+    var body: some View {
+        if let browser { LiveRunBrowserBar(browser: browser, url: url) } else {
+            HStack(spacing: 2) {
+                BarIcon(symbol: "arrow.left", tip: "Back", enabled: false) {}
+                BarIcon(symbol: Glyph.symbol(0xE72A), tip: "Forward", enabled: false) {}
+                BarIcon(symbol: Glyph.symbol(0xE72C), tip: "Reload the page", enabled: false) {}
+                HStack(spacing: 8) {
+                    Image(systemName: url?.hasPrefix("https://") == true ? "lock.fill" : Glyph.symbol(0xE774))
+                        .font(.system(size: 11)).foregroundStyle(Theme.muted).frame(width: 16)
+                    Text(url ?? "").font(Theme.body).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 10).frame(height: 32)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.field))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
+                .padding(.horizontal, 6)
+                BarIcon(symbol: Glyph.symbol(0xE8A7), tip: "Open in your browser", enabled: url != nil) { openWebURL(url) }
+            }
+            .padding(.bottom, 8)
+        }
+    }
+}
+
+private struct LiveRunBrowserBar: View {
+    @ObservedObject var browser: Browser
+    /// The served address, shown until the browser reports its own.
+    var url: String?
+    @State private var address = ""
+    @State private var invalid = false
+    @FocusState private var focused: Bool
+
+    private var shown: String? { browser.url ?? url }
+
+    var body: some View {
+        let ready = browser.ready
+        HStack(spacing: 2) {
+            BarIcon(symbol: "arrow.left", tip: "Back", enabled: ready && browser.canGoBack) { browser.goBack() }
+            BarIcon(symbol: Glyph.symbol(0xE72A), tip: "Forward", enabled: ready && browser.canGoForward) { browser.goForward() }
+            BarIcon(symbol: Glyph.symbol(0xE72C), tip: "Reload the page", enabled: ready) { browser.reload() }
+            HStack(spacing: 8) {
+                Image(systemName: shown?.hasPrefix("https://") == true ? "lock.fill" : Glyph.symbol(0xE774))
+                    .font(.system(size: 11)).foregroundStyle(Theme.muted).frame(width: 16)
+                TextField("Enter a web address", text: $address)
+                    .textFieldStyle(.plain).font(Theme.body).foregroundStyle(Theme.ink)
+                    .focused($focused)
+                    .onSubmit(go)
+                    .onExitCommand { address = shown ?? ""; invalid = false; focused = false }
+                    .onChange(of: address) { _, _ in invalid = false }
+                    .help(invalid ? "Enter a web address: http, https or about:blank." : "")
+            }
+            .padding(.horizontal, 10).frame(height: 32)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.field))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(invalid ? Theme.danger : focused ? Theme.accentDim : Theme.line, lineWidth: 1))
+            .padding(.horizontal, 6)
+            BarIcon(symbol: Glyph.symbol(0xE8A7), tip: "Open in your browser", enabled: shown != nil) { openWebURL(shown) }
+        }
+        .padding(.bottom, 8)
+        .onAppear { address = shown ?? "" }
+        // Page events must not replace an address while it is being typed.
+        .onChange(of: shown) { _, s in if !focused { address = s ?? "" } }
+        .onChange(of: focused) { _, f in
+            if f {
+                // A click into the field takes the whole address, as a browser's does, so typing replaces it.
+                DispatchQueue.main.async { NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil) }
+            } else { address = shown ?? ""; invalid = false }
+        }
+    }
+
+    /// Enter opens the typed address once the browser is up; until then the address can be copied, not opened.
+    private func go() {
+        guard browser.ready else { return }
+        guard let u = browserAddress(address) else { invalid = true; NSSound.beep(); return }
+        browser.load(u)
+        focused = false
+        address = u
+    }
 }

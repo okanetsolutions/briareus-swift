@@ -1,7 +1,7 @@
 // A project's Run tab on its board, after Issues (the Windows client's project_run.c): the pull request's Run tab, on the
 // project's default branch. Opening it serves the branch in a clean workspace with the project's run commands
-// (`serve_branch`, no agent turn) and shows it in an embedded browser, with the setup's console until the page is up. The
-// header picks the run profile, reloads the page, opens it in the browser, and deletes the run with its workspace.
+// (`serve_branch`, no agent turn) and shows it in an embedded browser under an address bar, with the setup's console until
+// the page is up. The header picks the run profile and deletes the run with its workspace.
 import Combine
 import SwiftUI
 
@@ -252,19 +252,13 @@ final class ProjectRunModel: ObservableObject {
 
     // MARK: - The header
 
-    /// The branch and the served address under the title, and the profile picker, Reload, Open in browser and Delete.
-    var subtitle: String {
-        var sub = "\(repo) \u{00B7} \(branch ?? "default branch")"
-        if let u = pageURL { sub += " \u{00B7} \(u)" }
-        return sub
-    }
+    /// The branch under the title, and the profile picker and Delete; the address bar over the page has the rest.
+    var subtitle: String { "\(repo) \u{00B7} \(branch ?? "default branch")" }
     var headerButtons: [HeaderButton] {
         var buttons: [HeaderButton] = []
         if !profiles.isEmpty {
             buttons.append(HeaderButton(glyph: "slider.horizontal.3", label: "\(shownProfile ?? "") ▾", tip: "The run profile it is served with") { [weak self] in self?.pickProfile() })
         }
-        buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Reload the page", enabled: browser?.ready ?? false) { [weak self] in self?.browser?.reload() })
-        buttons.append(HeaderButton(glyph: Glyph.symbol(0xE8A7), tip: "Open in your browser", enabled: url != nil) { [weak self] in openWebURL(self?.pageURL) })
         if Store.shared.supports("delete") {
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE74D), tip: "Delete this run and its workspace", enabled: target != nil && !deleting,
                                         destructive: true) { [weak self] in self?.deleteRun() })
@@ -273,7 +267,8 @@ final class ProjectRunModel: ObservableObject {
     }
 }
 
-/// The tab: the browser's area, down to the bottom of the pane, with what is happening written in it until the page is up.
+/// The tab: the browser's area under its address bar, down to the bottom of the pane, with what is happening written in
+/// it until the page is up.
 struct ProjectRunTab: View {
     @ObservedObject var model: ProjectRunModel
 
@@ -285,6 +280,7 @@ struct ProjectRunTab: View {
             if page, let e = model.serveError {
                 Text(e).font(Theme.footnote).foregroundStyle(Theme.danger).lineLimit(1).truncationMode(.tail).padding(.bottom, 10)
             }
+            if model.url != nil && !model.busy { RunBrowserBar(browser: browser, url: model.url) }
             ZStack(alignment: .topLeading) {
                 if let browser, page {
                     BrowserView(browser: browser).opacity(browser.ready ? 1 : 0)
