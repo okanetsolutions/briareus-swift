@@ -189,6 +189,8 @@ struct APIRoute: Sendable {
         .init(name: "review", method: "POST", path: "sessions", set: "review"),
         .init(name: "qa", method: "POST", path: "sessions", set: "qa"),
         .init(name: "session", method: "GET", path: "sessions/{sessionId}"),
+        // Every session of the token's projects followed on one connection (an event stream).
+        .init(name: "events", method: "GET", path: "events"),
         .init(name: "rename", method: "PATCH", path: "sessions/{sessionId}"),
         .init(name: "delete", method: "DELETE", path: "sessions/{sessionId}"),
         .init(name: "message", method: "POST", path: "sessions/{sessionId}/messages"),

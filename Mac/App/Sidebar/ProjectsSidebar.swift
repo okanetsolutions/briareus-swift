@@ -206,7 +206,12 @@ private struct SidebarSessionsScreen: View {
             if !model.loaded { LoadingNote() }
             Color.clear.frame(height: 8)
         }
-        .task { await poll(every: 7) { await model.load() } }
+        // Every 7 seconds, or every minute while the live stream brings the changes.
+        .task { await poll(every: 7) { if SessionFeed.shared.live && model.loaded { try? await Task.sleep(nanoseconds: 53_000_000_000) }; return await model.load() } }
+        .onReceive(NotificationCenter.default.publisher(for: .sessionLive)) { note in
+            guard note.userInfo?["repo"] as? String == model.project.repo, let raw = note.userInfo?["session"] as? JSON else { return }
+            model.upsert(raw)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await model.load() } }
         .onAppear {
             // Esc leaves ☑ Select.

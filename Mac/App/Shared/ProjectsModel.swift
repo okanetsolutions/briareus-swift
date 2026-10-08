@@ -140,3 +140,73 @@ final class ProjectsModel: ObservableObject {
 
     func project(_ repo: String?) -> Project? { projects.first { $0.repo == repo } }
 }
+
+// MARK: - Live
+
+/// Every session the token can see, followed on one connection (core events.stream): a record lands as it changes and a
+/// deleted one goes, in the saved per-project lists, the counts and dots, and the open project's list, so the sidebar
+/// keeps up without its 7-second poll. The stream starts with every session as it stands; nothing is replayed after a
+/// drop, so polling carries on, every minute while the stream flows.
+@MainActor
+final class SessionFeed: ObservableObject {
+    static let shared = SessionFeed()
+    @Published private(set) var live = false
+    private var task: Task<Void, Never>?
+
+    func start() {
+        guard task == nil, Store.shared.supports("events") else { return }
+        task = Task { await follow() }
+    }
+    func stop() { task?.cancel(); task = nil; live = false }
+
+    private func follow() async {
+        var failures = 0
+        while !Task.isCancelled {
+            guard let client = Store.shared.client, Store.shared.active else { try? await Task.sleep(nanoseconds: 2_000_000_000); continue }
+            do {
+                try await client.stream("events", opened: { Task { @MainActor in SessionFeed.shared.live = true } }) { event, data in
+                    guard let j = JSON.parse(data) else { return }
+                    Task { @MainActor in SessionFeed.shared.apply(event, j) }
+                }
+                failures = 0
+            } catch {
+                live = false
+                if Task.isCancelled || (error as? APIError)?.kind == .cancelled { return }
+                if let s = (error as? APIError)?.status, s == 401 || s == 403 || s == 404 { task = nil; return }
+                failures = min(failures + 1, 6)
+            }
+            live = false
+            try? await Task.sleep(nanoseconds: UInt64(min(pow(2, Double(failures)), 60) * 1_000_000_000))
+        }
+    }
+
+    private func apply(_ event: String, _ j: JSON) {
+        let cache = Store.shared.cache
+        switch event {
+        case "session":
+            guard let s = Session(j), let repo = s.repo else { return }
+            let key = "sessions:\(repo)"
+            var list = cache.value(key).flatMap(Session.parseList) ?? []
+            if let i = list.firstIndex(where: { $0.id == s.id }) {
+                if list[i].raw == s.raw { return }
+                list[i] = s
+            } else {
+                list.insert(s, at: 0)
+            }
+            cache.store(Session.json(list), key)
+            post(.sessionLive, ["repo": repo, "session": s.raw])
+        case "session.deleted":
+            guard let id = j["id"].string else { return }
+            for p in ProjectsModel.shared.projects {
+                let key = "sessions:\(p.repo)"
+                guard var list = cache.value(key).flatMap(Session.parseList), list.contains(where: { $0.id == id }) else { continue }
+                list.removeAll { $0.id == id }
+                cache.store(Session.json(list), key)
+                cache.remove("transcript:\(id)")
+                post(.sessionForgotten, ["id": id, "repo": p.repo])
+            }
+        default: return
+        }
+        ProjectsModel.shared.recount()
+    }
+}
