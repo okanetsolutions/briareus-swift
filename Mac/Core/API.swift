@@ -258,6 +258,17 @@ struct APIRoute: Sendable {
         // The Slack workspaces sessions send messages through: a user token and signing secret (write-only), and the
         // projects it serves with their channels; admin as well.
         .init(name: "settings_slack_workspaces", method: "GET", path: "settings/slack/workspaces"),
+        // Laravel Envoyer accounts, an Admin token's, each with its token and the one project that may use it; and that
+        // project's view of them: its Envoyer projects, servers and deployments, and a deployment started (`repo` names it).
+        .init(name: "settings_envoyer_accounts", method: "GET", path: "settings/envoyer/accounts"),
+        .init(name: "create_envoyer_account", method: "POST", path: "settings/envoyer/accounts"),
+        .init(name: "update_envoyer_account", method: "PUT", path: "settings/envoyer/accounts/{id}"),
+        .init(name: "delete_envoyer_account", method: "DELETE", path: "settings/envoyer/accounts/{id}"),
+        .init(name: "envoyer_accounts", method: "GET", path: "envoyer/accounts"),
+        .init(name: "envoyer_projects", method: "GET", path: "envoyer/accounts/{id}/projects"),
+        .init(name: "envoyer_servers", method: "GET", path: "envoyer/accounts/{id}/projects/{project}/servers"),
+        .init(name: "envoyer_deployments", method: "GET", path: "envoyer/accounts/{id}/projects/{project}/deployments"),
+        .init(name: "envoyer_deploy", method: "POST", path: "envoyer/accounts/{id}/projects/{project}/deployments"),
         .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
         .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
         .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),

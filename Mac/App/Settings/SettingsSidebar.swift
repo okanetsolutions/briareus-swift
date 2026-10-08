@@ -66,6 +66,7 @@ struct SettingsSidebar: View {
             ssh
             if store.supports("settings_forge_accounts") { forge }
             if store.supports("settings_slack_workspaces") { slack }
+            if store.supports("settings_envoyer_accounts") { envoyer }
         }
     }
 
@@ -188,6 +189,20 @@ struct SettingsSidebar: View {
             Explanation(text: "No Slack workspaces yet. ＋ New lets a project's sessions send Slack messages as you and hear the replies.")
         }
         if !s.loaded { LoadingNote(text: "Loading Slack workspaces…") }
+    }
+
+    /// The Envoyer accounts: each with its label and the project it serves.
+    @ViewBuilder private var envoyer: some View {
+        Color.clear.frame(height: 8)
+        SectionHeader(title: "Envoyer accounts", onNew: store.supports("create_envoyer_account") ? { Navigator.shared.show(.envoyerAccountSettings(row: nil, defaults: model.envoyer.defaults)) } : nil)
+        let s = model.envoyer
+        if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
+        ForEach(Array(s.list.enumerated()), id: \.offset) { _, row in
+            ItemRow(label: row["label"].nonEmpty ?? "Envoyer account", sub: row["repo"].string ?? "", enabled: true,
+                    selected: selected == Screen.envoyerAccountSettings(row: row, defaults: nil).id) { Navigator.shared.show(.envoyerAccountSettings(row: row, defaults: nil)) }
+        }
+        if selected == "envoyer-account:new" { ItemRow(label: "New Envoyer account", sub: "not saved yet", enabled: false, selected: true) {} }
+        if s.loaded && s.list.isEmpty && s.error == nil { Explanation(text: "No Envoyer accounts yet. ＋ New lets a project deploy through Laravel Envoyer.") }
     }
 
     // MARK: Foot

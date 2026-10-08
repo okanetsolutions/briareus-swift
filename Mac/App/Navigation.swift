@@ -32,6 +32,7 @@ enum Screen: Hashable, Identifiable {
     case sshServerSettings(row: JSON?, defaults: JSON?)
     case forgeAccountSettings(row: JSON?, defaults: JSON?)
     case slackWorkspaceSettings(row: JSON?, defaults: JSON?)
+    case envoyerAccountSettings(row: JSON?, defaults: JSON?)
     /// This Mac's meeting assistant settings.
     case meetingSettings
     /// A session's ⚡ Webhook, pushed over its conversation; `session` is the conversation's record.
@@ -55,6 +56,7 @@ enum Screen: Hashable, Identifiable {
         case .sshServerSettings(let row, _): return "ssh-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .forgeAccountSettings(let row, _): return "forge-account:\(row?["id"].int.map(String.init) ?? "new")"
         case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
+        case .envoyerAccountSettings(let row, _): return "envoyer-account:\(row?["id"].int.map(String.init) ?? "new")"
         case .meetingSettings: return "settings-meeting"
         case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
         }
