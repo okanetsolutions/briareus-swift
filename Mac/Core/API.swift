@@ -212,6 +212,8 @@ struct APIRoute: Sendable {
         .init(name: "browser_off", method: "DELETE", path: "sessions/{sessionId}/browser"),
         .init(name: "browser_input", method: "POST", path: "sessions/{sessionId}/browser/input"),
         .init(name: "browser_stream", method: "GET", path: "sessions/{sessionId}/browser/stream"),
+        // A PNG of the tab in view (read by BrowserScreenshot through APIClient.serverFile).
+        .init(name: "browser_screenshot", method: "GET", path: "sessions/{sessionId}/browser/screenshot"),
         // A session's webhook, for an admin token: its settings, URLs and keys, changed, and its keys replaced.
         .init(name: "session_webhook", method: "GET", path: "sessions/{sessionId}/webhook"),
         .init(name: "set_session_webhook", method: "PUT", path: "sessions/{sessionId}/webhook"),
@@ -386,6 +388,16 @@ final class APIClient: @unchecked Sendable {
             if data!.count > APIClient.maxRequestBytes { throw APIError(.oversizedRequest) }
         }
         return try await send(method: method, url: address.baseURL + path, contentType: body != nil ? "application/json" : nil, body: data, timeout: timeout)
+    }
+
+    /// A file this server serves under its API that needs the token: its bytes, up to `limit`. Nil when `url` is not under
+    /// this server's API at `prefix`.
+    func serverFile(_ url: String, under prefix: String, limit: Int = 512 * 1024 * 1024) async throws -> Data? {
+        guard url.hasPrefix(address.baseURL + prefix), let u = URL(string: url) else { return nil }
+        let r = try await transport.send(method: "GET", url: u, headers: ["Authorization": "Bearer \(token)"], body: nil, timeout: 300)
+        if r.status < 200 || r.status >= 300 { throw APIError(.http, status: r.status, message: APIError.statusText(r.status)) }
+        if r.body.count > limit { throw APIError(.http, status: 413, message: "The file is too large to open here.") }
+        return r.body
     }
 
     /// `GET /`: the token's own record and what the server can do.

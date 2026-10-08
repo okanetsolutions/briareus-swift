@@ -784,7 +784,7 @@ struct SharedBrowserScreen: View {
     /// ⋯: the tabs the strip may have no room for, the tab in view's reload and close, switching the browser on or off,
     /// and where it is shown.
     private func more() {
-        enum Choice { case tab(String), reload, closeTab, start, stop, popOut, dock }
+        enum Choice { case tab(String), reload, closeTab, screenshot, start, stop, popOut, dock }
         let drive = model.canDrive && state.running
         var items: [PopupMenu.Item] = [], choices: [Choice?] = []
         func add(_ title: String, _ c: Choice, enabled: Bool = true, checked: Bool = false) {
@@ -797,6 +797,7 @@ struct SharedBrowserScreen: View {
         }
         add("Reload", .reload, enabled: drive)
         add("Close this tab", .closeTab, enabled: drive && state.activeTab != nil)
+        if store.supports("browser_screenshot") { add("Screenshot of this tab", .screenshot, enabled: state.running) }
         let busy = model.starting || model.stopping
         if store.canManage && state.on && store.supports("browser_off") {
             separator(); add("Switch the browser off\u{2026}", .stop, enabled: !busy)
@@ -810,6 +811,7 @@ struct SharedBrowserScreen: View {
         case .tab(let id): model.tab(id)
         case .reload: model.send(["type": "reload"])
         case .closeTab: model.closeActiveTab()
+        case .screenshot: Task { await BrowserScreenshot.open(sessionID: model.sessionID) }
         case .start: model.switchBrowser(on: true)
         case .stop: model.switchBrowser(on: false)
         case .popOut: popOut()
@@ -960,5 +962,26 @@ private struct TabStrip: Layout {
             x += w + gap
         }
         if plus { subviews[n].place(at: CGPoint(x: bounds.minX + x + 2, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(width: 28, height: 28)) }
+    }
+}
+
+/// The tab in view as a PNG, as the server takes it (core sessions.browserScreenshot): saved in the caches and opened in
+/// the Mac's viewer, to keep or share.
+@MainActor
+enum BrowserScreenshot {
+    static func open(sessionID: String) async {
+        guard let client = Store.shared.client else { return }
+        let url = client.address.baseURL + "sessions/\(APIClient.encode(sessionID))/browser/screenshot"
+        do {
+            guard let data = try await client.serverFile(url, under: "sessions/", limit: 50 * 1024 * 1024) else { return }
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("briareus-screenshots", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+            let file = dir.appendingPathComponent("browser-\(sessionID.prefix(8))-\(stamp).png")
+            try data.write(to: file)
+            NSWorkspace.shared.open(file)
+        } catch {
+            Dialogs.alert("The screenshot could not be taken", (error as? APIError)?.status == 409 ? "The browser is not running." : errorText(error))
+        }
     }
 }
