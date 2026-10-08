@@ -499,7 +499,7 @@ private struct ConversationFooter: View {
         let active = s.isActive
         let stop = active && store.supports("cancel") && empty
         return VStack(spacing: 0) {
-            ComposerBox(files: files, text: $composer.text, lines: $composer.lines, focused: $composer.focused, placeholder: "Reply\u{2026}",
+            ComposerBox(files: files, text: $composer.text, lines: $composer.lines, focused: $composer.focused, placeholder: (model.session.provider ?? "").lowercased().contains("claude") ? "Reply\u{2026}  (/btw asks a side question the agent never sees)" : "Reply\u{2026}",
                         focus: composer.focus,
                         onSubmit: { model.send() },
                         onPaste: { files.paste($0) },
