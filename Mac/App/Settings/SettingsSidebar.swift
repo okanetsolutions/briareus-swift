@@ -66,6 +66,18 @@ struct SettingsSidebar: View {
             ssh
             if store.supports("settings_forge_accounts") { forge }
             if store.supports("settings_slack_workspaces") { slack }
+            if ServerSettingsModel.offered {
+                Color.clear.frame(height: 8)
+                SectionHeader(title: "Server", onNew: nil)
+                if store.supports("maintenance") || store.supports("settings_workspaces") {
+                    ItemRow(label: "🛠 Maintenance and workspaces", sub: "drain it, its clone slots", enabled: true,
+                            selected: selected == Screen.serverSettings.id) { Navigator.shared.show(.serverSettings) }
+                }
+                if store.supports("settings_templates") {
+                    ItemRow(label: "📝 Prompt templates", sub: "what agents are briefed with", enabled: true,
+                            selected: selected == Screen.templatesSettings.id) { Navigator.shared.show(.templatesSettings) }
+                }
+            }
         }
     }
 

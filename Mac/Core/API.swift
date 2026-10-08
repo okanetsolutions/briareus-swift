@@ -218,6 +218,17 @@ struct APIRoute: Sendable {
         .init(name: "rotate_session_webhook", method: "POST", path: "sessions/{sessionId}/webhook/rotate"),
         // The Cloudflare Access service token the Run tab's browser sends to ▶ Run preview hosts; a manage token.
         .init(name: "preview_access", method: "GET", path: "preview/access"),
+        // The server, an Admin token's: draining it for maintenance, its workspace clone slots (cleaned or set up afresh
+        // when idle), the prompt templates its agents are briefed with, and a project's local checkout's own update.
+        .init(name: "maintenance", method: "GET", path: "maintenance"),
+        .init(name: "set_maintenance", method: "POST", path: "maintenance"),
+        .init(name: "settings_workspaces", method: "GET", path: "settings/workspaces"),
+        .init(name: "clean_workspace", method: "POST", path: "settings/workspaces/{slot}/clean"),
+        .init(name: "reset_workspace_setup", method: "POST", path: "settings/workspaces/{slot}/reset-setup"),
+        .init(name: "settings_templates", method: "GET", path: "settings/templates"),
+        .init(name: "set_templates", method: "PUT", path: "settings/templates"),
+        .init(name: "project_update", method: "GET", path: "settings/projects/{id}/update"),
+        .init(name: "run_project_update", method: "POST", path: "settings/projects/{id}/update"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
