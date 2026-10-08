@@ -136,6 +136,63 @@ final class SlackInboxModel: ObservableObject {
             .sorted { SlackNames.person($0["id"].string, people: people).lowercased() < SlackNames.person($1["id"].string, people: people).lowercased() }
     }
 
+    // MARK: Live
+
+    /// Whether the workspace's events are flowing (`ready` received), so polling can wait.
+    @Published private(set) var live = false
+    /// Follows the workspace's events until cancelled, reconnecting with a growing pause; on each `ready` (the stream does
+    /// not replay what it missed) the open conversation is read again.
+    func follow() async {
+        guard Store.shared.supports("slack_events") else { return }
+        var failures = 0
+        while !Task.isCancelled {
+            guard let ws = workspace, let client = Store.shared.client else { try? await Task.sleep(nanoseconds: 2_000_000_000); continue }
+            do {
+                try await client.stream("slack_events", ["id": .string(ws)]) { event, data in
+                    guard let j = JSON.parse(data) else { return }
+                    Task { @MainActor in self.apply(event, j, workspace: ws) }
+                }
+                failures = 0
+            } catch {
+                if (error as? APIError)?.kind == .cancelled || Task.isCancelled { live = false; return }
+                // 409: no signing secret, so no events; polling carries on alone.
+                if (error as? APIError)?.status == 409 { live = false; return }
+                failures = min(failures + 1, 6)
+            }
+            live = false
+            try? await Task.sleep(nanoseconds: UInt64(min(pow(2, Double(failures)), 60) * 1_000_000_000))
+        }
+        live = false
+    }
+    private func apply(_ event: String, _ j: JSON, workspace ws: String) {
+        guard ws == workspace else { return }
+        switch event {
+        case "ready":
+            live = true
+            Task { await loadHistory(older: false) }
+        case "message", "message.changed":
+            let e = j["event"]
+            // An edit carries the new copy as `message`; a reply's parent update arrives the same way.
+            let m = e["message"].isObject ? e["message"] : e
+            guard let ch = e["channel"].string ?? j["channel"].string, ch == channel else { return }
+            if let parent = m["thread_ts"].nonEmpty, parent != m["ts"].string {
+                if thread == parent { threadMessages.merge(m) }
+                if m["subtype"].string == "thread_broadcast" { messages.merge(m); scrollTick += 1 }
+            } else {
+                messages.merge(m)
+                scrollTick += 1
+            }
+        case "message.deleted":
+            let e = j["event"]
+            guard let ch = e["channel"].string, ch == channel, let ts = e["deleted_ts"].string ?? e["ts"].string else { return }
+            messages.remove(ts); threadMessages.remove(ts)
+        case "workspace.changed", "workspace.removed":
+            live = false
+            Task { await start() }
+        default: break
+        }
+    }
+
     // MARK: A conversation
 
     func open(_ id: String) {
@@ -310,6 +367,7 @@ struct SlackInboxScreen: View {
             }
         }
         .task { await model.start() }
+        .task(id: model.workspace) { await model.follow() }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in
             Task { await model.start(); await model.loadConversations(); await model.loadHistory(older: false) }
         }
@@ -320,6 +378,7 @@ struct SlackInboxScreen: View {
         guard let ws = model.workspaces.first(where: { SlackInboxModel.id($0) == model.workspace }) else { return "Your Slack, read and written as you" }
         var s = ws["label"].nonEmpty ?? ws["team"].nonEmpty ?? "Workspace"
         if let user = ws["user"].nonEmpty { s += " · as \(user)" }
+        s += model.live ? " · live" : ""
         return s
     }
 
@@ -331,7 +390,6 @@ struct SlackInboxScreen: View {
                 if let i = popUpMenu(rows) { model.pickWorkspace(SlackInboxModel.id(model.workspaces[i])) }
             })
         }
-        out.append(HeaderButton(glyph: "globe", label: "Slack web", tip: "Slack's own web app, signed in as you") { Navigator.shared.push(.webApp(.slack)) })
         out.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the conversations and this one's newest messages again", enabled: !model.coolingDown) {
             Task { await model.loadConversations(); await model.loadHistory(older: false) }
         })
@@ -470,12 +528,12 @@ private struct SlackConversationView: View {
                 }
                 SlackComposer(model: model, thread: nil, placeholder: "Message \(SlackNames.glyph(row))\(model.name(row))")
             }
-            // What arrived since, every 30 seconds while on show.
+            // What arrived since, every 30 seconds while on show, unless the workspace's events bring it as it happens.
             .task(id: model.channel) {
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 30_000_000_000)
                     if Task.isCancelled { return }
-                    if store.active { await model.loadHistory(older: false) }
+                    if store.active && !model.live { await model.loadHistory(older: false) }
                 }
             }
         } else {

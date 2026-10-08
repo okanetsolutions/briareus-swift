@@ -269,6 +269,8 @@ struct APIRoute: Sendable {
         .init(name: "slack_send", method: "POST", path: "slack/workspaces/{id}/conversations/{channel}/messages"),
         .init(name: "slack_thread", method: "GET", path: "slack/workspaces/{id}/conversations/{channel}/threads/{ts}"),
         .init(name: "slack_read", method: "POST", path: "slack/workspaces/{id}/conversations/{channel}/read"),
+        // New Slack messages, edits, deletions and read marks as they happen (an event stream; needs the signing secret).
+        .init(name: "slack_events", method: "GET", path: "slack/workspaces/{id}/events"),
         .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
         .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
         .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),
