@@ -6,7 +6,8 @@
 // or pull request on the app's own screens; the Windows client's side panel over the board is the detail pane's stack
 // here, ‹ coming back to the board. An issue card lists the pull requests that close it, from the board's `pulls` read;
 // this project's open the same way, others on GitHub. A card dragged to another column moves there at once and on GitHub
-// through `project_board_move`, as dragging it on GitHub's board does; a refusal puts the board back as GitHub has it.
+// through `project_board_move`, as dragging it on GitHub's board does; a refusal puts the board back as GitHub has it, and
+// a read that lags behind the move keeps it where it went.
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -70,9 +71,14 @@ final class ProjectBoardModel: ObservableObject {
 
     // MARK: Reading
 
+    /// The moves GitHub accepted lately, across every project: they outlive the tab, so a project closed and opened again
+    /// still shows its cards where they went.
+    private static var settling: [SettlingMove] = []
+
     private func show(_ answer: JSON) {
         guard var b = ProjectBoard(answer) else { return }
         b.keepRepo(repo)
+        Self.settling = settlingApply(Self.settling, to: &b, repo: repo)
         board = b
     }
     /// Reads the board the first time the tab is shown, the saved copy first. While a card is moving, the read after the
@@ -122,6 +128,7 @@ final class ProjectBoardModel: ObservableObject {
         guard let from = b.columns.firstIndex(where: { $0.cards.contains { $0.id == cardID } }), from != to,
               let at = b.columns[from].cards.firstIndex(where: { $0.id == cardID }), movable(b.columns[from].cards[at]) else { return }
         let args: JSON = ["repo": .string(repo), "itemId": .string(cardID), "columnId": JSON(b.columns[to].id)]
+        let off = b.columns[from].id, onto = b.columns[to].id
         guard b.move(from: from, card: at, to: to) else { return }
         board = b
         moved = (cardID, from, at)
@@ -134,7 +141,10 @@ final class ProjectBoardModel: ObservableObject {
             let r = await boardCall("project_board_move", args)
             moving = false
             // Moved or not, the board is read again as GitHub has it now: the server has dropped its saved copy.
-            if let e = r.error { moveError = e.description } else { moved = nil }
+            if let e = r.error { moveError = e.description } else {
+                moved = nil
+                Self.settling = settlingRecord(Self.settling, repo: repo, id: cardID, from: off, to: onto)
+            }
             await load(fresh: r.error != nil)
         }
     }
