@@ -258,6 +258,17 @@ struct APIRoute: Sendable {
         // The Slack workspaces sessions send messages through: a user token and signing secret (write-only), and the
         // projects it serves with their channels; admin as well.
         .init(name: "settings_slack_workspaces", method: "GET", path: "settings/slack/workspaces"),
+        // The operator's Slack inbox, an Admin token's: the workspaces, a workspace's conversations and people, a
+        // conversation's history and threads, a message sent as the operator, a direct message opened, a read mark.
+        .init(name: "slack_workspaces", method: "GET", path: "slack/workspaces"),
+        .init(name: "slack_conversations", method: "GET", path: "slack/workspaces/{id}/conversations"),
+        .init(name: "slack_conversation", method: "GET", path: "slack/workspaces/{id}/conversations/{channel}"),
+        .init(name: "slack_people", method: "GET", path: "slack/workspaces/{id}/people"),
+        .init(name: "slack_open_dm", method: "POST", path: "slack/workspaces/{id}/direct-messages"),
+        .init(name: "slack_history", method: "GET", path: "slack/workspaces/{id}/conversations/{channel}/messages"),
+        .init(name: "slack_send", method: "POST", path: "slack/workspaces/{id}/conversations/{channel}/messages"),
+        .init(name: "slack_thread", method: "GET", path: "slack/workspaces/{id}/conversations/{channel}/threads/{ts}"),
+        .init(name: "slack_read", method: "POST", path: "slack/workspaces/{id}/conversations/{channel}/read"),
         .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
         .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
         .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),

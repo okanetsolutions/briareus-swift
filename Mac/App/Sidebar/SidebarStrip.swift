@@ -25,7 +25,7 @@ struct SidebarStrip: View {
             .help("New session")
             StripButton(active: selected == "whatsapp", action: { action(.whatsapp) }) { WhatsAppMark() }
                 .frame(width: Self.iconWidth).help("WhatsApp")
-            StripButton(active: selected == "slack", action: { action(.slack) }) { SlackMark() }
+            StripButton(active: selected == "slack" || selected == "slack-inbox", action: { action(.slack) }) { SlackMark() }
                 .frame(width: Self.iconWidth).help("Slack")
             StripButton(active: selected == "usage", action: { action(.usage) }) { emoji("📊", active: selected == "usage") }
                 .frame(width: Self.iconWidth).help("Usage")
