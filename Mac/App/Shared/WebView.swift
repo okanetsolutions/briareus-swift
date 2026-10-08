@@ -81,10 +81,12 @@ final class Browser: NSObject, ObservableObject, WKNavigationDelegate, WKUIDeleg
     // MARK: WKNavigationDelegate
 
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        // A navigation to a preview host without the service token is sent again with it. Only a GET is: a form's POST
-        // would lose its body, and the Access cookie the first one earned already lets it through.
+        // A navigation to a preview host without the service token is sent again with it. Only a new GET is: a form's
+        // POST would lose its body, and a step back or forward, or a reload, would become a new page in the history
+        // (clearing what Forward goes to); the Access cookie the first one earned already lets those through.
         if let access, let u = action.request.url?.absoluteString, action.targetFrame?.isMainFrame != false,
            (action.request.httpMethod ?? "GET").uppercased() == "GET",
+           action.navigationType != .backForward && action.navigationType != .reload,
            previewAccessApplies(url: u, hostSuffix: access.hostSuffix),
            action.request.value(forHTTPHeaderField: "CF-Access-Client-Id") == nil {
             decisionHandler(.cancel)
@@ -199,10 +201,7 @@ private struct LiveRunBrowserBar: View {
         // Page events must not replace an address while it is being typed.
         .onChange(of: shown) { _, s in if !focused { address = s ?? "" } }
         .onChange(of: focused) { _, f in
-            if f {
-                // A click into the field takes the whole address, as a browser's does, so typing replaces it.
-                DispatchQueue.main.async { NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil) }
-            } else { address = shown ?? ""; invalid = false }
+            if f { selectAllOnMouseUp { focused } } else { address = shown ?? ""; invalid = false }
         }
     }
 
@@ -213,5 +212,17 @@ private struct LiveRunBrowserBar: View {
         browser.load(u)
         focused = false
         address = u
+    }
+}
+
+/// A click into an address field takes the whole address, as a browser's does, so typing replaces it. The field editor
+/// places the caret when the button comes up, so the selection waits for that; `stillFocused` drops it once the field
+/// has lost focus meanwhile.
+@MainActor
+func selectAllOnMouseUp(tries: Int = 50, _ stillFocused: @escaping @MainActor () -> Bool) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+        guard stillFocused() else { return }
+        if NSEvent.pressedMouseButtons & 1 != 0 && tries > 0 { selectAllOnMouseUp(tries: tries - 1, stillFocused); return }
+        NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
     }
 }
