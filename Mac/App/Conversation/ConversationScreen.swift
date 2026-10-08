@@ -115,7 +115,52 @@ final class ConversationModel: ObservableObject {
         if next != blocks { blocks = next }
     }
 
-    /// Polls while the screen is up: every 2 seconds while the agent works, every 7 otherwise, with the Windows client's backoff.
+    /// Whether the session's event stream is flowing, so polling only checks in now and then.
+    @Published private(set) var live = false
+
+    /// Follows the session's event stream while the screen is up: each transcript line lands as it is written, and the
+    /// record on each change. It starts after the lines already read; a dropped stream comes back after 2 s doubling to a
+    /// minute, and polling carries on meanwhile.
+    func follow() async {
+        guard Store.shared.supports("session_events") else { return }
+        var failures = 0
+        while !Task.isCancelled {
+            while (!Store.shared.active || !loaded) && !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000_000) }
+            guard let client = Store.shared.client, !Task.isCancelled else { return }
+            do {
+                try await client.stream("session_events", ["sessionId": .string(id), "since": JSON(transcript.cursor)],
+                                        opened: { [weak self] in Task { @MainActor in self?.live = true } }) { [weak self] event, data in
+                    guard let j = JSON.parse(data) else { return }
+                    Task { @MainActor in self?.applyLive(event, j) }
+                }
+                failures = 0
+            } catch {
+                live = false
+                if Task.isCancelled || (error as? APIError)?.kind == .cancelled { return }
+                if let s = (error as? APIError)?.status, s == 404 || s == 403 { return }
+                failures = min(failures + 1, 6)
+            }
+            live = false
+            try? await Task.sleep(nanoseconds: UInt64(min(pow(2, Double(failures)), 60) * 1_000_000_000))
+        }
+    }
+    private func applyLive(_ event: String, _ j: JSON) {
+        live = true
+        if event == "session" {
+            if let next = Session(j["session"].isObject ? j["session"] : j) { snapshot = next; showPanel() }
+            return
+        }
+        // A transcript line, unnamed; one already held (read by a poll meanwhile) adds nothing.
+        guard j["seq"].truncatedInt != nil else { return }
+        let before = transcript.events.count
+        transcript.append(.array([j]))
+        guard transcript.events.count != before else { return }
+        if !unsaved { unsaved = !Store.shared.cache.append([j], cacheKey) }
+        rebuild()
+    }
+
+    /// Polls while the screen is up: every 2 seconds while the agent works, every 7 otherwise, with the Windows client's
+    /// backoff; every 30 while the event stream brings the lines.
     func run() async {
         var failures = 0
         while !Task.isCancelled {
@@ -125,7 +170,7 @@ final class ConversationModel: ObservableObject {
             if !busy && !dialogOpen && !loading { failure = await refresh(full: false) }
             if Task.isCancelled { return }
             if let failure, failure.kind != .cancelled { failures += 1 } else { failures = 0 }
-            let delay = pollDelay(base: session.isActive ? 2 : 7, failures: failures, retryAfter: failure?.retryAfter)
+            let delay = pollDelay(base: live ? 30 : session.isActive ? 2 : 7, failures: failures, retryAfter: failure?.retryAfter)
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         }
     }
@@ -272,6 +317,8 @@ struct ConversationScreen: View {
     @ObservedObject private var store = Store.shared
     @State private var atBottom = true
     @State private var stick = true
+    /// The user scrolled since the transcript last kept to its end: only then does it stop following new lines.
+    @State private var userScrolled = false
     /// A scroll to the end under way, which the user scrolling the transcript cancels.
     @State private var scrolling: Task<Void, Never>?
 
@@ -322,12 +369,13 @@ struct ConversationScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PaneHeader(title: model.session.displayTitle, subtitle: conversationStatusLine(model.session), buttons: headerButtons,
+            PaneHeader(title: model.session.displayTitle, subtitle: (model.live ? "● live · " : "") + conversationStatusLine(model.session), buttons: headerButtons,
                        titleAction: store.supports("rename") ? { model.rename() } : nil)
             transcript
             ConversationFooter(model: model, composer: model.composer, files: model.files, voice: model.voice)
         }
         .task(id: store.active) { await model.run() }
+        .task { await model.follow() }
         .onAppear {
             model.showPanel()
             stick = true
@@ -365,7 +413,7 @@ struct ConversationScreen: View {
                                 Color.clear.preference(key: TranscriptEndKey.self, value: g.frame(in: .named("transcript")).maxY)
                             })
                     }
-                    .background(UserScrollWatcher { scrolling?.cancel(); scrolling = nil })
+                    .background(UserScrollWatcher { scrolling?.cancel(); scrolling = nil; userScrolled = true })
                     .padding(.top, 18).padding(.bottom, 30)
                     .padding(.horizontal, 24)
                     .frame(maxWidth: 860)
@@ -375,7 +423,9 @@ struct ConversationScreen: View {
                 .onPreferenceChange(TranscriptEndKey.self) { maxY in
                     let bottom = maxY <= outer.size.height + 4
                     if atBottom != bottom { atBottom = bottom }
-                    if scrolling == nil && stick != bottom { stick = bottom }
+                    // Content growing under the end is not the user leaving it: only their own scroll unsticks it.
+                    if bottom { if !stick { stick = true }; userScrolled = false }
+                    else if scrolling == nil && userScrolled && stick { stick = false }
                 }
                 .overlay(alignment: .bottom) {
                     // The "latest" button: back to the end, which the transcript then keeps to.
