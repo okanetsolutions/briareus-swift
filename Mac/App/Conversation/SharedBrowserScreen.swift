@@ -882,7 +882,8 @@ struct DockedBrowserColumn: View {
 }
 
 /// A toolbar glyph, as Claude's browser pane has them: no frame, tinted under the mouse, greyed while it cannot act.
-private struct BarIcon: View {
+/// A toolbar glyph: no frame, tinted under the mouse, greyed while it cannot act.
+struct BarIcon: View {
     var symbol: String
     var tip: String
     var enabled = true

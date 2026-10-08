@@ -71,14 +71,7 @@ struct PullScreen: View {
     }
 
     private var header: some View {
-        var sub = "\(repo) #\(number)"
-        var buttons: [HeaderButton] = []
-        if model.tab == .run, model.runURL != nil {
-            sub += " · \(model.pageURL ?? "")"
-            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Reload the page", enabled: model.browser?.ready ?? false) { model.browser?.reload() })
-            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE8A7), tip: "Open in your browser") { openWebURL(model.pageURL) })
-        }
-        return PaneHeader(title: "Pull request", subtitle: sub, buttons: buttons)
+        PaneHeader(title: "Pull request", subtitle: "\(repo) #\(number)", buttons: [])
     }
 
     /// The notices, the title block and the tabs.
@@ -945,8 +938,8 @@ private struct PullSidebar: View {
 
 // MARK: - Run
 
-/// The Run tab: the browser's area, down to the bottom of the pane, under a line saying what a restart is doing, with what
-/// is happening written in it until the page is up.
+/// The Run tab: the browser's area under its address bar, down to the bottom of the pane, with what is happening written
+/// in it until the page is up.
 private struct RunArea: View {
     @ObservedObject var model: PullModel
 
@@ -958,6 +951,7 @@ private struct RunArea: View {
             if page, let e = model.serveError {
                 Text(e).font(Theme.footnote).foregroundStyle(Theme.danger).lineLimit(1).truncationMode(.tail).padding(.horizontal, 4).padding(.bottom, 10)
             }
+            if model.runURL != nil && !model.runBusy { RunBrowserBar(browser: browser, url: model.runURL) }
             ZStack(alignment: .topLeading) {
                 if let browser, page {
                     BrowserView(browser: browser).opacity(browser.ready ? 1 : 0)
