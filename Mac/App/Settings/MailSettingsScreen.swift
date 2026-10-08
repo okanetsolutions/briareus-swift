@@ -6,6 +6,8 @@ import SwiftUI
 
 @MainActor
 final class MailSettingsModel: ObservableObject {
+    /// One for Settings' rows and the mailbox pages, so a sign-in under way and the list read are shared.
+    static let shared = MailSettingsModel()
     @Published private(set) var accounts = MailAccounts()
     @Published private(set) var loaded = false
     @Published private(set) var reading = false
@@ -166,10 +168,10 @@ final class MailSettingsModel: ObservableObject {
             await load()
         }
     }
-    /// Only the field edited is sent: another client may have changed the others meanwhile.
-    func editLabel(_ a: MailAccount) {
-        guard can("update_mail_account"), let v = Dialogs.text("Mailbox label", label: "A name to show; empty for none.", okLabel: "Save", current: a.label) else { return }
-        write("update_mail_account", ["id": JSON(a.id), "label": .string(v.cTrimmed)], id: a.id, done: "Label saved; refreshing the accounts.")
+    /// The label, as typed on the mailbox's page, saved with Save. Only the field edited is sent: another client may have
+    /// changed the others meanwhile.
+    func saveLabel(_ a: MailAccount, _ label: String) {
+        write("update_mail_account", ["id": JSON(a.id), "label": .string(label.cTrimmed)], id: a.id, done: "Label saved.")
     }
     func toggle(_ a: MailAccount) {
         write("update_mail_account", ["id": JSON(a.id), "enabled": .bool(!a.enabled)], id: a.id,
@@ -193,20 +195,29 @@ final class MailSettingsModel: ObservableObject {
     }
 }
 
+/// A mailbox's page (`accountID`), or adding one (nil): connecting Gmail or Outlook, and the sign-in under way.
 struct MailSettingsScreen: View {
-    @StateObject private var model = MailSettingsModel()
+    var accountID: Int?
+    @ObservedObject private var model = MailSettingsModel.shared
     @ObservedObject private var store = Store.shared
+    @State private var label = ""
+    @State private var labelRead: String?
+
+    private var account: MailAccount? { accountID.flatMap { model.accounts.find($0) } }
+    private var dirty: Bool { account.map { label != $0.label } ?? false }
 
     var body: some View {
         VStack(spacing: 0) {
-            PaneHeader(title: "Mail accounts", subtitle: "Gmail and Outlook mailboxes the server keeps synced; it can only read them", buttons: [
-                HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the accounts again", enabled: !model.reading && !model.writing) { model.refresh() },
-            ])
+            PaneHeader(title: account.map { $0.label.cTrimmed.isEmpty ? $0.email : $0.label } ?? (accountID == nil ? "New mailbox" : "Mailbox"),
+                       subtitle: "Gmail and Outlook. The server can only read the mailbox.", buttons: headerButtons)
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) { content }
-                    .padding(.horizontal, Theme.paneMargin).padding(.top, 16).padding(.bottom, 24)
-                    .frame(maxWidth: 760, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 0) {
+                    SettingsTabs(tabs: [SettingsTabs.Tab(id: 0, title: "Mailbox", glyph: "envelope", dot: dirty)], open: 0) { _ in }
+                    content
+                }
+                .padding(.horizontal, Theme.paneMargin).padding(.top, 16).padding(.bottom, 24)
+                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .task { await model.load() }
@@ -218,8 +229,21 @@ struct MailSettingsScreen: View {
                 await model.load()
             }
         }
+        .onChange(of: account?.label) { _, l in if labelRead == nil || !dirty { label = l ?? ""; labelRead = l } }
+        .onAppear { label = account?.label ?? ""; labelRead = account?.label }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in model.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: .saveScreen)) { _ in save() }
     }
+
+    private var headerButtons: [HeaderButton] {
+        var out: [HeaderButton] = []
+        if account != nil && store.supports("update_mail_account") {
+            out.append(HeaderButton(glyph: Glyph.symbol(0xE74E), label: "Save", tip: "Save this mailbox (⌘S)", enabled: dirty && model.can("update_mail_account"), prominent: true) { save() })
+        }
+        out.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the accounts again", enabled: !model.reading && !model.writing) { model.refresh() })
+        return out
+    }
+    private func save() { if let a = account, dirty { model.saveLabel(a, label) } }
 
     @ViewBuilder private var content: some View {
         if !MailSettingsModel.offered {
@@ -229,15 +253,18 @@ struct MailSettingsScreen: View {
             if let n = model.notice {
                 Text(n).font(Theme.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true).padding(.bottom, 12)
             }
+            if let s = model.signIn { waiting(s) }
             if !model.loaded {
                 if !model.blocked { LoadingNote(text: "Loading mail accounts…") }
+            } else if let a = account {
+                SettingsFieldLabel(label: "Label", hint: "A name to show; empty shows the address.")
+                TextField(a.email, text: $label).textFieldStyle(.roundedBorder).padding(.bottom, 14)
+                AccountRow(model: model, account: a)
+            } else if accountID != nil {
+                Text("This mailbox is no longer connected.").font(Theme.footnote).foregroundStyle(Theme.muted)
             } else {
-                if let s = model.signIn { waiting(s) }
+                Text("Add a mailbox").font(Theme.footnoteSemibold).foregroundStyle(Theme.ink).padding(.bottom, 8)
                 connect
-                ForEach(model.accounts.accounts, id: \.id) { a in AccountRow(model: model, account: a).padding(.bottom, 12) }
-                if model.accounts.accounts.isEmpty {
-                    Text("No mailboxes connected yet.").font(Theme.footnote).foregroundStyle(Theme.muted)
-                }
             }
         }
     }
@@ -288,7 +315,6 @@ private struct AccountRow: View {
             if a.needsSignIn { Notice(message: "The provider stopped honouring its sign-in (revoked or expired). Sign in again with this mailbox.") }
             FlowLayout(spacing: 6, lineSpacing: 6) {
                 if store.supports("update_mail_account") {
-                    Button("Label…") { model.editLabel(a) }.dashButton(.bordered).disabled(!model.can("update_mail_account"))
                     Button(a.enabled ? "Disable" : "Enable") { model.toggle(a) }.dashButton(.bordered).disabled(!model.can("update_mail_account"))
                     Button("Sync window…") { model.editDays(a) }.dashButton(.bordered).disabled(!model.can("update_mail_account"))
                 }

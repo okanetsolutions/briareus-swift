@@ -190,7 +190,12 @@ struct MailScreen: View {
     private var headerButtons: [HeaderButton] {
         var out: [HeaderButton] = []
         if MailSettingsModel.offered {
-            out.append(HeaderButton(glyph: "gearshape", label: "Mail accounts", tip: "The mailboxes the server syncs") { Navigator.shared.push(.mailSettings) })
+            // The mailboxes' setup lives in Settings › Mail (Windows #141).
+            out.append(HeaderButton(glyph: "gearshape", label: "Mail accounts", tip: "The mailboxes the server syncs, in Settings") {
+                let nav = Navigator.shared
+                nav.sidebarMode = .settings
+                nav.show(.mailSettings(id: nil))
+            })
         }
         out.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the mailboxes and the newest messages again",
                                 enabled: !model.listing && !model.coolingDown) { model.refresh() })

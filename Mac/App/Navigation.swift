@@ -34,8 +34,8 @@ enum Screen: Hashable, Identifiable {
     case slackWorkspaceSettings(row: JSON?, defaults: JSON?)
     /// This Mac's meeting assistant settings.
     case meetingSettings
-    /// The mailboxes the server keeps synced.
-    case mailSettings
+    /// A mailbox the server keeps synced, or (nil) adding one.
+    case mailSettings(id: Int?)
     /// The synced mail.
     case mail
     /// A session's ⚡ Webhook, pushed over its conversation; `session` is the conversation's record.
@@ -60,7 +60,7 @@ enum Screen: Hashable, Identifiable {
         case .forgeAccountSettings(let row, _): return "forge-account:\(row?["id"].int.map(String.init) ?? "new")"
         case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
         case .meetingSettings: return "settings-meeting"
-        case .mailSettings: return "mail-settings"
+        case .mailSettings(let id): return id.map { "mail-settings:\($0)" } ?? "mail-settings"
         case .mail: return "mail"
         case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
         }

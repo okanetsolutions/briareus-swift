@@ -38,6 +38,8 @@ struct MailAccount: Equatable, Sendable {
     /// "Work (me@example.com)", or the address alone.
     var title: String { label.cTrimmed.isEmpty ? email : "\(label) (\(email))" }
     var providerName: String { mailProviderName(provider) }
+    /// "connected", "needs sign-in" or the server's own word.
+    var statusLine: String { needsSignIn ? "needs sign-in" : status }
 }
 
 func mailProviderName(_ provider: String) -> String { provider == "gmail" ? "Gmail" : provider == "outlook" ? "Outlook" : provider }
