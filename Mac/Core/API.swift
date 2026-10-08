@@ -218,6 +218,17 @@ struct APIRoute: Sendable {
         .init(name: "rotate_session_webhook", method: "POST", path: "sessions/{sessionId}/webhook/rotate"),
         // The Cloudflare Access service token the Run tab's browser sends to ▶ Run preview hosts; a manage token.
         .init(name: "preview_access", method: "GET", path: "preview/access"),
+        // The operator's WhatsApp through the server's WAHA, an Admin token's: the linked phone (started, its QR code to
+        // link it, unlinked), its chats, a chat's history, a message sent, a chat marked read.
+        .init(name: "whatsapp_accounts", method: "GET", path: "whatsapp/accounts"),
+        .init(name: "whatsapp_account", method: "GET", path: "whatsapp/accounts/{id}"),
+        .init(name: "whatsapp_start", method: "POST", path: "whatsapp/accounts/{id}/start"),
+        .init(name: "whatsapp_qr", method: "GET", path: "whatsapp/accounts/{id}/qr"),
+        .init(name: "whatsapp_logout", method: "POST", path: "whatsapp/accounts/{id}/logout"),
+        .init(name: "whatsapp_conversations", method: "GET", path: "whatsapp/accounts/{id}/conversations"),
+        .init(name: "whatsapp_messages", method: "GET", path: "whatsapp/accounts/{id}/conversations/{chat}/messages"),
+        .init(name: "whatsapp_send", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/messages"),
+        .init(name: "whatsapp_read", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/read"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),

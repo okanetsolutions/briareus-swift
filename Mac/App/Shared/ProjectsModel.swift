@@ -105,6 +105,8 @@ final class ProjectsModel: ObservableObject {
         error = nil
         Store.shared.cache.store(answer, "projects")
         recount()
+        // Whether the server has WhatsApp set up, which the sidebar's WhatsApp button opens then.
+        await WhatsAppInboxModel.shared.probe()
         guard Store.shared.supports("sessions") else { return nil }
         do {
             let all = try await Store.shared.call("sessions")
