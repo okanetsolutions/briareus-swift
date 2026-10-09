@@ -624,6 +624,12 @@ struct FilesKeyMonitor: NSViewRepresentable {
         case (31, [.command, .option]): model.navigator = .symbols           // ⌥⌘O
         case (0, [.command, .shift]): model.navigator = .actions             // ⇧⌘A
         case (3, [.command, .shift]): model.navigator = nil; model.openFind() // ⇧⌘F
+        case (3, [.command]):                                                // ⌘F: in the open file
+            guard let editor = model.editor, model.navigator == nil, model.findPanel == nil else { return false }
+            editor.showFindBar()
+        case (5, [.command]), (5, [.command, .shift]):                       // ⌘G, ⇧⌘G
+            guard let editor = model.editor, model.navigator == nil, model.findPanel == nil else { return false }
+            editor.findNext(backward: flags.contains(.shift))
         case (111, [.command]): model.openStructure()                        // ⌘F12
         case (11, [.command]):                                               // ⌘B
             model.caretAction { w, m, p in model.goToDeclaration(w, member: m, from: p) }
