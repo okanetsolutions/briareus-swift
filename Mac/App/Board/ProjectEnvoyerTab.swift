@@ -31,7 +31,9 @@ final class ProjectEnvoyerModel: ObservableObject {
     func pickAccount(_ id: Int) {
         account = id; project = nil; projects = []; servers = []; deployments = []
         Task {
-            switch await boardCall("envoyer_projects", ["id": JSON(id), "repo": .string(repo)]) {
+            let r = await boardCall("envoyer_projects", ["id": JSON(id), "repo": .string(repo)])
+            guard account == id else { return }  // another account was picked meanwhile; this list isn't its
+            switch r {
             case .failure(let e): error = e.message ?? e.description
             case .success(let v):
                 projects = v["projects"].items; error = nil
@@ -40,6 +42,8 @@ final class ProjectEnvoyerModel: ObservableObject {
         }
     }
     func pickProject(_ id: Int) {
+        servers = []; deployments = []
+        guard id > 0 else { project = nil; return }  // "Choose…" (tag 0) means no project
         project = id
         Task { await loadProject() }
     }
@@ -49,6 +53,7 @@ final class ProjectEnvoyerModel: ObservableObject {
         async let s = boardCall("envoyer_servers", args)
         async let d = boardCall("envoyer_deployments", args)
         let (sr, dr) = await (s, d)
+        guard account == a, project == p else { return }  // the selection moved on while these were loading
         servers = sr.value?["servers"].items ?? []
         deployments = dr.value?["deployments"].items ?? []
         if let e = dr.error ?? sr.error { error = e.message ?? e.description } else { error = nil }
