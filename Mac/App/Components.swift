@@ -348,7 +348,52 @@ enum Clipboard {
 }
 
 /// Opens an https URL in the default browser; anything else is refused.
+@MainActor
 func openWebURL(_ url: String?) {
     guard let url, let u = URL(string: url), u.scheme?.lowercased() == "https", u.host != nil, u.user == nil, u.password == nil else { return }
+    // A test run's video served by this server needs the device's token, which a browser does not have: fetched here
+    // and opened in the Mac's player.
+    if let client = Store.shared.client, url.hasPrefix(client.address.baseURL + "videos/"), Store.shared.supports("video") {
+        Task { @MainActor in await ServerVideo.open(url, client: client) }
+        return
+    }
     NSWorkspace.shared.open(u)
+}
+
+@MainActor
+enum ServerVideo {
+    /// Downloads the video into the caches, then opens it with the default player; a folder of them opens in the browser.
+    static func open(_ url: String, client: APIClient) async {
+        let name = URL(string: url)?.lastPathComponent ?? "video.webm"
+        guard name.contains(".") else { if let u = URL(string: url) { NSWorkspace.shared.open(u) }; return }
+        do {
+            guard let data = try await client.serverFile(url, under: "videos/") else { return }
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("briareus-videos", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let file = dir.appendingPathComponent(String(abs(url.hashValue)) + "-" + name)
+            try data.write(to: file)
+            NSWorkspace.shared.open(file)
+        } catch {
+            Dialogs.alert("The video could not be opened", errorText(error))
+        }
+    }
+}
+
+/// Saves a file someone else sent into a folder of the temporary directory, quarantined as a download so Gatekeeper
+/// checks it, and opens it when it is a safe kind (`ReceivedFile.opensDirectly`); anything else is shown in Finder.
+func openReceivedFile(_ data: Data, named name: String?, prefix: String, in folder: String) throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(folder, isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let safe = ReceivedFile.safeName(prefix + "-" + ReceivedFile.safeName(name))
+    var file = dir.appendingPathComponent(safe, isDirectory: false)
+    try? FileManager.default.removeItem(at: file)
+    try data.write(to: file)
+    var values = URLResourceValues()
+    values.quarantineProperties = [
+        kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload as String,
+        kLSQuarantineAgentNameKey as String: "Briareus"
+    ]
+    try file.setResourceValues(values)
+    if ReceivedFile.opensDirectly(safe) { NSWorkspace.shared.open(file) }
+    else { NSWorkspace.shared.activateFileViewerSelecting([file]) }
 }
