@@ -42,6 +42,9 @@ enum Screen: Hashable, Identifiable {
     case mailSettings(id: Int?)
     /// The synced mail.
     case mail
+    /// The server's maintenance and workspaces, and its prompt templates.
+    case serverSettings
+    case templatesSettings
     /// A session's ⚡ Webhook, pushed over its conversation; `session` is the conversation's record.
     case webhook(session: JSON)
 
@@ -68,6 +71,8 @@ enum Screen: Hashable, Identifiable {
         case .meetingSettings: return "settings-meeting"
         case .mailSettings(let id): return id.map { "mail-settings:\($0)" } ?? "mail-settings"
         case .mail: return "mail"
+        case .serverSettings: return "settings-server"
+        case .templatesSettings: return "settings-templates"
         case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
         }
     }
