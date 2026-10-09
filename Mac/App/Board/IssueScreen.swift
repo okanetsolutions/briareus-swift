@@ -95,9 +95,10 @@ final class IssueModel: ObservableObject {
         boardGen += 1
         let gen = boardGen
         readingBoard = true
-        var args: JSON = ["repo": .string(repo)]
-        if fresh { args["fresh"] = "1" }
-        let r = await boardCall("pulls", args)
+        guard let r = await PullsGate.read(repo, fresh: fresh) else {
+            if gen == boardGen { readingBoard = false }
+            return nil
+        }
         guard gen == boardGen else { return nil }
         readingBoard = false
         switch r {
@@ -319,7 +320,9 @@ struct IssueScreen: View {
     var body: some View {
         let issue = model.issue
         VStack(spacing: 0) {
-            PaneHeader(title: "#\(issue.number)", subtitle: repo, buttons: [
+            // While GitHub's allowance is spent, when the board behind the issue is read again.
+            let retry = PullsGate.deadline(repo).map { " · list retry after \(formatEventTime($0))" } ?? ""
+            PaneHeader(title: "#\(issue.number)", subtitle: repo + retry, buttons: [
                 HeaderButton(glyph: Glyph.symbol(0xE8C8), tip: "Copy the issue’s link", enabled: safeWebURL(issue.url)) { if safeWebURL(issue.url), let u = issue.url { Clipboard.copy(u) } },
                 HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the issue from GitHub again", enabled: !model.readingBoard && !model.readingDetail) { model.refresh() },
             ])
