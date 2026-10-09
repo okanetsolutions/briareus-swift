@@ -238,6 +238,8 @@ struct APIRoute: Sendable {
         // A task's history, an Admin token's: every session filed under it (review, fix and QA rounds) and what they
         // cost together.
         .init(name: "task", method: "GET", path: "tasks/{id}"),
+        // Feedback on a session's preview page: a comment on a marked spot, with the uploaded screenshot, sent to its agent.
+        .init(name: "preview_feedback", method: "POST", path: "sessions/{sessionId}/preview/feedback"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
