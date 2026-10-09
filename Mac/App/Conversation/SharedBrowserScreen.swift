@@ -42,9 +42,9 @@ final class BrowserDock: ObservableObject {
     }
 
     /// The main window has room for the column and is on show.
-    var dockable: Bool { !Navigator.shared.isNarrow && !(BrowserWindows.mainWindow?.isMiniaturized ?? false) }
+    var dockable: Bool { !Navigator.main.isNarrow && !(BrowserWindows.mainWindow?.isMiniaturized ?? false) }
     /// Whether the session's conversation is the page in the detail, which the browser can dock beside.
-    static func conversationShown(_ id: String) -> Bool { Navigator.shared.root.id == "conversation:\(id)" }
+    static func conversationShown(_ id: String) -> Bool { Navigator.main.root.id == "conversation:\(id)" }
 
     /// The browser's width beside the detail in a window `total` wide, the divider not counted (main.c browser_split).
     nonisolated static func columnWidth(total: CGFloat, expanded: Bool, width: CGFloat?) -> CGFloat {
@@ -77,7 +77,9 @@ final class BrowserWindows: NSObject, NSWindowDelegate {
 
     /// The main window: the one that is neither a browser's nor a panel.
     static var mainWindow: NSWindow? {
-        let others = NSApp.windows.filter { w in !(w is NSPanel) && !shared.windows.values.contains { $0 === w } && w.contentView != nil }
+        let others = NSApp.windows.filter { w in
+            !(w is NSPanel) && !shared.windows.values.contains { $0 === w } && !DetachedWindows.shared.owns(w) && w.contentView != nil
+        }
         return others.first { $0.identifier?.rawValue.hasPrefix("main") == true } ?? others.first
     }
 
@@ -101,7 +103,7 @@ final class BrowserWindows: NSObject, NSWindowDelegate {
         w.minSize = NSSize(width: 420, height: 320)
         w.title = "Browser"
         w.contentView = NSHostingView(rootView: SharedBrowserScreen(session: session, detached: true)
-            .environmentObject(Store.shared).environmentObject(Navigator.shared)
+            .environmentObject(Store.shared).environmentObject(Navigator.main)
             .foregroundStyle(Theme.ink))
         w.delegate = self
         if let at, at.width > 0, at.height > 0 {
@@ -629,7 +631,7 @@ struct SharedBrowserScreen: View {
     @StateObject private var model: SharedBrowserModel
     @ObservedObject private var store = Store.shared
     @ObservedObject private var dock = BrowserDock.shared
-    @ObservedObject private var navigator = Navigator.shared
+    @ObservedObject private var navigator = Navigator.main
     @FocusState private var addressFocused: Bool
 
     init(session: JSON, detached: Bool, visible: Bool = true) {
@@ -784,7 +786,7 @@ struct SharedBrowserScreen: View {
     /// ⋯: the tabs the strip may have no room for, the tab in view's reload and close, switching the browser on or off,
     /// and where it is shown.
     private func more() {
-        enum Choice { case tab(String), reload, closeTab, start, stop, popOut, dock }
+        enum Choice { case tab(String), reload, closeTab, screenshot, start, stop, popOut, dock }
         let drive = model.canDrive && state.running
         var items: [PopupMenu.Item] = [], choices: [Choice?] = []
         func add(_ title: String, _ c: Choice, enabled: Bool = true, checked: Bool = false) {
@@ -797,6 +799,7 @@ struct SharedBrowserScreen: View {
         }
         add("Reload", .reload, enabled: drive)
         add("Close this tab", .closeTab, enabled: drive && state.activeTab != nil)
+        if store.supports("browser_screenshot") { add("Screenshot of this tab", .screenshot, enabled: state.running) }
         let busy = model.starting || model.stopping
         if store.canManage && state.on && store.supports("browser_off") {
             separator(); add("Switch the browser off\u{2026}", .stop, enabled: !busy)
@@ -810,6 +813,7 @@ struct SharedBrowserScreen: View {
         case .tab(let id): model.tab(id)
         case .reload: model.send(["type": "reload"])
         case .closeTab: model.closeActiveTab()
+        case .screenshot: Task { await BrowserScreenshot.open(sessionID: model.sessionID) }
         case .start: model.switchBrowser(on: true)
         case .stop: model.switchBrowser(on: false)
         case .popOut: popOut()
@@ -960,5 +964,26 @@ private struct TabStrip: Layout {
             x += w + gap
         }
         if plus { subviews[n].place(at: CGPoint(x: bounds.minX + x + 2, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(width: 28, height: 28)) }
+    }
+}
+
+/// The tab in view as a PNG, as the server takes it (core sessions.browserScreenshot): saved in the caches and opened in
+/// the Mac's viewer, to keep or share.
+@MainActor
+enum BrowserScreenshot {
+    static func open(sessionID: String) async {
+        guard let client = Store.shared.client else { return }
+        let url = client.address.baseURL + "sessions/\(APIClient.encode(sessionID))/browser/screenshot"
+        do {
+            guard let data = try await client.serverFile(url, under: "sessions/", limit: 50 * 1024 * 1024) else { return }
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("briareus-screenshots", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+            let file = dir.appendingPathComponent("browser-\(sessionID.prefix(8))-\(stamp).png")
+            try data.write(to: file)
+            NSWorkspace.shared.open(file)
+        } catch {
+            Dialogs.alert("The screenshot could not be taken", (error as? APIError)?.status == 409 ? "The browser is not running." : errorText(error))
+        }
     }
 }

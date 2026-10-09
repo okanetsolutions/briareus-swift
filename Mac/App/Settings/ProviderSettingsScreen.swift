@@ -514,7 +514,7 @@ struct ProviderSettingsScreen: View {
 }
 
 /// A quota window: its label and how much is used on the right, over a 5px track filled green, amber past 70% and red past 90%.
-private struct QuotaBar: View {
+struct QuotaBar: View {
     var window: (label: String, right: String, pct: Double)
     var body: some View {
         let pct = min(max(window.pct, 0), 100)
