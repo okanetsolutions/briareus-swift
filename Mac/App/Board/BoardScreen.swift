@@ -16,6 +16,8 @@ final class BoardModel: ObservableObject {
     @Published var tab = BoardTab.pulls
     @Published var runs: [Session] = []
     @Published var syncedAt: Date?
+    /// Bumped when a read is held by the cooldown, so the board reads once it is over.
+    @Published private(set) var cooldownTick = 0
     @Published var pullFilter = BoardFilter()
     @Published var issueFilter = BoardFilter()
     @Published var loaded = false
@@ -123,16 +125,19 @@ final class BoardModel: ObservableObject {
         readGen += 1
         let gen = readGen
         reading = true
-        var args: JSON = ["repo": .string(repo)]
-        if fresh { args["fresh"] = "1" }
-        let r = await boardCall("pulls", args)
+        // While the server's cooldown runs the list is not read; the board waits for it (cooldownTick) with what it shows.
+        guard let r = await PullsGate.read(repo, fresh: fresh) else {
+            if gen == readGen { reading = false; cooldownTick += 1 }
+            return nil
+        }
         guard gen == readGen else { return nil }
         reading = false
         switch r {
         case .success(let v):
             show(v, saved: false)
             error = nil
-            syncedAt = Date()
+            // When the server read GitHub, not when its copy reached the app.
+            syncedAt = boardDateParse(v["syncedAt"].string) ?? Date()
             Store.shared.cache.store(v, "pulls:\(repo)")
             issueStatus.next()
             return nil
@@ -304,6 +309,7 @@ struct BoardScreen: View {
     @ObservedObject private var projects = ProjectsModel.shared
     @ObservedObject private var meeting = Meeting.shared
     @State private var remoteRevision = 0
+    @State private var cooldownRevision = 0
 
     init(repo: String) {
         self.repo = repo
@@ -371,6 +377,15 @@ struct BoardScreen: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in model.refresh() }
+        // A list held by the server's cooldown is read as soon as it is over.
+        .task(id: model.cooldownTick) {
+            guard let until = PullsGate.deadline(repo) else { return }
+            try? await Task.sleep(nanoseconds: UInt64(max(until.timeIntervalSinceNow, 0) * 1_000_000_000) + 200_000_000)
+            if !Task.isCancelled { await model.load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .pullsCooldownChanged)) { note in
+            if note.userInfo?["repo"] as? String == repo { cooldownRevision += 1 }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .remoteSessionsChanged)) { _ in remoteRevision += 1 }
         .onReceive(NotificationCenter.default.publisher(for: .sessionForgotten)) { note in
             if let id = note.userInfo?["id"] as? String { model.runs.removeAll { $0.id == id } }
@@ -384,9 +399,15 @@ struct BoardScreen: View {
         var sub = repo
         if model.loaded { sub += " · \(model.pulls.count) open pull request\(model.pulls.count == 1 ? "" : "s")" }
         if let at = model.syncedAt { sub += " · synced \(formatRelative(at))" }
+        // While GitHub's allowance is spent, when the list is read again; ⟳ waits for it too.
+        _ = cooldownRevision
+        let retry = PullsGate.deadline(repo)
+        let retryText = retry.map { " · retry after \(formatEventTime($0))" } ?? ""
+        sub += retryText
         var status: String?
         var buttons: [HeaderButton] = []
-        let refresh = HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the pull requests from GitHub again", enabled: !model.reading) { model.refresh() }
+        let refresh = HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Refresh the list (the server may return cached data)",
+                                   enabled: !model.reading && retry == nil) { model.refresh() }
         switch model.tab {
         case .ssh, .sftp:
             _ = remoteRevision
@@ -413,6 +434,7 @@ struct BoardScreen: View {
             sub = repo
             if model.loaded { sub += " · \(model.reviewPulls.count) waiting on \(model.reviewer ?? "you")" }
             if let at = model.syncedAt { sub += " · synced \(formatRelative(at))" }
+            sub += retryText
             buttons.append(HeaderButton(glyph: "person.crop.circle", label: BoardEdits.login.map { "Reviewing as \($0)" } ?? "Set my GitHub login…",
                                         tip: "The GitHub login whose reviews the Review List shows") {
                 model.dialogOpen = true

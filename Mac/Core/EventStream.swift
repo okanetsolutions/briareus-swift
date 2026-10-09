@@ -6,7 +6,8 @@ extension APIClient {
     /// Reads a GET call's event stream, handing each event to `emit` as it completes (on a queue of the stream's own,
     /// one event at a time), until the server ends it (returns), or it fails or the task is cancelled (throws, with
     /// `.cancelled` for the latter).
-    func stream(_ name: String, _ arguments: JSON = [:], emit: @escaping @Sendable (_ event: String, _ data: String) -> Void) async throws {
+    func stream(_ name: String, _ arguments: JSON = [:], opened: (@Sendable () -> Void)? = nil,
+                emit: @escaping @Sendable (_ event: String, _ data: String) -> Void) async throws {
         guard let route = APIRoute.named(name), route.method == "GET" else { throw APIError(.http, status: 400, message: "Unknown call") }
         var (path, rest) = try APIClient.resolve(route, arguments)
         var sep = "?"
@@ -22,7 +23,7 @@ extension APIClient {
         request.setValue(authorization, forHTTPHeaderField: "Authorization")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-        try await EventStreamReader(emit: emit).run(request)
+        try await EventStreamReader(emit: emit, opened: opened).run(request)
     }
 }
 
@@ -40,7 +41,9 @@ private final class EventStreamReader: NSObject, URLSessionDataDelegate, @unchec
     private var retryAfter: String?
     private var refusal = Data()
 
-    init(emit: @escaping @Sendable (String, String) -> Void) { self.emit = emit }
+    /// Called once the server answers 200 with the stream, before any event.
+    private let opened: (@Sendable () -> Void)?
+    init(emit: @escaping @Sendable (String, String) -> Void, opened: (@Sendable () -> Void)? = nil) { self.emit = emit; self.opened = opened }
 
     func run(_ request: URLRequest) async throws {
         try await withTaskCancellationHandler {
@@ -92,6 +95,7 @@ private final class EventStreamReader: NSObject, URLSessionDataDelegate, @unchec
             status = http.statusCode
             contentType = http.value(forHTTPHeaderField: "Content-Type")
             retryAfter = http.value(forHTTPHeaderField: "Retry-After")
+            if status >= 200 && status < 300 { opened?() }
         }
         completionHandler(.allow)
     }

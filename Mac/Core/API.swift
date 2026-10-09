@@ -153,6 +153,10 @@ struct APIRoute: Sendable {
         .init(name: "projects", method: "GET", path: "projects"),
         .init(name: "branches", method: "GET", path: "branches"),
         .init(name: "runtimes", method: "GET", path: "runtimes"),
+        // The providers sessions start on, with every account's login and quota (`fresh` reads them again).
+        .init(name: "providers", method: "GET", path: "providers"),
+        // Whether the server can transcribe voice notes.
+        .init(name: "transcribe_status", method: "GET", path: "transcribe"),
         .init(name: "usage", method: "GET", path: "usage"),
         .init(name: "usage_all", method: "GET", path: "usage/all"),   // every project's spend; a filter given as an array repeats
         .init(name: "actions", method: "GET", path: "actions"),
@@ -195,6 +199,8 @@ struct APIRoute: Sendable {
         .init(name: "review", method: "POST", path: "sessions", set: "review"),
         .init(name: "qa", method: "POST", path: "sessions", set: "qa"),
         .init(name: "session", method: "GET", path: "sessions/{sessionId}"),
+        // One session followed live (an event stream): transcript lines as they are written, and its record on change.
+        .init(name: "session_events", method: "GET", path: "sessions/{sessionId}/events"),
         .init(name: "rename", method: "PATCH", path: "sessions/{sessionId}"),
         .init(name: "delete", method: "DELETE", path: "sessions/{sessionId}"),
         .init(name: "message", method: "POST", path: "sessions/{sessionId}/messages"),
@@ -218,12 +224,20 @@ struct APIRoute: Sendable {
         .init(name: "browser_off", method: "DELETE", path: "sessions/{sessionId}/browser"),
         .init(name: "browser_input", method: "POST", path: "sessions/{sessionId}/browser/input"),
         .init(name: "browser_stream", method: "GET", path: "sessions/{sessionId}/browser/stream"),
+        // A PNG of the tab in view (read by BrowserScreenshot through APIClient.serverFile).
+        .init(name: "browser_screenshot", method: "GET", path: "sessions/{sessionId}/browser/screenshot"),
         // A session's webhook, for an admin token: its settings, URLs and keys, changed, and its keys replaced.
         .init(name: "session_webhook", method: "GET", path: "sessions/{sessionId}/webhook"),
         .init(name: "set_session_webhook", method: "PUT", path: "sessions/{sessionId}/webhook"),
         .init(name: "rotate_session_webhook", method: "POST", path: "sessions/{sessionId}/webhook/rotate"),
         // The Cloudflare Access service token the Run tab's browser sends to ▶ Run preview hosts; a manage token.
         .init(name: "preview_access", method: "GET", path: "preview/access"),
+        // What an interrupted session left in its workspace, and resuming it from that report (by its fingerprint).
+        .init(name: "session_recovery", method: "GET", path: "sessions/{sessionId}/recovery"),
+        .init(name: "resume_session", method: "POST", path: "sessions/{sessionId}/recovery"),
+        // A task's history, an Admin token's: every session filed under it (review, fix and QA rounds) and what they
+        // cost together.
+        .init(name: "task", method: "GET", path: "tasks/{id}"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
@@ -423,6 +437,16 @@ final class APIClient: @unchecked Sendable {
             if data!.count > APIClient.maxRequestBytes { throw APIError(.oversizedRequest) }
         }
         return try await send(method: method, url: address.baseURL + path, contentType: body != nil ? "application/json" : nil, body: data, timeout: timeout)
+    }
+
+    /// A file this server serves under its API that needs the token: its bytes, up to `limit`. Nil when `url` is not under
+    /// this server's API at `prefix`.
+    func serverFile(_ url: String, under prefix: String, limit: Int = 512 * 1024 * 1024) async throws -> Data? {
+        guard url.hasPrefix(address.baseURL + prefix), let u = URL(string: url) else { return nil }
+        let r = try await transport.send(method: "GET", url: u, headers: ["Authorization": "Bearer \(token)"], body: nil, timeout: 300)
+        if r.status < 200 || r.status >= 300 { throw APIError(.http, status: r.status, message: APIError.statusText(r.status)) }
+        if r.body.count > limit { throw APIError(.http, status: 413, message: "The file is too large to open here.") }
+        return r.body
     }
 
     /// `GET /`: the token's own record and what the server can do.

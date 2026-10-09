@@ -267,6 +267,44 @@ func sessionUsageRowsPresent(_ raw: JSON) -> Bool {
     return ["inputTokens", "outputTokens", "durationMs", "costUsd"].contains { u[$0].number != nil }
 }
 
+// MARK: - Recovery
+
+/// What an interrupted or failed session left in its workspace (`GET /sessions/{id}/recovery`): the branch it is on and
+/// the one it should be, its last commit, the files changed, whether it can be resumed and why (not), and the report's
+/// fingerprint, which a resume names so it resumes from what was read.
+struct RecoveryReport: Equatable, Sendable {
+    var status: String
+    var expectedBranch: String?
+    var branch: String?
+    var head: String?
+    var changes: String
+    var available: Bool
+    var canResume: Bool
+    var reason: String
+    var phase: String
+    var fingerprint: String
+
+    init?(_ j: JSON) {
+        guard j.isObject, let fingerprint = j["fingerprint"].string else { return nil }
+        status = j["status"].string ?? ""
+        expectedBranch = j["expectedBranch"].nonEmpty
+        branch = j["branch"].nonEmpty
+        head = j["head"].nonEmpty
+        changes = j["changes"].string ?? ""
+        available = j["available"].is(true)
+        canResume = j["canResume"].is(true) && !fingerprint.isEmpty
+        reason = j["reason"].string ?? ""
+        phase = j["phase"].string ?? "conversation"
+        self.fingerprint = fingerprint
+    }
+
+    /// Whether the conversation offers recovery: a session that stopped mid-work.
+    static func offered(status: String) -> Bool { status == "interrupted" || status == "failed" }
+    /// "Changed: 3 files" from `git status --short`, or nil without changes.
+    var changeCount: Int { changes.split(separator: "\n").filter { !$0.hasPrefix("…") && !$0.hasPrefix("(") }.count }
+    var shortHead: String? { head.map { String($0.prefix(8)) } }
+}
+
 // MARK: - Find in the conversation
 
 /// The texts a transcript block shows that find searches (the Windows client's doc_search over the rendered document),

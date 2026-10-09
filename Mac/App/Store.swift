@@ -145,6 +145,13 @@ final class Store: ObservableObject {
     /// Asks the server again before refusing voice notes: nil when they work, else what is missing.
     func voiceNotesOff() async -> String? {
         guard transcribes != true, let client else { return Discovery.voiceNotesOff(transcribes) }
+        // The lighter `GET /transcribe` where the server has it, else the whole discovery.
+        if supports("transcribe_status"), let v = try? await client.call("transcribe_status"), let on = v["available"].bool {
+            guard self.client === client else { return nil }
+            transcribes = on
+            if let device { saveConnection(Connection(device: device, routes: routes, transcribe: on)) }
+            return Discovery.voiceNotesOff(on)
+        }
         do {
             let d = try await client.discovery()
             guard self.client === client else { return nil }
