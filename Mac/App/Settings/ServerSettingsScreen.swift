@@ -187,6 +187,8 @@ final class TemplatesModel: ObservableObject {
     @Published var selected: String?
     @Published private(set) var error: String?
     @Published private(set) var saving = false
+    /// Set once the server's templates have arrived; until then `values` is empty and saving would wipe every override.
+    @Published private(set) var loaded = false
 
     func load() async {
         switch await boardCall("settings_templates") {
@@ -197,7 +199,7 @@ final class TemplatesModel: ObservableObject {
             var map: [String: String] = [:]
             let row = v["templates"].items.first?["values"] ?? [:]
             for k in row.keys { if let s = row[k].string { map[k] = s } }
-            saved = map; values = map
+            saved = map; values = map; loaded = true
             if selected == nil { selected = catalog.first?["id"].string }
             error = nil
         }
@@ -207,7 +209,7 @@ final class TemplatesModel: ObservableObject {
         Binding(get: { self.values[id] ?? "" }, set: { self.values[id] = $0 })
     }
     func save() {
-        guard Store.shared.supports("set_templates"), !saving else { return }
+        guard loaded, dirty, Store.shared.supports("set_templates"), !saving else { return }
         var body: [String: JSON] = [:]
         for (k, v) in values where !v.cTrimmed.isEmpty { body[k] = .string(v) }
         saving = true
@@ -227,7 +229,7 @@ struct TemplatesSettingsScreen: View {
         VStack(spacing: 0) {
             PaneHeader(title: "Prompt templates", subtitle: "What the server briefs its agents with; empty uses the built-in text", buttons: [
                 HeaderButton(glyph: Glyph.symbol(0xE74E), label: model.saving ? "Saving…" : "Save", tip: "Save the templates (⌘S)",
-                             enabled: model.dirty && !model.saving && store.supports("set_templates"), prominent: true) { model.save() },
+                             enabled: model.loaded && model.dirty && !model.saving && store.supports("set_templates"), prominent: true) { model.save() },
             ])
             if let e = model.error { NoticeBox(message: e).padding(Theme.paneMargin) }
             HStack(spacing: 0) {
