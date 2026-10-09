@@ -667,8 +667,7 @@ struct SharedBrowserScreen: View {
         .onChange(of: addressFocused) { _, focused in
             model.addressFocused = focused
             if focused {
-                // A click into the field takes the whole address, as a browser's does, so typing replaces it.
-                DispatchQueue.main.async { NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil) }
+                selectAllOnMouseUp { addressFocused }
             } else {
                 model.syncAddress()
             }

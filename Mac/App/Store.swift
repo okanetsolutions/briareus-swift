@@ -181,6 +181,11 @@ final class Store: ObservableObject {
         guard let client, canTranscribe else { throw APIError.refused("This token cannot transcribe voice notes.") }
         return try await finish(client) { try await client.transcribe(audio, contentType: contentType) }
     }
+    /// Downloads what a file-answering GET sends (`repo_archive`) to a temporary file the caller owns.
+    func download(_ operation: String, _ arguments: JSON = [:], timeout: TimeInterval) async throws -> URL {
+        guard let client, supports(operation) else { throw APIError.refused("This token cannot perform that action.") }
+        return try await finish(client) { try await client.download(operation, arguments, timeout: timeout) }
+    }
     /// Stores a file on the server for the next message; the answer is the id to send.
     func upload(name: String, bytes: Data) async throws -> String {
         guard let client, canManage, supports("upload") else { throw APIError.refused("This server does not take files with a message.") }
