@@ -33,7 +33,7 @@ enum SidebarCommon {
         case .newSession: nav.show(.newSession(repo: newSessionRepo))
         case .usage: nav.show(.usage)
         case .whatsapp: nav.show(.webApp(.whatsapp))
-        case .slack: nav.show(.webApp(.slack))
+        case .slack: nav.show(SlackInboxModel.offered ? .slackInbox : .webApp(.slack))
         case .mail: nav.show(MailInboxModel.offered ? .mail : .mailSettings(id: nil))
         case .findings: nav.show(.findings)
         }

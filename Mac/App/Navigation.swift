@@ -26,6 +26,8 @@ enum Screen: Hashable, Identifiable {
     /// What every project spent over a window.
     case usage
     case webApp(WebApp)
+    /// The operator's Slack inbox, read through the server.
+    case slackInbox
     /// The settings page's forms: `row` is the server's record (nil with `defaults` for a new one).
     case projectSettings(row: JSON?, defaults: JSON?)
     case providerSettings(row: JSON?, defaults: JSON?)
@@ -34,6 +36,7 @@ enum Screen: Hashable, Identifiable {
     case forgeAccountSettings(row: JSON?, defaults: JSON?)
     case slackWorkspaceSettings(row: JSON?, defaults: JSON?)
     case mcpServerSettings(row: JSON?, defaults: JSON?)
+    case envoyerAccountSettings(row: JSON?, defaults: JSON?)
     /// This Mac's meeting assistant settings.
     case meetingSettings
     /// A mailbox the server keeps synced, or (nil) adding one.
@@ -58,6 +61,7 @@ enum Screen: Hashable, Identifiable {
         case .findings: return "findings"
         case .usage: return "usage"
         case .webApp(let app): return app.rawValue
+        case .slackInbox: return "slack-inbox"
         case .projectSettings(let row, _): return "project-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .dbServerSettings(let row, _): return "db-server:\(row?["id"].int.map(String.init) ?? "new")"
@@ -65,6 +69,7 @@ enum Screen: Hashable, Identifiable {
         case .forgeAccountSettings(let row, _): return "forge-account:\(row?["id"].int.map(String.init) ?? "new")"
         case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
         case .mcpServerSettings(let row, _): return "mcp-server:\(row?["id"].int.map(String.init) ?? "new")"
+        case .envoyerAccountSettings(let row, _): return "envoyer-account:\(row?["id"].int.map(String.init) ?? "new")"
         case .meetingSettings: return "settings-meeting"
         case .mailSettings(let id): return id.map { "mail-settings:\($0)" } ?? "mail-settings"
         case .mail: return "mail"

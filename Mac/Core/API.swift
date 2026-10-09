@@ -344,6 +344,30 @@ struct APIRoute: Sendable {
         .init(name: "delete_mcp_server", method: "DELETE", path: "settings/mcp/servers/{id}"),
         .init(name: "connect_mcp_server", method: "POST", path: "settings/mcp/servers/{id}/connect"),
         .init(name: "finish_mcp_sign_in", method: "POST", path: "settings/mcp/servers/{id}/finish-sign-in"),
+        // Laravel Envoyer accounts, an Admin token's, each with its token and the one project that may use it; and that
+        // project's view of them: its Envoyer projects, servers and deployments, and a deployment started (`repo` names it).
+        .init(name: "settings_envoyer_accounts", method: "GET", path: "settings/envoyer/accounts"),
+        .init(name: "create_envoyer_account", method: "POST", path: "settings/envoyer/accounts"),
+        .init(name: "update_envoyer_account", method: "PUT", path: "settings/envoyer/accounts/{id}"),
+        .init(name: "delete_envoyer_account", method: "DELETE", path: "settings/envoyer/accounts/{id}"),
+        .init(name: "envoyer_accounts", method: "GET", path: "envoyer/accounts"),
+        .init(name: "envoyer_projects", method: "GET", path: "envoyer/accounts/{id}/projects"),
+        .init(name: "envoyer_servers", method: "GET", path: "envoyer/accounts/{id}/projects/{project}/servers"),
+        .init(name: "envoyer_deployments", method: "GET", path: "envoyer/accounts/{id}/projects/{project}/deployments"),
+        .init(name: "envoyer_deploy", method: "POST", path: "envoyer/accounts/{id}/projects/{project}/deployments"),
+        // The operator's Slack inbox, an Admin token's: the workspaces, a workspace's conversations and people, a
+        // conversation's history and threads, a message sent as the operator, a direct message opened, a read mark.
+        .init(name: "slack_workspaces", method: "GET", path: "slack/workspaces"),
+        .init(name: "slack_conversations", method: "GET", path: "slack/workspaces/{id}/conversations"),
+        .init(name: "slack_conversation", method: "GET", path: "slack/workspaces/{id}/conversations/{channel}"),
+        .init(name: "slack_people", method: "GET", path: "slack/workspaces/{id}/people"),
+        .init(name: "slack_open_dm", method: "POST", path: "slack/workspaces/{id}/direct-messages"),
+        .init(name: "slack_history", method: "GET", path: "slack/workspaces/{id}/conversations/{channel}/messages"),
+        .init(name: "slack_send", method: "POST", path: "slack/workspaces/{id}/conversations/{channel}/messages"),
+        .init(name: "slack_thread", method: "GET", path: "slack/workspaces/{id}/conversations/{channel}/threads/{ts}"),
+        .init(name: "slack_read", method: "POST", path: "slack/workspaces/{id}/conversations/{channel}/read"),
+        // New Slack messages, edits, deletions and read marks as they happen (an event stream; needs the signing secret).
+        .init(name: "slack_events", method: "GET", path: "slack/workspaces/{id}/events"),
         .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
         .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
         .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),

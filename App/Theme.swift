@@ -176,6 +176,8 @@ private struct MarkdownTable: View {
                 }
                 .overlay(Rectangle().strokeBorder(Theme.border, lineWidth: 1))
             }
+            // A sideways ScrollView doesn't take its content's height on its own; without this the rows below the first are clipped
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

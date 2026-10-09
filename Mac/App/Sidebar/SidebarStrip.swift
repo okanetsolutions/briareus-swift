@@ -25,7 +25,7 @@ struct SidebarStrip: View {
             .help("New session")
             StripButton(active: selected == "whatsapp", action: { action(.whatsapp) }) { WhatsAppMark() }
                 .frame(width: Self.iconWidth).help("WhatsApp")
-            StripButton(active: selected == "slack", action: { action(.slack) }) { SlackMark() }
+            StripButton(active: selected == "slack" || selected == "slack-inbox", action: { action(.slack) }) { SlackMark() }
                 .frame(width: Self.iconWidth).help("Slack")
             // The synced mail, on a server that has it for an Admin token.
             if MailInboxModel.offered || MailSettingsModel.offered {
