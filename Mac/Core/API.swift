@@ -264,6 +264,15 @@ struct APIRoute: Sendable {
         .init(name: "whatsapp_read", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/read"),
         // An attachment's bytes, through the server (fetched by APIClient.serverFile, with the token).
         .init(name: "whatsapp_media", method: "GET", path: "whatsapp/accounts/{id}/conversations/{chat}/messages/{message}/media"),
+        // A project's memories, what its agents remember between sessions; and for an Admin token their health (what
+        // needs verifying, what looks duplicated), verify, archive or restore, and a merge of two.
+        .init(name: "memories", method: "GET", path: "memories"),
+        .init(name: "create_memory", method: "POST", path: "memories"),
+        .init(name: "update_memory", method: "PUT", path: "memories/{id}"),
+        .init(name: "delete_memory", method: "DELETE", path: "memories/{id}"),
+        .init(name: "memories_health", method: "GET", path: "memories/health"),
+        .init(name: "memory_policy", method: "POST", path: "memories/{id}/policy"),
+        .init(name: "memories_merge", method: "POST", path: "memories/merge"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
