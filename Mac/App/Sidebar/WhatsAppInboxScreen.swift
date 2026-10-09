@@ -197,7 +197,8 @@ final class WhatsAppInboxModel: ObservableObject {
     }
     func recover() { uncertain = false; sendError = nil; Task { await loadNewest() } }
 
-    /// An attachment, downloaded through the server (WAHA's own storage) and opened with its app.
+    /// An attachment, downloaded through the server (WAHA's own storage), quarantined, and opened with its app when it is a
+    /// safe kind; anything else is shown in Finder.
     @Published private(set) var downloading: String?
     func openMedia(_ m: WhatsAppMessage) {
         guard let id = chat, downloading == nil, let client = Store.shared.client else { return }
@@ -207,13 +208,9 @@ final class WhatsAppInboxModel: ObservableObject {
             defer { downloading = nil }
             do {
                 guard let data = try await client.serverFile(url, under: "whatsapp/accounts/", limit: 100 * 1024 * 1024) else { return }
-                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("briareus-whatsapp", isDirectory: true)
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                let safe = (m.mediaName ?? "attachment").replacingOccurrences(of: "/", with: "_")
+                let safe = ReceivedFile.safeName(m.mediaName)
                 let ext = (safe as NSString).pathExtension.isEmpty ? WhatsAppText.fileExtension(m.mediaType) : ""
-                let file = dir.appendingPathComponent(String(abs(m.id.hashValue)) + "-" + safe + ext)
-                try data.write(to: file)
-                NSWorkspace.shared.open(file)
+                try openReceivedFile(data, named: safe + ext, prefix: String(abs(m.id.hashValue)), in: "briareus-whatsapp")
             } catch {
                 historyError = errorText(error)
             }
