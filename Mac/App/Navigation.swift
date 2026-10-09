@@ -28,6 +28,8 @@ enum Screen: Hashable, Identifiable {
     case webApp(WebApp)
     /// The operator's WhatsApp, read through the server's WAHA.
     case whatsappInbox
+    /// The operator's Slack inbox, read through the server.
+    case slackInbox
     /// The settings page's forms: `row` is the server's record (nil with `defaults` for a new one).
     case projectSettings(row: JSON?, defaults: JSON?)
     case providerSettings(row: JSON?, defaults: JSON?)
@@ -62,6 +64,7 @@ enum Screen: Hashable, Identifiable {
         case .usage: return "usage"
         case .webApp(let app): return app.rawValue
         case .whatsappInbox: return "whatsapp-inbox"
+        case .slackInbox: return "slack-inbox"
         case .projectSettings(let row, _): return "project-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .dbServerSettings(let row, _): return "db-server:\(row?["id"].int.map(String.init) ?? "new")"
