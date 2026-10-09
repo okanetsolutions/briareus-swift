@@ -201,6 +201,8 @@ struct APIRoute: Sendable {
         .init(name: "session", method: "GET", path: "sessions/{sessionId}"),
         // One session followed live (an event stream): transcript lines as they are written, and its record on change.
         .init(name: "session_events", method: "GET", path: "sessions/{sessionId}/events"),
+        // Every session of the token's projects followed on one connection (an event stream).
+        .init(name: "events", method: "GET", path: "events"),
         .init(name: "rename", method: "PATCH", path: "sessions/{sessionId}"),
         .init(name: "delete", method: "DELETE", path: "sessions/{sessionId}"),
         .init(name: "message", method: "POST", path: "sessions/{sessionId}/messages"),
