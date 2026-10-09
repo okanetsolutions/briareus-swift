@@ -242,6 +242,8 @@ struct APIRoute: Sendable {
         .init(name: "task", method: "GET", path: "tasks/{id}"),
         // Feedback on a session's preview page: a comment on a marked spot, with the uploaded screenshot, sent to its agent.
         .init(name: "preview_feedback", method: "POST", path: "sessions/{sessionId}/preview/feedback"),
+        // A video a test run recorded, as its links name it; read with the token by openWebURL (ServerVideo).
+        .init(name: "video", method: "GET", path: "videos/{file}"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
