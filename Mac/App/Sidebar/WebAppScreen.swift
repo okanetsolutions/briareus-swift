@@ -43,7 +43,7 @@ struct WebAppScreen: View {
             VStack(spacing: 0) {
                 PaneHeader(title: app.name, subtitle: app.host, buttons: [
                     HeaderButton(glyph: Glyph.symbol(0xE72C), tip: app.reloadTip, enabled: browser.ready) { browser.reload() },
-                    HeaderButton(glyph: Glyph.symbol(0xE8A7), tip: "Open in your browser") { openWebURL(app.url) },
+                    HeaderButton(glyph: "globe", tip: "Open in your browser") { openWebURL(app.url) },
                 ])
                 page
             }

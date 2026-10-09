@@ -942,6 +942,7 @@ private struct PullSidebar: View {
 /// in it until the page is up.
 private struct RunArea: View {
     @ObservedObject var model: PullModel
+    @StateObject private var feedback = PreviewFeedback()
 
     var body: some View {
         let browser = model.browser
@@ -951,10 +952,11 @@ private struct RunArea: View {
             if page, let e = model.serveError {
                 Text(e).font(Theme.footnote).foregroundStyle(Theme.danger).lineLimit(1).truncationMode(.tail).padding(.horizontal, 4).padding(.bottom, 10)
             }
-            if model.runURL != nil && !model.runBusy { RunBrowserBar(browser: browser, url: model.runURL) }
+            if model.runURL != nil && !model.runBusy { RunBrowserBar(browser: browser, url: model.runURL, session: model.runSession, feedback: feedback) }
             ZStack(alignment: .topLeading) {
                 if let browser, page {
                     BrowserView(browser: browser).opacity(browser.ready ? 1 : 0)
+                    if let s = model.runSession { PreviewFeedbackLayer(feedback: feedback, browser: browser, session: s) }
                 }
                 if !(page && browser?.ready == true) { status }
             }

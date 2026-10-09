@@ -53,13 +53,20 @@ func listOf(_ answer: JSON, _ key: String) -> JSON { answer.isArray ? answer : a
 struct Project: Equatable, Sendable {
     var repo: String
     var label: String?
+    /// Settings name a local checkout of it, which a session can work in instead of a fresh worktree.
+    var hasLocal = false
 
-    init(repo: String, label: String? = nil) { self.repo = repo; self.label = label }
+    init(repo: String, label: String? = nil, hasLocal: Bool = false) { self.repo = repo; self.label = label; self.hasLocal = hasLocal }
     init?(_ j: JSON) {
         guard let repo = j["repo"].string else { return nil }
         self.repo = repo; label = j["label"].string
+        hasLocal = j["hasLocal"].is(true)
     }
-    var json: JSON { ["repo": .string(repo), "label": .string(orNull: label)] }
+    var json: JSON {
+        var out: JSON = ["repo": .string(repo), "label": .string(orNull: label)]
+        if hasLocal { out["hasLocal"] = true }
+        return out
+    }
     /// The label when it has one, else the repository name.
     var title: String { (label ?? "").isEmpty ? repo : label! }
 
@@ -325,4 +332,48 @@ private func daysFromCivil(_ year: Int, _ m: Int, _ d: Int) -> Int {
     let doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
     return era * 146097 + doe - 719468
+}
+
+// MARK: - New sessions
+
+/// Where a new session works (the Windows client's workspace chip): a fresh worktree with its own database, the project's
+/// own local checkout, or an orchestrator that plans and coordinates worker sessions and takes no branch.
+enum WorkspaceMode: Equatable, Sendable, CaseIterable {
+    case worktree, local, orchestrator
+
+    var chip: String {
+        switch self {
+        case .worktree: return "\u{2317} Worktree"
+        case .local: return "\u{2302} Local"
+        case .orchestrator: return "\u{1F9ED} Orchestrator"
+        }
+    }
+    /// The workspace menu's line; Local says why it cannot be picked when the project has no local checkout.
+    func menuTitle(hasLocal: Bool) -> String {
+        switch self {
+        case .worktree: return "\u{2317} Worktree: a fresh clone and database"
+        case .local: return hasLocal ? "\u{2302} Local: the project's own checkout" : "\u{2302} Local: no local checkout set in Settings"
+        case .orchestrator: return "\u{1F9ED} Orchestrator: plan and coordinate workers"
+        }
+    }
+    /// The welcome line around the project's name.
+    var welcome: (before: String, after: String) {
+        switch self {
+        case .worktree: return ("Start a session in a fresh ", " checkout with its own database.")
+        case .local: return ("Start a session in ", "'s own local checkout and database.")
+        case .orchestrator: return ("Start an orchestrator for ", " to plan and coordinate worker sessions.")
+        }
+    }
+    /// The branch chip with none picked: something else in each mode.
+    func noBranchLabel(defaultBranch: String?) -> String { self == .local ? "Current branch" : "New branch off \(defaultBranch ?? "main")" }
+    /// `start_session`'s workspace arguments: an orchestrator takes no branch.
+    func arguments(branch: String?) -> JSON {
+        var out: JSON = [:]
+        if self == .orchestrator { out["orchestrator"] = true; return out }
+        if let branch { out["branch"] = .string(branch) }
+        if self == .local { out["local"] = true }
+        return out
+    }
+    /// Only a worktree session has a review loop of its own.
+    var hasReviewLoop: Bool { self == .worktree }
 }
