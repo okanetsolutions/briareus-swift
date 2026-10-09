@@ -35,6 +35,9 @@ struct Memory: Equatable, Sendable, Identifiable {
         revision = j["revision"].nonEmpty
     }
 
+    /// Whether the two hold the same editable fields: name, kind, description and text.
+    func sameText(_ o: Memory) -> Bool { name == o.name && type == o.type && description == o.description && body == o.body }
+
     static let types = ["project", "feedback", "user", "reference"]
     static func typeLabel(_ t: String) -> String {
         switch t {

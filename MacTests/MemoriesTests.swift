@@ -14,4 +14,12 @@ final class MemoriesTests: XCTestCase {
         XCTAssertTrue(MemoryLogic.validName("deploy-notes_2")); XCTAssertFalse(MemoryLogic.validName("a b")); XCTAssertFalse(MemoryLogic.validName(""))
         XCTAssertEqual(Memory.typeLabel("user"), "About you")
     }
+
+    func testANewerVersionIsToldApartByItsEditableFieldsOnly() {
+        let a = Memory(j(#"{"id":1,"name":"alpha","body":"old"}"#))!
+        var flagged = a; flagged.revision = "r2"; flagged.needsVerification = true
+        XCTAssertTrue(a.sameText(flagged))
+        var rewritten = a; rewritten.body = "new"
+        XCTAssertFalse(a.sameText(rewritten))
+    }
 }

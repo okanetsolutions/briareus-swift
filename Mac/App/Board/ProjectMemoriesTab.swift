@@ -19,10 +19,15 @@ final class ProjectMemoriesModel: ObservableObject {
     @Published var summary = ""
     @Published var text = ""
     @Published var editingNew = false
+    /// The version of the open memory the editor's fields were filled from, which `dirty` compares against, so a newer
+    /// version read meanwhile (a merge, a refresh, an agent rewriting it) is not mistaken for an edit.
+    @Published private(set) var base: Memory?
+    /// The open memory changed on the server while the editor held unsaved edits.
+    @Published private(set) var stale = false
     /// Whether the editor holds what is not saved: a new memory with anything typed, or fields that differ from the one open.
     var dirty: Bool {
         if editingNew { return !name.isEmpty || !summary.isEmpty || !text.isEmpty }
-        guard let m = current else { return false }
+        guard let m = base, selected == m.id else { return false }
         return name != m.name || type != m.type || summary != m.description || text != m.body
     }
 
@@ -45,18 +50,26 @@ final class ProjectMemoriesModel: ObservableObject {
             memories = MemoryLogic.merge(list: v, health: health)
             duplicates = MemoryLogic.duplicates(health).filter { d in d.ids.allSatisfy { id in memories.contains { $0.id == id && !$0.archived } } }
             loaded = true; error = nil
-            if let s = selected, !memories.contains(where: { $0.id == s }) { selected = nil }
+            if let s = selected, !memories.contains(where: { $0.id == s }) { selected = nil; base = nil; stale = false }
+            // A newer version of the one open: shown when nothing is typed, else the edits are kept and it says so.
+            if !editingNew, let m = current, let b = base, b.id == m.id {
+                if m.sameText(b) { base = m } else if dirty { stale = true } else { fill(m) }
+            }
         }
+    }
+    private func fill(_ m: Memory) {
+        selected = m.id; base = m; stale = false
+        name = m.name; type = m.type; summary = m.description; text = m.body
     }
 
     func select(_ m: Memory) {
         guard leave() else { return }
-        selected = m.id; editingNew = false
-        name = m.name; type = m.type; summary = m.description; text = m.body
+        editingNew = false
+        fill(m)
     }
     func startNew() {
         guard leave() else { return }
-        selected = nil; editingNew = true
+        selected = nil; base = nil; stale = false; editingNew = true
         name = ""; type = "project"; summary = ""; text = ""
     }
     private func leave() -> Bool { !dirty || confirmDiscard("The changes to this memory have not been saved.") }
@@ -71,14 +84,24 @@ final class ProjectMemoriesModel: ObservableObject {
         if !editingNew, let id = selected { body["id"] = JSON(id) }
         busy = true; error = nil
         Task {
+            // update_memory takes no revision, so read it again first: a newer version than the one edited is not overwritten unasked.
+            if !editingNew, let id = selected {
+                await load()
+                guard selected == id, let latest = current, let b = base else { busy = false; error = "It was deleted since it was opened."; return }
+                if !latest.sameText(b) {
+                    stale = true
+                    guard Dialogs.confirm("\(latest.name) changed since it was opened.", "Saving replaces the newer text with yours.",
+                                          continueLabel: "Overwrite", destructive: true) else { busy = false; return }
+                }
+            }
             let r = await boardCall(op, body)
             busy = false
             switch r {
             case .failure(let e): if e.kind != .cancelled { error = e.description }
             case .success(let v):
                 editingNew = false
+                if let m = Memory(v["memory"]) { fill(m) }
                 await load()
-                if let m = Memory(v["memory"]) { selected = m.id; name = m.name; type = m.type; summary = m.description; text = m.body }
             }
         }
     }
@@ -90,7 +113,7 @@ final class ProjectMemoriesModel: ObservableObject {
             let r = await boardCall("delete_memory", ["id": JSON(m.id)])
             busy = false
             if let e = r.error { error = e.description; return }
-            selected = nil
+            selected = nil; base = nil; stale = false
             await load()
         }
     }
@@ -213,6 +236,9 @@ struct ProjectMemoriesTab: View {
                         }
                         Button(model.busy ? "Saving…" : "Save") { model.save() }.dashButton(.prominent)
                             .disabled(model.busy || (!model.dirty && !model.editingNew)).keyboardShortcut("s", modifiers: .command)
+                    }
+                    if model.stale && model.dirty {
+                        Notice(message: "It changed since it was opened. Your edits are kept; saving replaces the newer text.")
                     }
                     if let m = model.current {
                         Text([m.jobID.map { "last written by session \($0.prefix(8))" } ?? "edited by hand",
