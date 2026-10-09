@@ -144,3 +144,12 @@ enum LastRuntime {
         load(defaults).flatMap(catalog.offered)
     }
 }
+
+/// The review loop as the new session screen last set it (the Windows client's `reviewLoop` setting): the next new session
+/// starts with it, on until first turned off.
+enum LastReviewLoop {
+    static let key = "reviewLoop"
+
+    static func load(_ defaults: UserDefaults = .standard) -> Bool { defaults.string(forKey: key) != "off" }
+    static func save(_ on: Bool, _ defaults: UserDefaults = .standard) { defaults.set(on ? "on" : "off", forKey: key) }
+}
