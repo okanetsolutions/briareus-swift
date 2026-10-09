@@ -32,6 +32,7 @@ struct SessionPanel: View {
     @MainActor
     static func wanted(_ session: Session) -> Bool {
         if session.pullNumber != nil && session.repo != nil && Store.shared.supports("pull") { return true }
+        if Store.shared.isAdmin && Store.shared.supports("task") { return true }
         let raw = session.raw
         return sessionContextSize(raw) != nil || sessionUsageRowsPresent(raw) || compactShown(raw) || autoCompactShown(raw) || instructionsShown(raw)
     }
@@ -50,6 +51,9 @@ struct SessionPanel: View {
             VStack(alignment: .leading, spacing: 0) {
                 if let pull { prSection(pull) }
                 usageSection(afterPR: pull != nil)
+                if store.isAdmin && store.supports("task"), let id = record.raw["id"].string {
+                    TaskHistorySection(sessionID: id).id(id).padding(.top, 14)
+                }
             }
             .padding(.horizontal, Theme.sidebarMargin)
             .padding(.vertical, 14)
@@ -427,6 +431,68 @@ private struct ContextBar: View {
             }
             .background(Theme.sunken)
             .clipShape(Capsule())
+        }
+    }
+}
+
+/// The task the session belongs to (core /tasks): every session filed under it, from the first to the review, fix and QA
+/// rounds, each opening its conversation while it still has one, and what they spent together. Read when opened.
+private struct TaskHistorySection: View {
+    var sessionID: String
+    @State private var open = false
+    @State private var task: JSON = .null
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button { open.toggle(); if open && task.isNull { Task { await load() } } } label: {
+                HStack(spacing: 4) {
+                    Text(open ? "▾" : "▸").font(Theme.caption)
+                    Text("Task history").font(Theme.caption)
+                    if let n = task["sessions"].array?.count, n > 1 { Text("(\(n))").font(Theme.caption) }
+                }
+                .foregroundStyle(Theme.muted)
+            }
+            .buttonStyle(.plain)
+            if open {
+                if let e = error { Text(e).font(Theme.caption).foregroundStyle(Theme.danger) }
+                let u = task["usage"]
+                if u.isObject {
+                    let cost = u["costUsd"].number.map { String(format: "$%.2f", $0) } ?? "unpriced"
+                    let tokens = u["totalTokens"].number.map { formatTokens($0) } ?? "0"
+                    Text("\(cost) · \(tokens) tok · \(u["turns"].truncatedInt ?? 0) turns\((u["estimatedTurns"].truncatedInt ?? 0) > 0 ? " · estimated" : "")")
+                        .font(Theme.caption).foregroundStyle(Theme.ink)
+                }
+                ForEach(Array(task["sessions"].items.enumerated()), id: \.offset) { _, s in row(s) }
+                if let url = task["prUrl"].string, safeWebURL(url) {
+                    Button("Pull request ↗") { openWebURL(url) }.buttonStyle(.plain).font(Theme.caption).foregroundStyle(Theme.accent)
+                }
+            }
+        }
+    }
+
+    private func row(_ s: JSON) -> some View {
+        let current = s["id"].string == sessionID
+        let available = s["conversationAvailable"].is(true)
+        return Button {
+            if available, !current, let id = s["id"].string { Navigator.shared.push(.conversation(id: id, session: nil)) }
+        } label: {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(s["title"].nonEmpty ?? s["id"].string ?? "Session").font(Theme.caption).foregroundStyle(current ? Theme.accent : available ? Theme.ink : Theme.muted)
+                    .lineLimit(2).multilineTextAlignment(.leading)
+                Text([s["activity"].string, s["status"].string, available ? nil : "deleted"].compactMap { $0 }.joined(separator: " · "))
+                    .font(Theme.caption2).foregroundStyle(Theme.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .disabled(!available || current)
+    }
+
+    private func load() async {
+        switch await boardCall("task", ["id": .string(sessionID)]) {
+        case .success(let v): task = v; error = nil
+        case .failure(let e): if e.kind != .cancelled { error = e.status == 404 ? "No history for this task yet." : e.description }
         }
     }
 }
