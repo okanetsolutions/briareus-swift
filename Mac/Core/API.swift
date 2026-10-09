@@ -235,6 +235,9 @@ struct APIRoute: Sendable {
         // What an interrupted session left in its workspace, and resuming it from that report (by its fingerprint).
         .init(name: "session_recovery", method: "GET", path: "sessions/{sessionId}/recovery"),
         .init(name: "resume_session", method: "POST", path: "sessions/{sessionId}/recovery"),
+        // A task's history, an Admin token's: every session filed under it (review, fix and QA rounds) and what they
+        // cost together.
+        .init(name: "task", method: "GET", path: "tasks/{id}"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
