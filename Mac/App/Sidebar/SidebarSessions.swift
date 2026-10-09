@@ -57,6 +57,13 @@ final class SidebarSessions: ObservableObject {
         }
     }
 
+    /// A record from the live stream: replaces the one on screen, or a new session goes first.
+    func upsert(_ raw: JSON) {
+        guard let s = Session(raw) else { return }
+        if let i = sessions.firstIndex(where: { $0.id == s.id }) { if sessions[i] != s { sessions[i] = s } }
+        else { sessions.insert(s, at: 0) }
+    }
+
     /// The conversation leaves the list on screen at once (sessions_forget).
     func drop(_ id: String) { sessions.removeAll { $0.id == id } }
 

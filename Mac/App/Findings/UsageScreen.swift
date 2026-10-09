@@ -158,6 +158,7 @@ struct UsageScreen: View {
     }
 
     @ViewBuilder private var content: some View {
+        if store.supports("providers") { ProviderQuotaSection().padding(.bottom, 18) }
         if !store.supports("usage_all") {
             Text(adminNeeded).font(Theme.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
             Color.clear.frame(height: 12)
@@ -692,6 +693,75 @@ private struct TableRowView: View {
                     Text(text).font(font.font).foregroundStyle(color).lineLimit(1).truncationMode(.tail)
                 }
             }
+        }
+    }
+}
+
+/// Every provider sessions start on (core /providers), each account with whom it is logged in as and its plan's quota
+/// windows, so a spent account shows before a session fails on it. Read on show and with Check again (past the server's
+/// cache).
+private struct ProviderQuotaSection: View {
+    @State private var providers: [JSON] = []
+    @State private var loading = false
+    @State private var error: String?
+    @State private var open = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button { open.toggle() } label: {
+                    Text("\(open ? "▾" : "▸") Accounts and quota").font(Theme.bodySemibold).foregroundStyle(Theme.ink)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Button(loading ? "Checking…" : "Check again") { Task { await load(fresh: true) } }.dashButton(.bordered).disabled(loading)
+            }
+            if open {
+                if let e = error { Notice(message: e) }
+                if providers.isEmpty && loading { LoadingNote(text: "Reading the providers' accounts…") }
+                ForEach(Array(providers.enumerated()), id: \.offset) { _, p in provider(p) }
+            }
+        }
+        .task { await load(fresh: false) }
+    }
+
+    private func provider(_ p: JSON) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle().fill(!p["available"].is(true) ? Theme.danger : p["auth"]["loggedIn"].is(false) ? Theme.warn : Theme.ok).frame(width: 7, height: 7)
+                Text(p["label"].nonEmpty ?? p["id"].string ?? "Provider").font(Theme.footnoteSemibold).foregroundStyle(Theme.ink)
+                if !p["available"].is(true) { Text("CLI not installed").font(Theme.caption).foregroundStyle(Theme.danger) }
+                Spacer()
+                if let m = p["defaultModel"].nonEmpty { Text(m).font(Theme.caption).foregroundStyle(Theme.muted) }
+            }
+            ForEach(Array(p["accounts"].items.enumerated()), id: \.offset) { _, a in account(a, several: p["accounts"].count > 1) }
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.raise))
+    }
+
+    private func account(_ a: JSON, several: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            let auth = a["auth"]
+            HStack(spacing: 6) {
+                if several { Text(a["label"].nonEmpty ?? a["id"].string ?? "").font(Theme.caption).foregroundStyle(Theme.ink) }
+                Text(auth["loggedIn"].is(false) ? "not logged in" : auth["detail"].nonEmpty ?? (auth["loggedIn"].is(true) ? "logged in" : ""))
+                    .font(Theme.caption).foregroundStyle(auth["loggedIn"].is(false) ? Theme.danger : Theme.muted).lineLimit(1)
+            }
+            let windows = a["usage"]["windows"].items
+            ForEach(Array(windows.enumerated()), id: \.offset) { _, w in QuotaBar(window: ProviderStatusText.window(w)) }
+            if windows.isEmpty, let e = a["usage"]["error"].nonEmpty { Text(e).font(Theme.caption).foregroundStyle(Theme.muted) }
+        }
+        .padding(.leading, 13)
+    }
+
+    private func load(fresh: Bool) async {
+        loading = true
+        let r = await boardCall("providers", fresh ? ["fresh": "1"] : [:])
+        loading = false
+        switch r {
+        case .success(let v): providers = v["providers"].items; error = nil
+        case .failure(let e): if e.kind != .cancelled { error = e.description }
         }
     }
 }

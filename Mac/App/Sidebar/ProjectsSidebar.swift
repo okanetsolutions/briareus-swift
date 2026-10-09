@@ -28,18 +28,19 @@ struct ProjectsSidebar: View {
 enum SidebarCommon {
     /// sidebar_common_action: the strip's own actions, the same on both screens; ＋ New session opens on `repo`.
     static func perform(_ action: StripAction, newSessionRepo: String?) {
-        let nav = Navigator.shared
+        let nav = Navigator.main
         switch action {
         case .newSession: nav.show(.newSession(repo: newSessionRepo))
         case .usage: nav.show(.usage)
         case .whatsapp: nav.show(.webApp(.whatsapp))
         case .slack: nav.show(.webApp(.slack))
+        case .mail: nav.show(MailInboxModel.offered ? .mail : .mailSettings(id: nil))
         case .findings: nav.show(.findings)
         }
     }
 
     /// The foot's ⚙: Settings take the sidebar's place, as the Windows client's settings page has a sidebar of its own.
-    static func openSettings() { Navigator.shared.sidebarMode = .settings }
+    static func openSettings() { Navigator.main.sidebarMode = .settings }
 
     static func signOut() {
         guard Dialogs.confirm("Sign out of this server?",
@@ -133,7 +134,7 @@ private struct SidebarNote: View {
 
 private struct SidebarProjectsScreen: View {
     @ObservedObject private var model = ProjectsModel.shared
-    @ObservedObject private var navigator = Navigator.shared
+    @ObservedObject private var navigator = Navigator.main
     @ObservedObject private var store = Store.shared
     @ObservedObject private var attention = AttentionModel.shared
 
@@ -175,7 +176,7 @@ private struct SidebarProjectsScreen: View {
 private struct SidebarSessionsScreen: View {
     @ObservedObject var model: SidebarSessions
     @ObservedObject private var projects = ProjectsModel.shared
-    @ObservedObject private var navigator = Navigator.shared
+    @ObservedObject private var navigator = Navigator.main
     @ObservedObject private var attention = AttentionModel.shared
     @State private var keyMonitor: Any?
 
@@ -208,7 +209,12 @@ private struct SidebarSessionsScreen: View {
             if !model.loaded { LoadingNote() }
             Color.clear.frame(height: 8)
         }
-        .task { await poll(every: 7) { await model.load() } }
+        // Every 7 seconds, or every minute while the live stream brings the changes.
+        .task { await poll(every: 7) { if SessionFeed.shared.live && model.loaded { try? await Task.sleep(nanoseconds: 53_000_000_000) }; return await model.load() } }
+        .onReceive(NotificationCenter.default.publisher(for: .sessionLive)) { note in
+            guard note.userInfo?["repo"] as? String == model.project.repo, let raw = note.userInfo?["session"] as? JSON else { return }
+            model.upsert(raw)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await model.load() } }
         .onAppear {
             // Esc leaves ☑ Select.
