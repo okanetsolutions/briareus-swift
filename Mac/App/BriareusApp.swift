@@ -148,7 +148,10 @@ struct MainWindow: View {
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.ink)
-        .onChange(of: store.connected) { _, connected in if !connected { navigator.reset() } }
+        .onChange(of: store.connected) { _, connected in
+            if !connected { navigator.reset(); SessionFeed.shared.stop() } else { SessionFeed.shared.start() }
+        }
+        .onAppear { if store.connected { SessionFeed.shared.start() } }
     }
 
     /// main.c layout(): the 268px sidebar, the main column and, beside a conversation, the 272px panel, the dividers drawn
@@ -301,6 +304,8 @@ struct ScreenView: View {
         case .forgeAccountSettings(let row, let defaults): ForgeAccountSettingsScreen(row: row, defaults: defaults)
         case .slackWorkspaceSettings(let row, let defaults): SlackWorkspaceSettingsScreen(row: row, defaults: defaults)
         case .meetingSettings: MeetingSettingsScreen()
+        case .mailSettings(let id): MailSettingsScreen(accountID: id).id(id ?? 0)
+        case .mail: MailScreen()
         case .webhook(let session): WebhookScreen(session: session)
         }
     }

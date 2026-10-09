@@ -201,6 +201,8 @@ struct APIRoute: Sendable {
         .init(name: "session", method: "GET", path: "sessions/{sessionId}"),
         // One session followed live (an event stream): transcript lines as they are written, and its record on change.
         .init(name: "session_events", method: "GET", path: "sessions/{sessionId}/events"),
+        // Every session of the token's projects followed on one connection (an event stream).
+        .init(name: "events", method: "GET", path: "events"),
         .init(name: "rename", method: "PATCH", path: "sessions/{sessionId}"),
         .init(name: "delete", method: "DELETE", path: "sessions/{sessionId}"),
         .init(name: "message", method: "POST", path: "sessions/{sessionId}/messages"),
@@ -238,6 +240,8 @@ struct APIRoute: Sendable {
         // A task's history, an Admin token's: every session filed under it (review, fix and QA rounds) and what they
         // cost together.
         .init(name: "task", method: "GET", path: "tasks/{id}"),
+        // Feedback on a session's preview page: a comment on a marked spot, with the uploaded screenshot, sent to its agent.
+        .init(name: "preview_feedback", method: "POST", path: "sessions/{sessionId}/preview/feedback"),
         // A video a test run recorded, as its links name it; read with the token by openWebURL (ServerVideo).
         .init(name: "video", method: "GET", path: "videos/{file}"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
@@ -280,6 +284,17 @@ struct APIRoute: Sendable {
         // The Slack workspaces sessions send messages through: a user token and signing secret (write-only), and the
         // projects it serves with their channels; admin as well.
         .init(name: "settings_slack_workspaces", method: "GET", path: "settings/slack/workspaces"),
+        // Mailboxes the server keeps synced from Gmail and Outlook, an Admin token's: connected with the provider's sign-in
+        // (started here, finished by the server or with the address it ended on), their settings, a sync, a disconnect.
+        .init(name: "settings_mail_accounts", method: "GET", path: "settings/mail/accounts"),
+        // The synced mail, newest first, a page at a time (`cursor`), and one message with its body; read only.
+        .init(name: "mail_messages", method: "GET", path: "mail/messages"),
+        .init(name: "mail_message", method: "GET", path: "mail/accounts/{account}/messages/{id}"),
+        .init(name: "connect_mail_account", method: "POST", path: "settings/mail/accounts/connect"),
+        .init(name: "finish_mail_account", method: "POST", path: "settings/mail/accounts/connect/finish"),
+        .init(name: "update_mail_account", method: "PUT", path: "settings/mail/accounts/{id}"),
+        .init(name: "delete_mail_account", method: "DELETE", path: "settings/mail/accounts/{id}"),
+        .init(name: "sync_mail_account", method: "POST", path: "settings/mail/accounts/{id}/sync"),
         .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
         .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
         .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),

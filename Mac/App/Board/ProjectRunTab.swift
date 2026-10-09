@@ -271,6 +271,7 @@ final class ProjectRunModel: ObservableObject {
 /// it until the page is up.
 struct ProjectRunTab: View {
     @ObservedObject var model: ProjectRunModel
+    @StateObject private var feedback = PreviewFeedback()
 
     var body: some View {
         let browser = model.browser
@@ -280,10 +281,11 @@ struct ProjectRunTab: View {
             if page, let e = model.serveError {
                 Text(e).font(Theme.footnote).foregroundStyle(Theme.danger).lineLimit(1).truncationMode(.tail).padding(.bottom, 10)
             }
-            if model.url != nil && !model.busy { RunBrowserBar(browser: browser, url: model.url) }
+            if model.url != nil && !model.busy { RunBrowserBar(browser: browser, url: model.url, session: model.session, feedback: feedback) }
             ZStack(alignment: .topLeading) {
                 if let browser, page {
                     BrowserView(browser: browser).opacity(browser.ready ? 1 : 0)
+                    if let s = model.session { PreviewFeedbackLayer(feedback: feedback, browser: browser, session: s) }
                 }
                 if !(page && browser?.ready == true) { status }
             }
