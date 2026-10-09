@@ -370,6 +370,17 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(c.offered(RuntimeChoice(providerId: 1, model: "gpt")))
         XCTAssertNil(c.offered(RuntimeChoice(providerId: 2)))
     }
+    func testLastReviewLoopIsOnUntilTurnedOff() {
+        let d = UserDefaults(suiteName: "LastReviewLoopTests")!
+        d.removePersistentDomain(forName: "LastReviewLoopTests")
+        XCTAssertTrue(LastReviewLoop.load(d))
+        LastReviewLoop.save(false, d)
+        XCTAssertFalse(LastReviewLoop.load(d))
+        LastReviewLoop.save(true, d)
+        XCTAssertTrue(LastReviewLoop.load(d))
+        d.removePersistentDomain(forName: "LastReviewLoopTests")
+    }
+
     func testLastRuntimeRoundTripsAndForgets() {
         let d = UserDefaults(suiteName: "LastRuntimeTests")!
         d.removePersistentDomain(forName: "LastRuntimeTests")

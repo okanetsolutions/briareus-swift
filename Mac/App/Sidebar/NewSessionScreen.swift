@@ -19,7 +19,10 @@ final class NewSessionModel: ObservableObject {
     /// Nil: a new branch off the default (a worktree), or the checkout's current branch (local).
     @Published private(set) var branch: String?
     @Published private(set) var workspace = WorkspaceMode.worktree
-    @Published var reviewLoop = true
+    /// Starts as it was last set, and is remembered for the next new session whenever it changes.
+    @Published var reviewLoop = LastReviewLoop.load() {
+        didSet { if reviewLoop != oldValue { LastReviewLoop.save(reviewLoop) } }
+    }
     @Published private(set) var busy = false
     @Published private(set) var uncertain = false
     @Published private(set) var error: String?

@@ -54,6 +54,10 @@ final class ConversationModel: ObservableObject {
     let files = Attachments(call: "message")
     let voice = VoiceNote()
 
+    /// The window's navigator it opened in (a page popped out has its own), which its polling and its delete act on
+    /// whichever window is in front.
+    let navigator = Navigator.shared
+
     init(id: String, initial: JSON?) {
         self.id = id
         self.initial = initial.flatMap(Session.init) ?? Session(raw: ["id": .string(id), "status": ""])
@@ -133,7 +137,7 @@ final class ConversationModel: ObservableObject {
     /// The column at the right: the session's pull request and context usage, while this conversation is the page itself
     /// (not one pushed over a pull request) and the session has any of them. An open panel takes the latest record.
     func showPanel() {
-        let nav = Navigator.shared
+        let nav = navigator
         guard nav.top.id == screenID else { return }
         if nav.stack.count == 1 && SessionPanel.wanted(session) {
             if nav.panelSession != session.raw { nav.panelSession = session.raw }
@@ -147,7 +151,7 @@ final class ConversationModel: ObservableObject {
         let draft = composer.text
         ConversationDrafts.text[id] = draft.isEmpty ? nil : draft
         files.clear()
-        let nav = Navigator.shared
+        let nav = navigator
         if nav.panelSession?["id"].string == id { nav.panelSession = nil }
     }
 
@@ -184,7 +188,7 @@ final class ConversationModel: ObservableObject {
                 if let repo { info["repo"] = repo }
                 post(.sessionForgotten, info)
                 // Beside the list there is nothing to go back to: the right-hand side empties instead.
-                let nav = Navigator.shared
+                let nav = navigator
                 if nav.top.id == screenID { if nav.stack.count > 1 { nav.pop() } else { nav.clear() } }
                 return
             case "complete_findings":
