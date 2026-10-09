@@ -44,6 +44,7 @@ final class MailTests: XCTestCase {
         XCTAssertEqual(s.before[7], "reauth"); XCTAssertEqual(s.accountID, 7)
         let body = s.finishBody(pasted: "http://127.0.0.1:8888/callback?code=c%2B1&state=s%2B1&scope=mail", now: early)
         XCTAssertEqual(body?["state"].string, "s+1"); XCTAssertEqual(body?["code"].string, "c+1")
+        XCTAssertEqual(s.finishBody(pasted: "http://127.0.0.1:8888/callback?code=%7e%7E&state=s%2b1", now: early)?["code"].string, "~~")
         let bad = [
             "https://evil.example/callback?state=s%2B1&code=c", "http://127.0.0.1:8889/callback?state=s%2B1&code=c",
             "http://127.0.0.1:8888/other?state=s%2B1&code=c", "http://127.0.0.1:8888/callback?state=wrong&code=c",
@@ -51,6 +52,8 @@ final class MailTests: XCTestCase {
             "http://127.0.0.1:8888/callback?state=s%2B1&state=s%2B1&code=c", "http://127.0.0.1:8888/callback?state=s%2B1&code=c&error=access_denied",
             "http://127.0.0.1:8888/callback?state=s%2B1&code=%00", "http://127.0.0.1:8888/callback?state=s%2B1&code=%0a",
             "http://127.0.0.1:8888/callback?state=s%2B1&code=%XX", "http://127.0.0.1:8888/callback?state=s%2B1&code=%",
+            "http://127.0.0.1:8888/callback?state=s%2B1&code=%-1", "http://127.0.0.1:8888/callback?state=s%2B1&code=%+f",
+            "http://127.0.0.1:8888/callback?state=s%2B1&code=% f", "http://127.0.0.1:8888/callback?state=s%2B1&code=%1",
             "http://127.0.0.1:8888/callback?state=s%2B1&code=c#state=wrong", "http://127.0.0.1:8888/callback?state=s%2B1&code=c&bare",
             "http://127.0.0.1:8888/callback", "http://127.0.0.1:8888/callback?code=c", "http://127.0.0.1:8888/callback?state=s%2B1&code=c+\u{7F}",
         ]

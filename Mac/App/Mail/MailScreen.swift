@@ -21,6 +21,8 @@ final class MailInboxModel: ObservableObject {
     @Published private(set) var body: MailMessage?
     @Published private(set) var bodyError: String?
     @Published private(set) var readingBody = false
+    /// The message whose body is being read: opening another while one loads reads the new one, and the old answer is dropped.
+    private var readingKey: String?
     @Published private(set) var notice: String?
     /// While the server rate limits or fails, nothing is asked until then.
     @Published private(set) var retryUntil: Date?
@@ -113,11 +115,11 @@ final class MailInboxModel: ObservableObject {
     }
     func close() { selected = nil; body = nil; bodyError = nil }
     func loadBody(_ m: MailMessage) async {
-        guard selected == m.key, !readingBody, !coolingDown else { return }
-        readingBody = true
+        guard selected == m.key, readingKey != m.key, !coolingDown else { return }
+        readingKey = m.key; readingBody = true
         let gen = generation
         let r = await boardCall("mail_message", ["account": JSON(m.accountID), "id": .string(m.id)])
-        readingBody = false
+        if readingKey == m.key { readingKey = nil; readingBody = false }
         guard gen == generation, selected == m.key else { return }
         switch r {
         case .failure(let e):

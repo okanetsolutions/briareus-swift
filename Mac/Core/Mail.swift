@@ -163,8 +163,8 @@ private func mailFormDecode(_ s: Substring) -> String? {
         if c == UInt8(ascii: "%") {
             let a = u.index(after: i)
             guard a < u.endIndex, u.index(after: a) < u.endIndex,
-                  let h = Int(String(decoding: [u[a], u[u.index(after: a)]], as: UTF8.self), radix: 16) else { return nil }
-            c = UInt8(h)
+                  let hi = mailHexDigit(u[a]), let lo = mailHexDigit(u[u.index(after: a)]) else { return nil }
+            c = hi << 4 | lo
             i = u.index(after: u.index(after: a))
         } else {
             if c == UInt8(ascii: "+") { c = UInt8(ascii: " ") }
@@ -174,6 +174,16 @@ private func mailFormDecode(_ s: Substring) -> String? {
         bytes.append(c)
     }
     return String(bytes: bytes, encoding: .utf8)
+}
+
+/// One hex digit's value; nil for anything else, a sign included.
+private func mailHexDigit(_ c: UInt8) -> UInt8? {
+    switch c {
+    case UInt8(ascii: "0")...UInt8(ascii: "9"): return c - UInt8(ascii: "0")
+    case UInt8(ascii: "a")...UInt8(ascii: "f"): return c - UInt8(ascii: "a") + 10
+    case UInt8(ascii: "A")...UInt8(ascii: "F"): return c - UInt8(ascii: "A") + 10
+    default: return nil
+    }
 }
 
 /// An https address with nothing in it a browser would read otherwise: no spaces, controls or backslashes.
