@@ -25,6 +25,25 @@ final class ModelsTests: XCTestCase {
         for bad in ["{}", #"{"projects":null}"#, #"{"projects":{}}"#, "null", "3"] { XCTAssertNil(Project.parseList(j(bad)), bad) }
         XCTAssertEqual(Project.parseList(j("[]"))?.count, 0)
     }
+    func testProjectsSayWhetherTheyHaveALocalCheckout() {
+        let p = Project.parseList(j(#"[{"repo":"o/a","hasLocal":true},{"repo":"o/b","hasLocal":false},{"repo":"o/c","hasLocal":"yes"}]"#))!
+        XCTAssertEqual(p.map(\.hasLocal), [true, false, false])
+        let saved = Project.json(p)
+        XCTAssertTrue(saved[0]["hasLocal"].is(true)); XCTAssertTrue(saved[1]["hasLocal"].isNull)
+        XCTAssertEqual(Project.parseList(saved)?.map(\.hasLocal), [true, false, false])
+    }
+    func testWorkspaceModesStartSessionsAsWindowsDoes() {
+        XCTAssertEqual(WorkspaceMode.worktree.arguments(branch: "dev")["branch"].string, "dev")
+        XCTAssertTrue(WorkspaceMode.worktree.arguments(branch: nil)["local"].isNull)
+        let local = WorkspaceMode.local.arguments(branch: "dev")
+        XCTAssertTrue(local["local"].is(true)); XCTAssertEqual(local["branch"].string, "dev")
+        let orchestrator = WorkspaceMode.orchestrator.arguments(branch: "dev")
+        XCTAssertTrue(orchestrator["orchestrator"].is(true)); XCTAssertTrue(orchestrator["branch"].isNull); XCTAssertTrue(orchestrator["local"].isNull)
+        XCTAssertEqual(WorkspaceMode.local.noBranchLabel(defaultBranch: "main"), "Current branch")
+        XCTAssertEqual(WorkspaceMode.orchestrator.noBranchLabel(defaultBranch: nil), "New branch off main")
+        XCTAssertEqual(WorkspaceMode.local.menuTitle(hasLocal: false), "\u{2302} Local: no local checkout set in Settings")
+        XCTAssertEqual(WorkspaceMode.allCases.filter(\.hasReviewLoop), [.worktree])
+    }
     func testProjectWithoutLabel() {
         let p = Project(j(#"{"repo":"o/b"}"#))!
         XCTAssertNil(p.label); XCTAssertEqual(p.title, "o/b")
