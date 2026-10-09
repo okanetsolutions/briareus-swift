@@ -37,6 +37,58 @@ final class ProjectBoardTests: XCTestCase {
         XCTAssertEqual(c.cards[1].type, "draft"); XCTAssertNil(c.cards[1].repo); XCTAssertEqual(c.cards[1].number, 0); XCTAssertNil(c.cards[1].parent)
     }
 
+    /// Three columns, "No Status" (nil), "todo" and "doing"; card `c` in `column`.
+    private func lagging(_ column: String?) -> ProjectBoard {
+        func items(_ id: String?) -> String { id == column ? #"[{"id":"c","type":"issue","repo":"o/r","number":1}]"# : "[]" }
+        return board(#"{"columns":[{"id":null,"name":"No Status","items":"# + items(nil) + "},"
+            + #"{"id":"todo","name":"Todo","items":"# + items("todo") + "},"
+            + #"{"id":"doing","name":"Doing","items":"# + items("doing") + "}]}")
+    }
+
+    func testAMovedCardStaysInItsColumnWhileGitHubsReadLags() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        var moves = settlingRecord([], repo: "o/r", id: "c", from: "todo", to: "doing", now: now)
+        // A read still showing it where it was is corrected, and the move keeps settling.
+        var b = lagging("todo")
+        moves = settlingApply(moves, to: &b, repo: "o/r", now: now.addingTimeInterval(10))
+        XCTAssertEqual(b.find("c")?.column, 2); XCTAssertEqual(b.columns[1].count, 0); XCTAssertEqual(b.columns[2].count, 1)
+        XCTAssertEqual(moves.count, 1)
+        // Another repository's board is left alone.
+        b = lagging("todo")
+        XCTAssertEqual(settlingApply(moves, to: &b, repo: "o/other", now: now).count, 1); XCTAssertEqual(b.find("c")?.column, 1)
+        // A read showing it where it went settles it.
+        b = lagging("doing")
+        XCTAssertTrue(settlingApply(moves, to: &b, repo: "o/r", now: now.addingTimeInterval(20)).isEmpty)
+        // Past two minutes the read is taken as it is.
+        b = lagging("todo")
+        XCTAssertTrue(settlingApply(moves, to: &b, repo: "o/r", now: now.addingTimeInterval(121)).isEmpty)
+        XCTAssertEqual(b.find("c")?.column, 1)
+    }
+
+    func testASettlingCardMovedElsewhereSinceIsLeftWhereGitHubHasIt() {
+        let moves = settlingRecord([], repo: "o/r", id: "c", from: "todo", to: "doing")
+        // Someone moved it to "No Status" meanwhile: neither where it came from nor where it went.
+        var b = lagging(nil)
+        XCTAssertTrue(settlingApply(moves, to: &b, repo: "o/r").isEmpty)
+        XCTAssertEqual(b.find("c")?.column, 0)
+    }
+
+    func testACardMovedTwiceKeepsEveryColumnItCameFrom() {
+        var moves = settlingRecord([], repo: "o/r", id: "c", from: "todo", to: "doing")
+        moves = settlingRecord(moves, repo: "o/r", id: "c", from: "doing", to: nil)
+        XCTAssertEqual(moves.count, 1); XCTAssertEqual(moves[0].from, ["todo", "doing"]); XCTAssertNil(moves[0].column)
+        // A read behind both moves, showing it where it started, still puts it in "No Status".
+        var b = lagging("todo")
+        moves = settlingApply(moves, to: &b, repo: "o/r")
+        XCTAssertEqual(b.find("c")?.column, 0); XCTAssertEqual(moves.count, 1)
+    }
+
+    func testASettlingCardMissingFromTheReadWaits() {
+        var b = board(#"{"columns":[{"id":"todo","name":"Todo","items":[]},{"id":"doing","name":"Doing","items":[]}]}"#)
+        let moves = settlingApply(settlingRecord([], repo: "o/r", id: "c", from: "todo", to: "doing"), to: &b, repo: "o/r")
+        XCTAssertEqual(moves.count, 1); XCTAssertNil(b.find("c"))
+    }
+
     func testACardOpensItsIssueAsABoardRow() {
         let k = ProjectBoardCard(j(#"{"id":"i1","type":"issue","repo":"o/r","number":7,"title":"Fix it","url":"https://github.com/o/r/issues/7","#
             + #""createdAt":"2026-10-01T10:00:00Z","author":"ana","assignees":["ana"],"labels":[{"name":"bug","color":"d73a4a"}],"#
