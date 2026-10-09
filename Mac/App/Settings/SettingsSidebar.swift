@@ -68,6 +68,7 @@ struct SettingsSidebar: View {
             ssh
             if store.supports("settings_forge_accounts") { forge }
             if store.supports("settings_slack_workspaces") { slack }
+            if store.supports("settings_mcp_servers") { mcp }
             if ServerSettingsModel.offered {
                 Color.clear.frame(height: 8)
                 SectionHeader(title: "Server", onNew: nil)
@@ -202,6 +203,24 @@ struct SettingsSidebar: View {
             Explanation(text: "No Slack workspaces yet. ＋ New lets a project's sessions send Slack messages as you and hear the replies.")
         }
         if !s.loaded { LoadingNote(text: "Loading Slack workspaces…") }
+    }
+
+    /// The MCP servers whose tools sessions get: each with its dot (ready), label, kind, status and projects.
+    @ViewBuilder private var mcp: some View {
+        Color.clear.frame(height: 8)
+        SectionHeader(title: "MCP servers", onNew: store.supports("create_mcp_server") ? { model.newMcp() } : nil)
+        let s = model.mcp
+        if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
+        ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
+            ItemRow(label: row["label"].nonEmpty ?? row["name"].nonEmpty ?? "MCP server", sub: McpServerFormState.sidebarLine(row),
+                    enabled: row["enabled"].is(true) && row["status"].string == "ready",
+                    selected: selected == Screen.mcpServerSettings(row: row, defaults: nil).id) { model.openMcp(i) }
+        }
+        if selected == "mcp-server:new" { ItemRow(label: "New MCP server", sub: "not saved yet", enabled: false, selected: true) {} }
+        if s.loaded && s.list.isEmpty && s.error == nil {
+            Explanation(text: "No MCP servers yet. ＋ New gives sessions another server's tools, remote or run beside them.")
+        }
+        if !s.loaded { LoadingNote(text: "Loading MCP servers…") }
     }
 
     // MARK: Foot

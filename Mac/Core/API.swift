@@ -242,6 +242,42 @@ struct APIRoute: Sendable {
         .init(name: "task", method: "GET", path: "tasks/{id}"),
         // Feedback on a session's preview page: a comment on a marked spot, with the uploaded screenshot, sent to its agent.
         .init(name: "preview_feedback", method: "POST", path: "sessions/{sessionId}/preview/feedback"),
+        // A video a test run recorded, as its links name it; read with the token by openWebURL (ServerVideo).
+        .init(name: "video", method: "GET", path: "videos/{file}"),
+        // What waits on the operator, an Admin token's: questions, failures, stopped loops, and the SSH commands and Slack
+        // messages agents ask approval for, each approved or denied.
+        .init(name: "attention", method: "GET", path: "attention"),
+        .init(name: "ssh_requests", method: "GET", path: "ssh/requests"),
+        .init(name: "ssh_decision", method: "POST", path: "ssh/requests/{id}/decision"),
+        .init(name: "slack_requests", method: "GET", path: "slack/requests"),
+        .init(name: "slack_decision", method: "POST", path: "slack/requests/{id}/decision"),
+        // The operator's WhatsApp through the server's WAHA, an Admin token's: the linked phone (started, its QR code to
+        // link it, unlinked), its chats, a chat's history, a message sent, a chat marked read.
+        .init(name: "whatsapp_accounts", method: "GET", path: "whatsapp/accounts"),
+        .init(name: "whatsapp_account", method: "GET", path: "whatsapp/accounts/{id}"),
+        .init(name: "whatsapp_start", method: "POST", path: "whatsapp/accounts/{id}/start"),
+        .init(name: "whatsapp_qr", method: "GET", path: "whatsapp/accounts/{id}/qr"),
+        .init(name: "whatsapp_logout", method: "POST", path: "whatsapp/accounts/{id}/logout"),
+        .init(name: "whatsapp_conversations", method: "GET", path: "whatsapp/accounts/{id}/conversations"),
+        .init(name: "whatsapp_messages", method: "GET", path: "whatsapp/accounts/{id}/conversations/{chat}/messages"),
+        .init(name: "whatsapp_send", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/messages"),
+        .init(name: "whatsapp_read", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/read"),
+        // An attachment's bytes, through the server (fetched by APIClient.serverFile, with the token).
+        .init(name: "whatsapp_media", method: "GET", path: "whatsapp/accounts/{id}/conversations/{chat}/messages/{message}/media"),
+        // A project's memories, what its agents remember between sessions; and for an Admin token their health (what
+        // needs verifying, what looks duplicated), verify, archive or restore, and a merge of two.
+        .init(name: "memories", method: "GET", path: "memories"),
+        .init(name: "create_memory", method: "POST", path: "memories"),
+        .init(name: "update_memory", method: "PUT", path: "memories/{id}"),
+        .init(name: "delete_memory", method: "DELETE", path: "memories/{id}"),
+        .init(name: "memories_health", method: "GET", path: "memories/health"),
+        .init(name: "memory_policy", method: "POST", path: "memories/{id}/policy"),
+        .init(name: "memories_merge", method: "POST", path: "memories/merge"),
+        // The prompts kept for the composer: a project's own (`repo`) and those offered everywhere.
+        .init(name: "prompts", method: "GET", path: "prompts"),
+        .init(name: "create_prompt", method: "POST", path: "prompts"),
+        .init(name: "update_prompt", method: "PUT", path: "prompts/{id}"),
+        .init(name: "delete_prompt", method: "DELETE", path: "prompts/{id}"),
         // The server, an Admin token's: draining it for maintenance, its workspace clone slots (cleaned or set up afresh
         // when idle), the prompt templates its agents are briefed with, and a project's local checkout's own update.
         .init(name: "maintenance", method: "GET", path: "maintenance"),
@@ -304,6 +340,14 @@ struct APIRoute: Sendable {
         .init(name: "update_mail_account", method: "PUT", path: "settings/mail/accounts/{id}"),
         .init(name: "delete_mail_account", method: "DELETE", path: "settings/mail/accounts/{id}"),
         .init(name: "sync_mail_account", method: "POST", path: "settings/mail/accounts/{id}/sync"),
+        // The MCP servers whose tools sessions get beside Briareus's own: checked on save, and signed in to with OAuth in the
+        // browser (`connect` starts a sign-in; a loopback one is finished with the address it ended on).
+        .init(name: "settings_mcp_servers", method: "GET", path: "settings/mcp/servers"),
+        .init(name: "create_mcp_server", method: "POST", path: "settings/mcp/servers"),
+        .init(name: "update_mcp_server", method: "PUT", path: "settings/mcp/servers/{id}"),
+        .init(name: "delete_mcp_server", method: "DELETE", path: "settings/mcp/servers/{id}"),
+        .init(name: "connect_mcp_server", method: "POST", path: "settings/mcp/servers/{id}/connect"),
+        .init(name: "finish_mcp_sign_in", method: "POST", path: "settings/mcp/servers/{id}/finish-sign-in"),
         .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
         .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
         .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),
