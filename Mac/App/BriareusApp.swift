@@ -20,6 +20,7 @@ struct BriareusApp: App {
                 .environmentObject(store)
                 .environmentObject(navigator)
                 .frame(minWidth: 420, minHeight: 360)
+                .noWritingTools()
         }
         .windowStyle(.hiddenTitleBar)
         .commands {

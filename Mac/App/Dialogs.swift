@@ -46,6 +46,7 @@ enum Dialogs {
             let scroll = NSTextView.scrollableTextView()
             scroll.frame = NSRect(x: 0, y: 0, width: 360, height: 120)
             let tv = scroll.documentView as! NSTextView
+            tv.disableWritingTools()
             tv.string = current
             tv.font = .systemFont(ofSize: 13)
             tv.isRichText = false
@@ -61,6 +62,7 @@ enum Dialogs {
         }
         alert.accessoryView = field
         alert.window.initialFirstResponder = (field as? NSScrollView)?.documentView ?? field
+        if let f = field as? NSTextField { alert.window.disableFieldEditorWritingTools(for: f) }
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         return read()
     }

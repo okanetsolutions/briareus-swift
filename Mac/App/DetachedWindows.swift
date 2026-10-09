@@ -74,7 +74,7 @@ final class DetachedWindows: NSObject, NSWindowDelegate {
         w.makeKeyAndOrderFront(nil)
         w.contentView = NSHostingView(rootView: DetachedWindowView()
             .environmentObject(Store.shared).environmentObject(nav)
-            .frame(minWidth: 420, minHeight: 360))
+            .frame(minWidth: 420, minHeight: 360).noWritingTools())
     }
 
     /// The window's page, as it is, goes back to the main window's detail, and the window closes.

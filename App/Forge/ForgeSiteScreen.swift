@@ -327,6 +327,7 @@ private struct PlainTextEditor: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UITextView {
         let tv = UITextView()
+        tv.disableWritingTools()
         tv.delegate = context.coordinator
         tv.backgroundColor = .clear
         tv.font = UIFont.monospacedSystemFont(ofSize: UIFont.preferredFont(forTextStyle: .footnote).pointSize, weight: .regular)

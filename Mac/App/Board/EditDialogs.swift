@@ -81,7 +81,7 @@ private enum EditItemDialog {
             NSApp.stopModal()
             panel.orderOut(nil)
         }
-        panel.contentViewController = NSHostingController(rootView: EditItemView(state: state, finish: finish))
+        panel.contentViewController = NSHostingController(rootView: EditItemView(state: state, finish: finish).noWritingTools())
         panel.center()
         let closeObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: panel, queue: .main) { _ in
             Task { @MainActor in if NSApp.modalWindow === panel { NSApp.stopModal() } }

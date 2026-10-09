@@ -3,6 +3,29 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Writing Tools
+
+extension View {
+    /// No Writing Tools ("Write with Siri") on the text fields and editors under this view.
+    @ViewBuilder func noWritingTools() -> some View {
+        if #available(macOS 15.0, *) { writingToolsBehavior(.disabled) } else { self }
+    }
+}
+
+extension NSTextView {
+    /// No Writing Tools ("Write with Siri") on this text view, which SwiftUI's setting does not reach.
+    func disableWritingTools() {
+        if #available(macOS 15.0, *) { writingToolsBehavior = .none }
+    }
+}
+
+extension NSWindow {
+    /// No Writing Tools on the editor an AppKit text field of this window types into.
+    func disableFieldEditorWritingTools(for field: NSTextField) {
+        (fieldEditor(true, for: field) as? NSTextView)?.disableWritingTools()
+    }
+}
+
 // MARK: - Buttons
 
 enum ButtonKind { case prominent, bordered, plain, destructive }

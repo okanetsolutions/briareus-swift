@@ -760,6 +760,7 @@ final class CodeEditorView: NSView {
         super.init(frame: frame)
         text.isEditable = false
         text.isSelectable = true
+        text.disableWritingTools()
         text.isRichText = false
         text.usesFindBar = true
         text.isIncrementalSearchingEnabled = true
@@ -981,7 +982,7 @@ final class CodeNSTextView: NSTextView {
         let pop = NSPopover()
         pop.behavior = .semitransient
         pop.animates = false
-        pop.contentViewController = NSHostingController(rootView: QuickInfoView(symbol: symbol))
+        pop.contentViewController = NSHostingController(rootView: QuickInfoView(symbol: symbol).noWritingTools())
         pop.show(relativeTo: rect, of: self, preferredEdge: .maxY)
         popover = pop
     }

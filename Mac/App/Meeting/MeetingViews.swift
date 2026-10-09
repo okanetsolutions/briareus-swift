@@ -79,6 +79,7 @@ enum MeetingPrompt {
         let scroll = NSTextView.scrollableTextView()
         scroll.borderType = .bezelBorder
         let promptView = scroll.documentView as! NSTextView
+        promptView.disableWritingTools()
         promptView.font = .systemFont(ofSize: 13)
         promptView.isRichText = false
         promptView.isAutomaticQuoteSubstitutionEnabled = false
@@ -106,6 +107,7 @@ enum MeetingPrompt {
         stack.setFrameSize(stack.fittingSize)
         alert.accessoryView = stack
         alert.window.initialFirstResponder = promptView
+        alert.window.disableFieldEditorWritingTools(for: first)
         let joined = withExtendedLifetime(reset) { alert.runModal() == .alertFirstButtonReturn }
         guard joined else { return false }
         var prompt = promptView.string.trimmingCharacters(in: .whitespacesAndNewlines)

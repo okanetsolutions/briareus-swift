@@ -347,6 +347,7 @@ private struct ForgeEditor: NSViewRepresentable {
         scroll.hasHorizontalScroller = true
         scroll.autohidesScrollers = true
         guard let tv = scroll.documentView as? NSTextView else { return scroll }
+        tv.disableWritingTools()
         tv.delegate = context.coordinator
         tv.drawsBackground = false
         tv.isRichText = false
