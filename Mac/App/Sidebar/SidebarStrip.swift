@@ -2,7 +2,7 @@
 // its count, as 26px squares (⚙ Settings is at the foot's left). WhatsApp's and Slack's marks are drawn, as no font has them.
 import SwiftUI
 
-enum StripAction { case newSession, whatsapp, slack, usage, findings }
+enum StripAction { case newSession, whatsapp, slack, mail, usage, findings }
 
 struct SidebarStrip: View {
     /// The detail pane's root id, for the WhatsApp, Slack, 📊 and ⚑ switches' accent.
@@ -23,10 +23,17 @@ struct SidebarStrip: View {
             }
             .frame(maxWidth: .infinity)
             .help("New session")
-            StripButton(active: selected == "whatsapp", action: { action(.whatsapp) }) { WhatsAppMark() }
+            StripButton(active: selected == "whatsapp" || selected == "whatsapp-inbox", action: { action(.whatsapp) }) { WhatsAppMark() }
                 .frame(width: Self.iconWidth).help("WhatsApp")
             StripButton(active: selected == "slack" || selected == "slack-inbox", action: { action(.slack) }) { SlackMark() }
                 .frame(width: Self.iconWidth).help("Slack")
+            // The synced mail, on a server that has it for an Admin token.
+            if MailInboxModel.offered || MailSettingsModel.offered {
+                StripButton(active: selected == "mail" || selected == "mail-settings", action: { action(.mail) }) {
+                    emoji("✉", active: selected == "mail" || selected == "mail-settings")
+                }
+                .frame(width: Self.iconWidth).help("Mail")
+            }
             StripButton(active: selected == "usage", action: { action(.usage) }) { emoji("📊", active: selected == "usage") }
                 .frame(width: Self.iconWidth).help("Usage")
             StripButton(active: selected == "findings", badge: waiting, action: { action(.findings) }) { emoji("⚑", active: selected == "findings") }

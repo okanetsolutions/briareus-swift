@@ -148,7 +148,10 @@ struct MainWindow: View {
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.ink)
-        .onChange(of: store.connected) { _, connected in if !connected { navigator.reset() } }
+        .onChange(of: store.connected) { _, connected in
+            if !connected { navigator.reset(); SessionFeed.shared.stop() } else { SessionFeed.shared.start() }
+        }
+        .onAppear { if store.connected { SessionFeed.shared.start() } }
     }
 
     /// main.c layout(): the 268px sidebar, the main column and, beside a conversation, the 272px panel, the dividers drawn
@@ -294,6 +297,7 @@ struct ScreenView: View {
         case .findings: FindingsScreen()
         case .usage: UsageScreen()
         case .webApp(let app): WebAppScreen(app: app)
+        case .whatsappInbox: WhatsAppInboxScreen()
         case .slackInbox: SlackInboxScreen()
         case .projectSettings(let row, let defaults): ProjectSettingsScreen(row: row, defaults: defaults)
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)
@@ -301,7 +305,12 @@ struct ScreenView: View {
         case .sshServerSettings(let row, let defaults): SSHServerSettingsScreen(row: row, defaults: defaults)
         case .forgeAccountSettings(let row, let defaults): ForgeAccountSettingsScreen(row: row, defaults: defaults)
         case .slackWorkspaceSettings(let row, let defaults): SlackWorkspaceSettingsScreen(row: row, defaults: defaults)
+        case .mcpServerSettings(let row, let defaults): McpServerSettingsScreen(row: row, defaults: defaults)
         case .meetingSettings: MeetingSettingsScreen()
+        case .mailSettings(let id): MailSettingsScreen(accountID: id).id(id ?? 0)
+        case .mail: MailScreen()
+        case .serverSettings: ServerSettingsScreen()
+        case .templatesSettings: TemplatesSettingsScreen()
         case .webhook(let session): WebhookScreen(session: session)
         }
     }

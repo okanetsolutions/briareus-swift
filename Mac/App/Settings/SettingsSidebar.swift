@@ -37,6 +37,8 @@ struct SettingsSidebar: View {
     @ViewBuilder private var content: some View {
         // This computer's own settings come first: they need no Admin token.
         MeetingSettingsRow(selected: selected == Screen.meetingSettings.id)
+        // Mail under This computer, each mailbox a row as a project is (Windows #141).
+        if MailSettingsModel.offered { MailSettingsRows(selected: selected) }
         let why = settingsUnavailable("settings_projects", path: "settings/projects", what: "Project settings", manage: "projects")
         SectionHeader(title: "Projects", onNew: why == nil ? { model.newProject() } : nil)
         if let why {
@@ -66,6 +68,19 @@ struct SettingsSidebar: View {
             ssh
             if store.supports("settings_forge_accounts") { forge }
             if store.supports("settings_slack_workspaces") { slack }
+            if store.supports("settings_mcp_servers") { mcp }
+            if ServerSettingsModel.offered {
+                Color.clear.frame(height: 8)
+                SectionHeader(title: "Server", onNew: nil)
+                if store.supports("maintenance") || store.supports("settings_workspaces") {
+                    ItemRow(label: "🛠 Maintenance and workspaces", sub: "drain it, its clone slots", enabled: true,
+                            selected: selected == Screen.serverSettings.id) { Navigator.shared.show(.serverSettings) }
+                }
+                if store.supports("settings_templates") {
+                    ItemRow(label: "📝 Prompt templates", sub: "what agents are briefed with", enabled: true,
+                            selected: selected == Screen.templatesSettings.id) { Navigator.shared.show(.templatesSettings) }
+                }
+            }
         }
     }
 
@@ -188,6 +203,24 @@ struct SettingsSidebar: View {
             Explanation(text: "No Slack workspaces yet. ＋ New lets a project's sessions send Slack messages as you and hear the replies.")
         }
         if !s.loaded { LoadingNote(text: "Loading Slack workspaces…") }
+    }
+
+    /// The MCP servers whose tools sessions get: each with its dot (ready), label, kind, status and projects.
+    @ViewBuilder private var mcp: some View {
+        Color.clear.frame(height: 8)
+        SectionHeader(title: "MCP servers", onNew: store.supports("create_mcp_server") ? { model.newMcp() } : nil)
+        let s = model.mcp
+        if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
+        ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
+            ItemRow(label: row["label"].nonEmpty ?? row["name"].nonEmpty ?? "MCP server", sub: McpServerFormState.sidebarLine(row),
+                    enabled: row["enabled"].is(true) && row["status"].string == "ready",
+                    selected: selected == Screen.mcpServerSettings(row: row, defaults: nil).id) { model.openMcp(i) }
+        }
+        if selected == "mcp-server:new" { ItemRow(label: "New MCP server", sub: "not saved yet", enabled: false, selected: true) {} }
+        if s.loaded && s.list.isEmpty && s.error == nil {
+            Explanation(text: "No MCP servers yet. ＋ New gives sessions another server's tools, remote or run beside them.")
+        }
+        if !s.loaded { LoadingNote(text: "Loading MCP servers…") }
     }
 
     // MARK: Foot
@@ -413,5 +446,29 @@ private struct Tag: View {
         Text(text).font(Theme.caption2).foregroundStyle(Theme.muted).lineLimit(1).fixedSize()
             .padding(.horizontal, 6).padding(.vertical, 1)
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Theme.line, lineWidth: 1))
+    }
+}
+
+/// The mailboxes the server keeps synced, each a row (its label or address, its provider and address, lit when connected
+/// and enabled); ＋ New connects another.
+private struct MailSettingsRows: View {
+    var selected: String?
+    @ObservedObject private var mail = MailSettingsModel.shared
+    @ObservedObject private var store = Store.shared
+    var body: some View {
+        let a = mail.accounts
+        SectionHeader(title: "Mail", onNew: mail.loaded && (a.gmail || a.outlook) && store.supports("connect_mail_account") ? { Navigator.shared.show(.mailSettings(id: nil)) } : nil)
+        if let e = mail.error, !mail.loaded { Notice(message: e).padding(.horizontal, 8).padding(.bottom, 8) }
+        ForEach(a.accounts, id: \.id) { m in
+            ItemRow(label: m.label.cTrimmed.isEmpty ? m.email : m.label,
+                    sub: "\(m.providerName) · \(m.needsSignIn ? "needs sign-in" : m.label.cTrimmed.isEmpty ? m.statusLine : m.email)",
+                    enabled: m.enabled && m.status == "connected",
+                    selected: selected == Screen.mailSettings(id: m.id).id) { Navigator.shared.show(.mailSettings(id: m.id)) }
+        }
+        if selected == "mail-settings" { ItemRow(label: "New mailbox", sub: "not connected yet", enabled: false, selected: true) {} }
+        if mail.loaded && a.accounts.isEmpty { Explanation(text: "No mailboxes yet. ＋ New signs in to Gmail or Outlook.") }
+        if !mail.loaded { LoadingNote(text: "Loading mail accounts…") }
+        Color.clear.frame(height: 16)
+            .task { await mail.load() }
     }
 }

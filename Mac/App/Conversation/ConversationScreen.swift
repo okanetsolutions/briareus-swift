@@ -44,6 +44,11 @@ final class ConversationModel: ObservableObject {
     @Published var triageNote = ""
     /// Bumped to scroll the transcript to its end and keep it there.
     @Published private(set) var scrollToEnd = 0
+    /// The find bar (⌘F) while open, its query and its matches; `findTick` is bumped to bring the current one into view.
+    @Published private(set) var finding = false
+    @Published var findQuery = "" { didSet { if findQuery != oldValue { findSearch() } } }
+    @Published private(set) var find = TranscriptFind()
+    @Published private(set) var findTick = 0
 
     private var restored = false, unsaved = false, retimed = false, pendingFull = false
     var dialogOpen = false
@@ -198,6 +203,42 @@ final class ConversationModel: ObservableObject {
         files.clear()
         let nav = navigator
         if nav.panelSession?["id"].string == id { nav.panelSession = nil }
+    }
+
+    // MARK: Find in the conversation
+
+    private var findBlocks: [(seq: Int, pieces: [String])] {
+        blocks.map { ($0.seq, transcriptFindPieces($0, open: expanded.contains($0.seq))) }
+    }
+    func openFind() { finding = true; findFocus += 1 }
+    /// Focus for the find field: bumped by ⌘F, also while it is open.
+    @Published private(set) var findFocus = 0
+    func closeFind() {
+        finding = false
+        findQuery = ""
+        find = TranscriptFind()
+        selection.find = nil
+    }
+    private func findSearch() {
+        find.search(findQuery, in: findBlocks)
+        findShow()
+    }
+    func findStep(backward: Bool) {
+        guard !find.matches.isEmpty else { return }
+        find.step(backward: backward)
+        findShow()
+    }
+    /// The transcript changed under an open find bar: the matches again, the current one kept where it was.
+    func findRefresh() {
+        guard finding, !findQuery.isEmpty else { return }
+        let before = find.currentMatch
+        find.rebuild(findBlocks)
+        selection.find = (findQuery, find.currentMatch?.block, find.currentInBlock ?? 0)
+        if find.currentMatch != before { findTick += 1 }
+    }
+    private func findShow() {
+        selection.find = findQuery.isEmpty ? nil : (findQuery, find.currentMatch?.block, find.currentInBlock ?? 0)
+        if find.currentMatch != nil { findTick += 1 }
     }
 
     // MARK: Writing
@@ -375,12 +416,17 @@ struct ConversationScreen: View {
         VStack(spacing: 0) {
             PaneHeader(title: model.session.displayTitle, subtitle: (model.live ? "● live · " : "") + conversationStatusLine(model.session), buttons: headerButtons,
                        titleAction: store.supports("rename") ? { model.rename() } : nil)
+            if model.finding { FindBar(model: model) }
             transcript
             if RecoveryReport.offered(status: model.session.status) && store.isAdmin && store.supports("session_recovery") {
                 RecoveryBox(sessionID: model.id) { Task { await model.refresh(full: true) } }.id(model.id)
             }
             ConversationFooter(model: model, composer: model.composer, files: model.files, voice: model.voice)
         }
+        // ⌘F: find in the conversation (the Windows client's Ctrl+F).
+        .background(Button("") { model.openFind() }.keyboardShortcut("f", modifiers: .command).opacity(0).frame(width: 0, height: 0))
+        .onChange(of: model.blocks) { _, _ in model.findRefresh() }
+        .onChange(of: model.expanded) { _, _ in model.findRefresh() }
         .task(id: store.active) { await model.run() }
         .task { await model.follow() }
         .onAppear {
@@ -448,7 +494,26 @@ struct ConversationScreen: View {
                 }
                 .onChange(of: contentMark) { _, _ in if stick { scrollToEnd(proxy) } }
                 .onChange(of: model.scrollToEnd) { _, _ in stick = true; scrollToEnd(proxy) }
+                .onChange(of: model.findTick) { _, _ in revealFind(proxy) }
+                // The bar takes height from the transcript: one kept at its end stays there.
+                .onChange(of: model.finding) { _, _ in if stick { scrollToEnd(proxy) } }
                 .onAppear { scrollToEnd(proxy) }
+            }
+        }
+    }
+
+    /// Brings find's current match into view: its block first, which the lazy column may not have made yet, then the match
+    /// itself once its text is there.
+    private func revealFind(_ proxy: ScrollViewProxy) {
+        guard model.find.currentMatch != nil else { return }
+        scrolling?.cancel()
+        stick = false
+        scrolling = Task { @MainActor in
+            defer { scrolling = nil }
+            for _ in 0..<80 {
+                await Task.yield()
+                if Task.isCancelled || model.selection.revealStep(window: NSApp.keyWindow) { return }
+                try? await Task.sleep(nanoseconds: 30_000_000)
             }
         }
     }
@@ -564,6 +629,12 @@ private struct ConversationFooter: View {
                         onTap: { composer.focusNow() }) {
                 if files.supported {
                     AttachButton(enabled: files.count < attachmentsMax) { files.pick() }
+                }
+                if SavedPrompts.offered {
+                    PromptsButton(repo: model.session.repo, text: composer.text) { body in
+                        composer.text = composer.text.cTrimmed.isEmpty ? body : composer.text + "\n\n" + body
+                        composer.focusNow()
+                    }
                 }
                 if store.canTranscribe {
                     MicButton(voice: voice)
@@ -681,3 +752,60 @@ private struct RecoveryBox: View {
         }
     }
 }
+/// The find bar under the header (the Windows client's pane find bar): the query, where the current match is of how
+/// many, Previous and Next (⇧⌘G and ⌘G, or ⇧Enter and Enter in the field) and Close (Esc in the field).
+private struct FindBar: View {
+    @ObservedObject var model: ConversationModel
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let none = model.find.matches.isEmpty
+        HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Theme.muted)
+                TextField("Find in conversation", text: $model.findQuery)
+                    .textFieldStyle(.plain).font(Theme.body).foregroundStyle(Theme.ink)
+                    .focused($focused)
+                    .onSubmit {
+                        model.findStep(backward: NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false)
+                        focused = true
+                    }
+                    .onExitCommand { model.closeFind() }
+            }
+            .padding(.horizontal, 10).frame(height: 28)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Theme.field))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(focused ? Theme.accentDim : Theme.line, lineWidth: 1))
+            .frame(maxWidth: 420)
+            Text(model.find.status).font(Theme.footnote).monospacedDigit()
+                .foregroundStyle(none && !model.findQuery.isEmpty ? Theme.danger : Theme.muted)
+                .frame(minWidth: 72)
+            Button("Previous") { model.findStep(backward: true) }
+                .dashButton(.bordered).disabled(none).keyboardShortcut("g", modifiers: [.command, .shift]).help("Previous match (⇧⌘G)")
+            Button("Next") { model.findStep(backward: false) }
+                .dashButton(.bordered).disabled(none).keyboardShortcut("g", modifiers: .command).help("Next match (⌘G)")
+            Spacer(minLength: 0)
+            Button("Close") { model.closeFind() }.dashButton(.bordered).help("Close (Esc)")
+        }
+        .padding(.horizontal, 18).frame(height: 40)
+        .background(Theme.canvas)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+        .onAppear { focus() }
+        .onChange(of: model.findFocus) { _, _ in focus() }
+    }
+
+    /// ⌘F with the bar open takes the field again, its query selected, so typing replaces it. A bar just shown is not in
+    /// the window yet, and the composer keeps the keys until the field can take them: it asks again until it has them,
+    /// and selects only its own text.
+    private func focus(_ tries: Int = 8) {
+        focused = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
+            if focused, NSApp.keyWindow?.firstResponder is NSText, !(NSApp.keyWindow?.firstResponder is ComposerNSTextView) {
+                NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+            } else if tries > 0 {
+                focus(tries - 1)
+            }
+        }
+    }
+}
+
+

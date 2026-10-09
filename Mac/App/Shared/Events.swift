@@ -5,6 +5,8 @@ import Foundation
 extension Notification.Name {
     /// A conversation was deleted: `userInfo["id"]` and `userInfo["repo"]`. The sidebar drops it and asks the server again.
     static let sessionForgotten = Notification.Name("BriareusSessionForgotten")
+    /// A session's record as it changed, from the live stream (`repo`, `session`).
+    static let sessionLive = Notification.Name("BriareusSessionLive")
     /// A session changed (renamed, stopped, started): the sidebar reads its project again. `userInfo["repo"]` when known.
     static let sessionsChanged = Notification.Name("BriareusSessionsChanged")
     /// The Findings screen read the conversations again: the sidebar's ⚑ counts once more.
@@ -21,6 +23,7 @@ extension Notification.Name {
     static let forgeAccountsChanged = Notification.Name("BriareusForgeAccountsChanged")
     /// The settings sidebar reads the Slack workspaces again.
     static let slackWorkspacesChanged = Notification.Name("BriareusSlackWorkspacesChanged")
+    static let mcpServersChanged = Notification.Name("BriareusMcpServersChanged")
     /// The project list changed (a project saved, cloned, deleted or reordered): the sidebar reads it again.
     static let projectsChanged = Notification.Name("BriareusProjectsChanged")
     /// Runs a session operation (`compact`, `clear`, `rename` with compaction settings) through its open conversation, which

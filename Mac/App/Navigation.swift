@@ -26,6 +26,8 @@ enum Screen: Hashable, Identifiable {
     /// What every project spent over a window.
     case usage
     case webApp(WebApp)
+    /// The operator's WhatsApp, read through the server's WAHA.
+    case whatsappInbox
     /// The operator's Slack inbox, read through the server.
     case slackInbox
     /// The settings page's forms: `row` is the server's record (nil with `defaults` for a new one).
@@ -35,8 +37,16 @@ enum Screen: Hashable, Identifiable {
     case sshServerSettings(row: JSON?, defaults: JSON?)
     case forgeAccountSettings(row: JSON?, defaults: JSON?)
     case slackWorkspaceSettings(row: JSON?, defaults: JSON?)
+    case mcpServerSettings(row: JSON?, defaults: JSON?)
     /// This Mac's meeting assistant settings.
     case meetingSettings
+    /// A mailbox the server keeps synced, or (nil) adding one.
+    case mailSettings(id: Int?)
+    /// The synced mail.
+    case mail
+    /// The server's maintenance and workspaces, and its prompt templates.
+    case serverSettings
+    case templatesSettings
     /// A session's ⚡ Webhook, pushed over its conversation; `session` is the conversation's record.
     case webhook(session: JSON)
 
@@ -52,6 +62,7 @@ enum Screen: Hashable, Identifiable {
         case .findings: return "findings"
         case .usage: return "usage"
         case .webApp(let app): return app.rawValue
+        case .whatsappInbox: return "whatsapp-inbox"
         case .slackInbox: return "slack-inbox"
         case .projectSettings(let row, _): return "project-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
@@ -59,7 +70,12 @@ enum Screen: Hashable, Identifiable {
         case .sshServerSettings(let row, _): return "ssh-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .forgeAccountSettings(let row, _): return "forge-account:\(row?["id"].int.map(String.init) ?? "new")"
         case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
+        case .mcpServerSettings(let row, _): return "mcp-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .meetingSettings: return "settings-meeting"
+        case .mailSettings(let id): return id.map { "mail-settings:\($0)" } ?? "mail-settings"
+        case .mail: return "mail"
+        case .serverSettings: return "settings-server"
+        case .templatesSettings: return "settings-templates"
         case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
         }
     }

@@ -304,3 +304,110 @@ struct RecoveryReport: Equatable, Sendable {
     var changeCount: Int { changes.split(separator: "\n").filter { !$0.hasPrefix("…") && !$0.hasPrefix("(") }.count }
     var shortHead: String? { head.map { String($0.prefix(8)) } }
 }
+
+// MARK: - Find in the conversation
+
+/// The texts a transcript block shows that find searches (the Windows client's doc_search over the rendered document),
+/// one per piece of selectable text in reading order: what is drawn, not its Markdown source, so markup is invisible and a
+/// link's address is not searched. A folded block's steps count only while it is open.
+func transcriptFindPieces(_ block: TranscriptBlock, open: Bool) -> [String] {
+    switch block {
+    case .preparation(let events): return open ? events.map(logLineText) : []
+    case .tools: return []
+    case .event(let e):
+        switch e.kind {
+        case "user": return [e.text ?? ""]
+        case "text": return markdownFindPieces(e.text)
+        case "ask": return ["Your input is needed"] + markdownFindPieces(e.question ?? e.text)
+        case "result": return []
+        default: return e.text != nil ? [logLineText(e)] : []
+        }
+    }
+}
+
+/// A reply's pieces as MarkdownView draws them: a paragraph, heading, list item or quote each, a code block whole, a
+/// table cell by cell, row by row.
+func markdownFindPieces(_ source: String?) -> [String] {
+    var out: [String] = []
+    for b in Markdown.parse(source) {
+        switch b.kind {
+        case .paragraph, .heading, .bullet, .quote: out.append(Markdown.plain(b.text))
+        case .code: out.append(b.text)
+        case .table: for row in b.cells { for cell in row { out.append(Markdown.plain(cell)) } }
+        case .rule: break
+        }
+    }
+    return out
+}
+
+/// Where each occurrence of `query` starts in `text`, in UTF-16 units, ignoring case; occurrences do not overlap.
+func findOccurrences(of query: String, in text: String) -> [Int] {
+    guard !query.isEmpty else { return [] }
+    let s = text as NSString
+    var out: [Int] = []
+    var from = 0
+    while from < s.length {
+        let r = s.range(of: query, options: [.caseInsensitive], range: NSRange(location: from, length: s.length - from))
+        if r.location == NSNotFound { break }
+        out.append(r.location)
+        from = r.location + max(r.length, 1)
+    }
+    return out
+}
+
+/// One hit: the block (by its seq), the piece of it and where in the piece.
+struct TranscriptFindMatch: Equatable, Sendable {
+    var block: Int
+    var piece: Int
+    var offset: Int
+}
+
+/// The find bar's search over a transcript: the query, every match in reading order, and the one shown as current, which
+/// stays on the same place when the transcript is read again (the first match at or after it).
+struct TranscriptFind: Equatable, Sendable {
+    private(set) var query = ""
+    private(set) var matches: [TranscriptFindMatch] = []
+    private(set) var current = 0
+
+    var currentMatch: TranscriptFindMatch? { matches.indices.contains(current) ? matches[current] : nil }
+    /// Which occurrence within its block the current match is: how the drawn text finds it.
+    var currentInBlock: Int? {
+        guard let m = currentMatch else { return nil }
+        return matches[..<current].filter { $0.block == m.block }.count
+    }
+    /// "Find", "No matches" or "3 / 12".
+    var status: String {
+        if query.isEmpty { return "Find" }
+        if matches.isEmpty { return "No matches" }
+        return "\(current + 1) / \(matches.count)"
+    }
+
+    /// Searches the blocks (seq and pieces, in reading order) for a new query, from the first match.
+    mutating func search(_ query: String, in blocks: [(seq: Int, pieces: [String])]) {
+        self.query = query
+        matches = []; current = 0
+        rebuild(blocks)
+    }
+    /// The transcript changed: the matches again, the current one kept on its place.
+    mutating func rebuild(_ blocks: [(seq: Int, pieces: [String])]) {
+        let old = currentMatch
+        matches = []; current = 0
+        var restored = false
+        for b in blocks {
+            for (p, text) in b.pieces.enumerated() {
+                for o in findOccurrences(of: query, in: text) {
+                    let m = TranscriptFindMatch(block: b.seq, piece: p, offset: o)
+                    if !restored, let old, (m.block, m.piece, m.offset) >= (old.block, old.piece, old.offset) {
+                        current = matches.count; restored = true
+                    }
+                    matches.append(m)
+                }
+            }
+        }
+    }
+    /// The next match, or the previous one, wrapping around.
+    mutating func step(backward: Bool) {
+        guard !matches.isEmpty else { return }
+        current = (current + (backward ? matches.count - 1 : 1)) % matches.count
+    }
+}

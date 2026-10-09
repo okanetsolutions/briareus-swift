@@ -32,8 +32,9 @@ enum SidebarCommon {
         switch action {
         case .newSession: nav.show(.newSession(repo: newSessionRepo))
         case .usage: nav.show(.usage)
-        case .whatsapp: nav.show(.webApp(.whatsapp))
+        case .whatsapp: nav.show(WhatsAppInboxModel.offered && WhatsAppInboxModel.shared.configured == true ? .whatsappInbox : .webApp(.whatsapp))
         case .slack: nav.show(SlackInboxModel.offered ? .slackInbox : .webApp(.slack))
+        case .mail: nav.show(MailInboxModel.offered ? .mail : .mailSettings(id: nil))
         case .findings: nav.show(.findings)
         }
     }
@@ -135,11 +136,12 @@ private struct SidebarProjectsScreen: View {
     @ObservedObject private var model = ProjectsModel.shared
     @ObservedObject private var navigator = Navigator.main
     @ObservedObject private var store = Store.shared
+    @ObservedObject private var attention = AttentionModel.shared
 
     var body: some View {
         SidebarScreenFrame(sessions: nil) {
             Color.clear.frame(height: 10)
-            SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting) {
+            SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting + attention.approvals) {
                 SidebarCommon.perform($0, newSessionRepo: model.projects.first?.repo)
             }
             Color.clear.frame(height: 14)
@@ -175,13 +177,14 @@ private struct SidebarSessionsScreen: View {
     @ObservedObject var model: SidebarSessions
     @ObservedObject private var projects = ProjectsModel.shared
     @ObservedObject private var navigator = Navigator.main
+    @ObservedObject private var attention = AttentionModel.shared
     @State private var keyMonitor: Any?
 
     var body: some View {
         let selected = navigator.selectedID
         SidebarScreenFrame(sessions: model) {
             Color.clear.frame(height: 10)
-            SidebarStrip(selected: selected, waiting: projects.findingsWaiting) {
+            SidebarStrip(selected: selected, waiting: projects.findingsWaiting + attention.approvals) {
                 SidebarCommon.perform($0, newSessionRepo: model.project.repo)
             }
             Color.clear.frame(height: 14)
@@ -206,7 +209,12 @@ private struct SidebarSessionsScreen: View {
             if !model.loaded { LoadingNote() }
             Color.clear.frame(height: 8)
         }
-        .task { await poll(every: 7) { await model.load() } }
+        // Every 7 seconds, or every minute while the live stream brings the changes.
+        .task { await poll(every: 7) { if SessionFeed.shared.live && model.loaded { try? await Task.sleep(nanoseconds: 53_000_000_000) }; return await model.load() } }
+        .onReceive(NotificationCenter.default.publisher(for: .sessionLive)) { note in
+            guard note.userInfo?["repo"] as? String == model.project.repo, let raw = note.userInfo?["session"] as? JSON else { return }
+            model.upsert(raw)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await model.load() } }
         .onAppear {
             // Esc leaves ☑ Select.
