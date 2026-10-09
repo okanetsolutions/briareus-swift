@@ -46,7 +46,8 @@ final class Keeper<Model: AnyObject> {
         let made = make()
         model = made
         watch = Navigator.stacksChanged.sink { [weak self] in
-            MainActor.assumeIsolated {
+            // A step later: a page moving between windows (pop out, dock) is briefly on no stack, and keeps its model.
+            DispatchQueue.main.async {
                 guard let self, !Navigator.anyHas(self.screen), let kept = self.model else { return }
                 self.model = nil
                 self.watch = nil

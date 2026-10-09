@@ -84,10 +84,11 @@ final class DetachedWindows: NSObject, NSWindowDelegate {
         entries.remove(at: i)
         w.contentView = nil
         w.close()
-        Navigator.stacksChanged.send()
-        // A step later, so the page's views (a web page's own view among them) have left the closed window.
+        // A step later, so the page's views (a web page's own view among them) have left the closed window. Its models
+        // are checked only once the main window has taken the page, so they live on through the move.
         DispatchQueue.main.async {
             Navigator.main.adopt(stack, panel: panel)
+            Navigator.stacksChanged.send()
             if let main = BrowserWindows.mainWindow { self.front(main) }
         }
     }
