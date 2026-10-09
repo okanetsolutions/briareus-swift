@@ -1,7 +1,6 @@
 // The words and numbers the screens show, as the Windows client formats them. Colours are the UI's: it maps a finding's
 // severity, a session's status, a review verdict and a check's result to its palette.
 import Foundation
-import UniformTypeIdentifiers
 
 // MARK: - Findings
 
@@ -119,36 +118,4 @@ func formatFileSize(_ bytes: Int) -> String {
     if bytes >= 1024 * 1024 { return String(format: "%.1f MB", Double(bytes) / (1024.0 * 1024.0)) }
     let kb = (max(bytes, 0) + 1023) / 1024
     return "\(max(kb, 1)) KB"
-}
-
-// MARK: - Received files
-
-/// A file someone else sent (a chat's attachment): the name it is saved under and whether it is safe to open with one click.
-enum ReceivedFile {
-    /// The sender's file name made safe to save: no folders, no hidden or dot-dot name, no control characters, at most
-    /// 120 characters; "attachment" when nothing is left.
-    static func safeName(_ name: String?) -> String {
-        var s = String(String.UnicodeScalarView((name ?? "").unicodeScalars.map { c in
-            c == "/" || c == "\\" || c == ":" || CharacterSet.controlCharacters.contains(c) ? "_" : c
-        }))
-        while let f = s.first, f == "." || f.isWhitespace { s.removeFirst() }
-        while let l = s.last, l.isWhitespace { s.removeLast() }
-        if s.count > 120 {
-            let ext = (s as NSString).pathExtension
-            let keep = ext.isEmpty || ext.count > 10 ? "" : "." + ext
-            s = String(s.prefix(120 - keep.count)) + keep
-        }
-        return s.isEmpty ? "attachment" : s
-    }
-    /// Whether a saved file of this name may be opened straight away: images (not SVG), PDFs, audio, video and plain
-    /// text. Anything else (scripts, apps, archives, web pages, documents, no extension) is only shown in Finder.
-    static func opensDirectly(_ name: String) -> Bool {
-        let ext = (name as NSString).pathExtension
-        guard !ext.isEmpty, let t = UTType(filenameExtension: ext) else { return false }
-        // Scripts and source code conform to plain text, so they are ruled out before anything is allowed.
-        let unsafe: [UTType] = [.sourceCode, .script, .shellScript, .executable, .svg, .html, .xml]
-        if unsafe.contains(where: { t.conforms(to: $0) }) { return false }
-        if t == .plainText || t == .utf8PlainText { return true }
-        return [UTType.image, .pdf, .audiovisualContent].contains { t.conforms(to: $0) }
-    }
 }

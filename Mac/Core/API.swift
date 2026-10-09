@@ -253,19 +253,6 @@ struct APIRoute: Sendable {
         .init(name: "ssh_decision", method: "POST", path: "ssh/requests/{id}/decision"),
         .init(name: "slack_requests", method: "GET", path: "slack/requests"),
         .init(name: "slack_decision", method: "POST", path: "slack/requests/{id}/decision"),
-        // The operator's WhatsApp through the server's WAHA, an Admin token's: the linked phone (started, its QR code to
-        // link it, unlinked), its chats, a chat's history, a message sent, a chat marked read.
-        .init(name: "whatsapp_accounts", method: "GET", path: "whatsapp/accounts"),
-        .init(name: "whatsapp_account", method: "GET", path: "whatsapp/accounts/{id}"),
-        .init(name: "whatsapp_start", method: "POST", path: "whatsapp/accounts/{id}/start"),
-        .init(name: "whatsapp_qr", method: "GET", path: "whatsapp/accounts/{id}/qr"),
-        .init(name: "whatsapp_logout", method: "POST", path: "whatsapp/accounts/{id}/logout"),
-        .init(name: "whatsapp_conversations", method: "GET", path: "whatsapp/accounts/{id}/conversations"),
-        .init(name: "whatsapp_messages", method: "GET", path: "whatsapp/accounts/{id}/conversations/{chat}/messages"),
-        .init(name: "whatsapp_send", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/messages"),
-        .init(name: "whatsapp_read", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/read"),
-        // An attachment's bytes, through the server (fetched by APIClient.serverFile, with the token).
-        .init(name: "whatsapp_media", method: "GET", path: "whatsapp/accounts/{id}/conversations/{chat}/messages/{message}/media"),
         // A project's memories, what its agents remember between sessions; and for an Admin token their health (what
         // needs verifying, what looks duplicated), verify, archive or restore, and a merge of two.
         .init(name: "memories", method: "GET", path: "memories"),

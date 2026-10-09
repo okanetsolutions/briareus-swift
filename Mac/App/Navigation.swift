@@ -26,8 +26,6 @@ enum Screen: Hashable, Identifiable {
     /// What every project spent over a window.
     case usage
     case webApp(WebApp)
-    /// The operator's WhatsApp, read through the server's WAHA.
-    case whatsappInbox
     /// The operator's Slack inbox, read through the server.
     case slackInbox
     /// The settings page's forms: `row` is the server's record (nil with `defaults` for a new one).
@@ -63,7 +61,6 @@ enum Screen: Hashable, Identifiable {
         case .findings: return "findings"
         case .usage: return "usage"
         case .webApp(let app): return app.rawValue
-        case .whatsappInbox: return "whatsapp-inbox"
         case .slackInbox: return "slack-inbox"
         case .projectSettings(let row, _): return "project-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"

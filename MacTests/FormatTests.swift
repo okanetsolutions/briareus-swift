@@ -213,20 +213,4 @@ final class FormatTests: XCTestCase {
         XCTAssertEqual(workingVerb(-150), "Working")
         XCTAssertFalse(workingVerb(Int.min).isEmpty)
     }
-
-    func testReceivedFileNamesAndWhatOpensDirectly() {
-        XCTAssertEqual(ReceivedFile.safeName("../../etc/passwd"), "_.._etc_passwd")
-        XCTAssertEqual(ReceivedFile.safeName(".hidden"), "hidden")
-        XCTAssertEqual(ReceivedFile.safeName(".."), "attachment")
-        XCTAssertEqual(ReceivedFile.safeName(nil), "attachment")
-        XCTAssertEqual(ReceivedFile.safeName("a\u{0}b:c\\d.pdf"), "a_b_c_d.pdf")
-        XCTAssertEqual(ReceivedFile.safeName(String(repeating: "x", count: 300) + ".png").count, 120)
-        XCTAssertTrue(ReceivedFile.safeName(String(repeating: "x", count: 300) + ".png").hasSuffix(".png"))
-        for ok in ["photo.JPG", "doc.pdf", "voice.ogg", "clip.mp4", "song.mp3", "notes.txt"] {
-            XCTAssertTrue(ReceivedFile.opensDirectly(ok), ok)
-        }
-        for bad in ["invoice.command", "run.sh", "x.py", "App.app", "a.zip", "page.html", "pic.svg", "f.pkg", "noext", "a.terminal", "x.jar", "s.scpt", "w.webloc", "a.png.command"] {
-            XCTAssertFalse(ReceivedFile.opensDirectly(bad), bad)
-        }
-    }
 }

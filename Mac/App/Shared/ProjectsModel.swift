@@ -107,8 +107,6 @@ final class ProjectsModel: ObservableObject {
         recount()
         // The approvals agents wait on count on the ⚑ too.
         _ = await AttentionModel.shared.load()
-        // Whether the server has WhatsApp set up, which the sidebar's WhatsApp button opens then.
-        await WhatsAppInboxModel.shared.probe()
         guard Store.shared.supports("sessions") else { return nil }
         do {
             let all = try await Store.shared.call("sessions")

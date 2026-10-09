@@ -401,22 +401,3 @@ enum ServerVideo {
         }
     }
 }
-
-/// Saves a file someone else sent into a folder of the temporary directory, quarantined as a download so Gatekeeper
-/// checks it, and opens it when it is a safe kind (`ReceivedFile.opensDirectly`); anything else is shown in Finder.
-func openReceivedFile(_ data: Data, named name: String?, prefix: String, in folder: String) throws {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(folder, isDirectory: true)
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    let safe = ReceivedFile.safeName(prefix + "-" + ReceivedFile.safeName(name))
-    var file = dir.appendingPathComponent(safe, isDirectory: false)
-    try? FileManager.default.removeItem(at: file)
-    try data.write(to: file)
-    var values = URLResourceValues()
-    values.quarantineProperties = [
-        kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload as String,
-        kLSQuarantineAgentNameKey as String: "Briareus"
-    ]
-    try file.setResourceValues(values)
-    if ReceivedFile.opensDirectly(safe) { NSWorkspace.shared.open(file) }
-    else { NSWorkspace.shared.activateFileViewerSelecting([file]) }
-}

@@ -32,7 +32,7 @@ enum SidebarCommon {
         switch action {
         case .newSession: nav.show(.newSession(repo: newSessionRepo))
         case .usage: nav.show(.usage)
-        case .whatsapp: nav.show(WhatsAppInboxModel.offered && WhatsAppInboxModel.shared.configured == true ? .whatsappInbox : .webApp(.whatsapp))
+        case .whatsapp: nav.show(.webApp(.whatsapp))
         case .slack: nav.show(SlackInboxModel.offered ? .slackInbox : .webApp(.slack))
         case .mail: nav.show(MailInboxModel.offered ? .mail : .mailSettings(id: nil))
         case .findings: nav.show(.findings)

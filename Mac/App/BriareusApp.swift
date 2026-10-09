@@ -298,7 +298,6 @@ struct ScreenView: View {
         case .findings: FindingsScreen()
         case .usage: UsageScreen()
         case .webApp(let app): WebAppScreen(app: app)
-        case .whatsappInbox: WhatsAppInboxScreen()
         case .slackInbox: SlackInboxScreen()
         case .projectSettings(let row, let defaults): ProjectSettingsScreen(row: row, defaults: defaults)
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)
