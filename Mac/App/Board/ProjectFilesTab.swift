@@ -333,7 +333,7 @@ struct ProjectFilesTab: View {
     var body: some View {
         GeometryReader { g in
             let total = max(g.size.width - 1, 1)
-            let tree = min(max(total * treeFraction, 200), max(total - 320, 200))
+            let tree: CGFloat = min(max(total * CGFloat(treeFraction), 200), max(total - 320, 200))
             HStack(spacing: 0) {
                 projectPane.frame(width: tree)
                 ZStack {
@@ -345,9 +345,10 @@ struct ProjectFilesTab: View {
                 .onHover { on in if on { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
                 .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { v in
-                        let start = dragStart ?? tree
+                        let start: CGFloat = dragStart ?? tree
                         if dragStart == nil { dragStart = start }
-                        treeFraction = min(max((start + v.translation.width) / total, 0.1), 0.8)
+                        let fraction = Double((start + v.translation.width) / total)
+                        treeFraction = min(max(fraction, 0.1), 0.8)
                     }
                     .onEnded { _ in dragStart = nil })
                 editorPane.frame(maxWidth: .infinity)
