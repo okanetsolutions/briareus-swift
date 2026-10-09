@@ -60,7 +60,7 @@ final class SettingsModel: ObservableObject {
             Task { @MainActor in SettingsModel.shared.loadEnvoyer() }
         }
         // Each time the sidebar turns into the settings page, it reads everything afresh, as a new settings screen does.
-        modeWatch = Navigator.shared.$sidebarMode.removeDuplicates().sink { mode in
+        modeWatch = Navigator.main.$sidebarMode.removeDuplicates().sink { mode in
             guard mode == .settings else { return }
             Task { @MainActor in SettingsModel.shared.start() }
         }
@@ -129,7 +129,7 @@ final class SettingsModel: ObservableObject {
     static func isSettingsScreen(_ screen: Screen) -> Bool {
         switch screen {
         case .projectSettings, .providerSettings, .dbServerSettings, .sshServerSettings, .forgeAccountSettings, .slackWorkspaceSettings, .envoyerAccountSettings: return true
-        case .meetingSettings: return true
+        case .meetingSettings, .mailSettings: return true
         default: return false
         }
     }

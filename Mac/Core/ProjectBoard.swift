@@ -166,6 +166,16 @@ struct ProjectBoard: Equatable, Sendable {
         return true
     }
 
+    /// The column and position of the card with item id `id`.
+    func find(_ id: String) -> (column: Int, card: Int)? {
+        for (c, column) in columns.enumerated() {
+            if let i = column.cards.firstIndex(where: { $0.id == id }) { return (c, i) }
+        }
+        return nil
+    }
+    /// The column standing for option `id` (nil: the "No <field>" column).
+    func columnIndex(_ id: String?) -> Int? { columns.firstIndex { $0.id == id } }
+
     /// Drops the cards that are not `repo`'s (drafts and private items among them), as a board shared by several
     /// repositories shows one project only its own. A column that lost cards has its count and totals redone over the rest.
     mutating func keepRepo(_ repo: String?) {
@@ -303,4 +313,48 @@ func savedIssueKey(_ repo: String, _ number: Int) -> String { "issue:\(repo)#\(n
 /// An issue's Status on the first of its project boards that gives it one (from what `issue` answers for it); nil on none.
 func issueProjectStatus(_ issue: JSON) -> String? {
     issue["projects"].items.lazy.compactMap { $0["status"].nonEmpty }.first
+}
+
+// MARK: - Moves settling
+
+/// A card GitHub moved on a repository's board, every column it was carried from while it settles and the one it went to
+/// (nil for the "No <field>" column). The board's cards are read through its view's filter, a GitHub search that lags
+/// behind a move by seconds: a read just after one still shows the card where it was, and the server keeps that read for
+/// 45 seconds. So for two minutes a read that has it in a column it came from is corrected by hand.
+struct SettlingMove: Equatable, Sendable {
+    static let seconds: TimeInterval = 120
+    var repo: String
+    var id: String
+    var from: [String?]
+    var column: String?
+    var until: Date
+}
+
+/// Records a move GitHub accepted. A card moved again before it settled keeps the columns it came from before, so a read
+/// behind both moves is still corrected.
+func settlingRecord(_ moves: [SettlingMove], repo: String, id: String, from: String?, to: String?, now: Date = Date()) -> [SettlingMove] {
+    var rest = moves
+    var origins: [String?] = []
+    if let i = rest.firstIndex(where: { $0.repo == repo && $0.id == id }) { origins = rest.remove(at: i).from }
+    origins.append(from)
+    rest.append(SettlingMove(repo: repo, id: id, from: origins, column: to, until: now.addingTimeInterval(SettlingMove.seconds)))
+    return rest
+}
+
+/// Puts the cards GitHub moved lately in their new columns on a read of `repo`'s board that still has them in a column
+/// they came from, and returns the moves still settling. One the read shows where it went, or anywhere but where it came
+/// from (moved again since, by someone else), is GitHub's own and settled; so is one past its two minutes.
+func settlingApply(_ moves: [SettlingMove], to board: inout ProjectBoard, repo: String, now: Date = Date()) -> [SettlingMove] {
+    var rest: [SettlingMove] = []
+    for m in moves {
+        if now > m.until { continue }
+        guard m.repo == repo else { rest.append(m); continue }
+        guard let (column, card) = board.find(m.id) else { rest.append(m); continue }
+        let to = board.columnIndex(m.column)
+        let stale = m.from.contains { $0 == board.columns[column].id }
+        if column == to || !stale { continue }
+        if let to { board.move(from: column, card: card, to: to) }
+        rest.append(m)
+    }
+    return rest
 }

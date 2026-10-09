@@ -139,9 +139,19 @@ struct BrowserView: NSViewRepresentable {
 struct RunBrowserBar: View {
     var browser: Browser?
     var url: String?
+    /// The session serving the page, which feedback goes to; nil offers none.
+    var session: String? = nil
+    var feedback: PreviewFeedback? = nil
 
     var body: some View {
-        if let browser { LiveRunBrowserBar(browser: browser, url: url) } else {
+        if let browser {
+            HStack(spacing: 0) {
+                LiveRunBrowserBar(browser: browser, url: url)
+                if let feedback, session != nil, PreviewFeedback.offered {
+                    PreviewFeedbackButton(feedback: feedback, browser: browser).padding(.bottom, 8)
+                }
+            }
+        } else {
             HStack(spacing: 2) {
                 BarIcon(symbol: "arrow.left", tip: "Back", enabled: false) {}
                 BarIcon(symbol: Glyph.symbol(0xE72A), tip: "Forward", enabled: false) {}
@@ -224,5 +234,104 @@ func selectAllOnMouseUp(tries: Int = 50, _ stillFocused: @escaping @MainActor ()
         guard stillFocused() else { return }
         if NSEvent.pressedMouseButtons & 1 != 0 && tries > 0 { selectAllOnMouseUp(tries: tries - 1, stillFocused); return }
         NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+    }
+}
+
+// MARK: - Feedback on a preview
+
+/// Feedback on the page a session serves (core /sessions/{id}/preview/feedback): a point marked on the page, a comment,
+/// and a snapshot of the page with the point drawn on it, sent to the session's agent as a message.
+@MainActor
+final class PreviewFeedback: ObservableObject {
+    /// Waiting for the click that marks the point.
+    @Published var marking = false
+    @Published var sending = false
+    @Published var result: String?
+
+    static var offered: Bool { Store.shared.canManage && Store.shared.supports("preview_feedback") && Store.shared.supports("upload") }
+
+    /// The page was clicked at `point` (in the browser view's coordinates): asks the comment, snapshots the page with the
+    /// point drawn, uploads it and sends the feedback.
+    func mark(_ point: CGPoint, browser: Browser, session: String) {
+        marking = false
+        guard let url = browser.url ?? browser.webView.url?.absoluteString,
+              let text = Dialogs.text("Feedback on this spot", label: "What should change here? The agent gets it with a screenshot of the page, the spot marked.",
+                                      okLabel: "Send", multiline: true)?.cTrimmed, !text.isEmpty else { return }
+        sending = true; result = nil
+        let config = WKSnapshotConfiguration()
+        browser.webView.takeSnapshot(with: config) { image, error in
+            Task { @MainActor in
+                guard let image, let png = Self.annotated(image, point: point, viewSize: browser.webView.bounds.size) else {
+                    self.sending = false; self.result = error?.localizedDescription ?? "The page could not be captured."; return
+                }
+                do {
+                    let uploadID = try await Store.shared.upload(name: "preview-feedback.png", bytes: png.data)
+                    let r = await boardCall("preview_feedback", ["sessionId": .string(session), "url": .string(url), "text": .string(text),
+                                                                "uploadId": .string(uploadID), "width": JSON(png.width), "height": JSON(png.height),
+                                                                "x": JSON(png.x), "y": JSON(png.y)])
+                    self.result = r.error.map { $0.message ?? $0.description } ?? "Sent to the session's agent."
+                } catch {
+                    self.result = errorText(error)
+                }
+                self.sending = false
+            }
+        }
+    }
+
+    /// The snapshot as a PNG with a ring around the point, and the point in its pixels.
+    static func annotated(_ image: NSImage, point: CGPoint, viewSize: CGSize) -> (data: Data, width: Int, height: Int, x: Double, y: Double)? {
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil), viewSize.width > 0, viewSize.height > 0 else { return nil }
+        let w = cg.width, h = cg.height
+        let sx = Double(w) / viewSize.width, sy = Double(h) / viewSize.height
+        let px = min(max(point.x * sx, 0), Double(w - 1)), py = min(max(point.y * sy, 0), Double(h - 1))
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        // The image's origin is at the bottom left.
+        let r = 18 * sx
+        ctx.setStrokeColor(NSColor.systemRed.cgColor); ctx.setLineWidth(4 * sx)
+        ctx.strokeEllipse(in: CGRect(x: px - r, y: Double(h) - py - r, width: 2 * r, height: 2 * r))
+        guard let out = ctx.makeImage() else { return nil }
+        let rep = NSBitmapImageRep(cgImage: out)
+        guard let data = rep.representation(using: .png, properties: [:]) else { return nil }
+        return (data, w, h, px, py)
+    }
+}
+
+/// While marking, a layer over the page that takes the click.
+struct PreviewFeedbackLayer: View {
+    @ObservedObject var feedback: PreviewFeedback
+    var browser: Browser
+    var session: String
+    var body: some View {
+        if feedback.marking {
+            GeometryReader { _ in
+                Color.accentColor.opacity(0.06)
+                    .contentShape(Rectangle())
+                    .onTapGesture(coordinateSpace: .local) { p in feedback.mark(p, browser: browser, session: session) }
+                    .overlay(alignment: .top) {
+                        Text("Click the spot your feedback is about · Esc cancels").font(Theme.footnote).foregroundStyle(Theme.onAccent)
+                            .padding(.horizontal, 10).padding(.vertical, 5).background(Capsule().fill(Theme.accent)).padding(.top, 10)
+                    }
+                    .onExitCommand { feedback.marking = false }
+            }
+            .onHover { $0 ? NSCursor.crosshair.push() : NSCursor.pop() }
+        }
+    }
+}
+
+/// 💬 in the address bar: marks a spot, then sends the feedback.
+struct PreviewFeedbackButton: View {
+    @ObservedObject var feedback: PreviewFeedback
+    /// Observed, so the button comes alive once the page is up.
+    @ObservedObject var browser: Browser
+    private var enabled: Bool { browser.ready }
+    var body: some View {
+        HStack(spacing: 6) {
+            BarIcon(symbol: "text.bubble", tip: feedback.marking ? "Cancel marking" : "Feedback on a spot of this page, to the session's agent",
+                    enabled: enabled && !feedback.sending) { feedback.marking.toggle() }
+            if feedback.sending { Text("Sending…").font(Theme.caption).foregroundStyle(Theme.muted) }
+            else if let r = feedback.result { Text(r).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1) }
+        }
     }
 }

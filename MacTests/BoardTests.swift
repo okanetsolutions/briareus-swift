@@ -778,4 +778,50 @@ final class BoardTests: XCTestCase {
         XCTAssertTrue(reviewList(pulls, stacks: .null, me: nil).isEmpty)
         XCTAssertTrue(reviewList(pulls, stacks: .null, me: "").isEmpty)
     }
+
+    // MARK: - The pull request list's cooldown (Windows #132)
+
+    func testASpentAllowanceHoldsTheListUntilTheServersTime() {
+        var c = PullsCooldown()
+        let now = Date(timeIntervalSince1970: 1_000)
+        XCTAssertTrue(c.mayRead("o/r", now: now))
+        c.failed("o/r", error: APIError(.http, status: 429, retryAfter: 90.2), now: now)
+        // Rounded up, so a fractional Retry-After cannot allow an early read; another repository is not held.
+        XCTAssertEqual(c.deadline("o/r", now: now), now.addingTimeInterval(91))
+        XCTAssertFalse(c.mayRead("o/r", now: now.addingTimeInterval(90)))
+        XCTAssertTrue(c.mayRead("o/r", now: now.addingTimeInterval(91)))
+        XCTAssertTrue(c.mayRead("o/other", now: now))
+        // A 429 without Retry-After waits a minute.
+        var d = PullsCooldown()
+        d.failed("o/r", error: APIError(.http, status: 429), now: now)
+        XCTAssertEqual(d.deadline("o/r", now: now), now.addingTimeInterval(60))
+    }
+
+    func testOtherFailuresBackOffAndASuccessResetsTheStreak() {
+        var c = PullsCooldown()
+        let now = Date(timeIntervalSince1970: 1_000)
+        c.failed("o/r", error: APIError(.network), now: now)
+        XCTAssertEqual(c.deadline("o/r", now: now), now.addingTimeInterval(2))
+        c.failed("o/r", error: APIError(.http, status: 502), now: now.addingTimeInterval(2))
+        XCTAssertEqual(c.deadline("o/r", now: now), now.addingTimeInterval(6))
+        for _ in 0..<8 { c.failed("o/r", error: APIError(.network), now: now) }
+        XCTAssertEqual(c.deadline("o/r", now: now), now.addingTimeInterval(60))
+        c.succeeded("o/r")
+        // The success does not shorten the deadline set, but the next failure starts the streak over.
+        XCTAssertEqual(c.deadline("o/r", now: now), now.addingTimeInterval(60))
+        c.failed("o/r", error: APIError(.network), now: now.addingTimeInterval(100))
+        XCTAssertEqual(c.deadline("o/r", now: now.addingTimeInterval(100)), now.addingTimeInterval(102))
+        // A cancelled read changes nothing.
+        var e = PullsCooldown()
+        e.failed("o/r", error: APIError(.cancelled), now: now)
+        XCTAssertTrue(e.mayRead("o/r", now: now))
+    }
+
+    func testALaterShorterRetryKeepsTheLongerDeadline() {
+        var c = PullsCooldown()
+        let now = Date(timeIntervalSince1970: 1_000)
+        c.failed("o/r", error: APIError(.http, status: 429, retryAfter: 300), now: now)
+        c.failed("o/r", error: APIError(.http, status: 429, retryAfter: 10), now: now.addingTimeInterval(5))
+        XCTAssertEqual(c.deadline("o/r", now: now), now.addingTimeInterval(300))
+    }
 }

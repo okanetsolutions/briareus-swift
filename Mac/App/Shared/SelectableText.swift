@@ -91,8 +91,16 @@ final class TextSelectionGroup {
     private var focus: End?
     private var mouseMonitor: Any?
 
-    func add(_ v: SelectableTextNSView) { members.add(v) }
+    /// The find bar's query and its current match (the block's seq and which occurrence in that block), which the views
+    /// light: every match softly, the current one more.
+    var find: (query: String, block: Int?, occurrence: Int)? {
+        didSet { hit = nil; for v in members.allObjects { v.needsDisplay = true } }
+    }
+    private var hit: (view: SelectableTextNSView, range: NSRange)??
+
+    func add(_ v: SelectableTextNSView) { members.add(v); hit = nil }
     func remove(_ v: SelectableTextNSView) {
+        hit = nil
         members.remove(v)
         if anchor?.view === v || focus?.view === v { clear() }
     }
@@ -106,6 +114,51 @@ final class TextSelectionGroup {
                 if abs(a.1.maxY - b.1.maxY) > 0.5 { return a.1.maxY > b.1.maxY }
                 return a.1.minX < b.1.minX
             }
+    }
+
+    /// The current match's view and range, once its block's views are on screen: the block's views in reading order,
+    /// counting its occurrences.
+    func currentHit() -> (view: SelectableTextNSView, range: NSRange)? {
+        if let hit { return hit }
+        var found: (view: SelectableTextNSView, range: NSRange)?
+        if let f = find, let block = f.block, !f.query.isEmpty {
+            var left = f.occurrence
+            for (v, _) in ordered() where v.findBlock == block {
+                let offsets = findOccurrences(of: f.query, in: v.plain)
+                if left < offsets.count {
+                    found = (v, NSRange(location: offsets[left], length: (f.query as NSString).length))
+                    break
+                }
+                left -= offsets.count
+            }
+        }
+        // Not kept while the block's views are still being made: the next draw looks again.
+        if found != nil { hit = .some(found) }
+        return found
+    }
+    /// One step of bringing the current match into view in the scroll view its texts are in: centred once its text is
+    /// made; until then a page toward its block, which the lazy column makes as it comes near. True once it is in view.
+    func revealStep(window: NSWindow?) -> Bool {
+        if let (v, r) = currentHit(), let doc = v.enclosingScrollView?.documentView, let clip = v.enclosingScrollView?.contentView {
+            let hit = v.convert(v.rect(for: r), to: doc)
+            let visible = clip.documentVisibleRect
+            if visible.contains(hit) && hit.minY - visible.minY > 40 && visible.maxY - hit.maxY > 40 { return true }
+            let pad = max((visible.height - hit.height) / 2, 0)
+            doc.scrollToVisible(hit.insetBy(dx: 0, dy: -pad))
+            return false
+        }
+        guard let f = find, let block = f.block else { return true }
+        let shown = ordered(in: window).filter { $0.view.findBlock != nil }
+        guard let any = shown.first?.view, let doc = any.enclosingScrollView?.documentView,
+              let clip = any.enclosingScrollView?.contentView else { return true }
+        let seqs = shown.compactMap { $0.view.findBlock }
+        guard let low = seqs.min(), let high = seqs.max() else { return true }
+        let visible = clip.documentVisibleRect
+        // Up or down a screen, as the document is drawn.
+        let up = block < low || (block <= high && block >= low)
+        let step = visible.height * 0.9 * (up == doc.isFlipped ? -1 : 1)
+        doc.scrollToVisible(visible.offsetBy(dx: 0, dy: step))
+        return false
     }
 
     /// The selection's ends in reading order, with the views between them; nil when it is empty.
@@ -279,6 +332,8 @@ final class SelectableTextNSView: NSView {
     var selected = NSRange(location: 0, length: 0) { didSet { if oldValue != selected { needsDisplay = true } } }
     /// A table cell: joined to one beside it with a tab when copied, and kept even when empty.
     var isCell = false
+    /// The transcript block it belongs to, by seq, which find counts its matches in.
+    var findBlock: Int?
     static let cellLineHeight = ceil(NSLayoutManager().defaultLineHeight(for: SelectableFont.system(14)))
     var plain: String { storage.string }
     var length: Int { storage.length }
@@ -354,6 +409,19 @@ final class SelectableTextNSView: NSView {
                 NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4).fill()
             }
         }
+        if let f = group?.find, !f.query.isEmpty {
+            // Find's matches in amber, the current one stronger: apart from the selection's accent.
+            let current = group?.currentHit().flatMap { $0.view === self ? $0.range : nil }
+            let n = (f.query as NSString).length
+            for o in findOccurrences(of: f.query, in: plain) {
+                let r = NSRange(location: o, length: n)
+                NSColor(Theme.warn).withAlphaComponent(r == current ? 0.55 : 0.22).setFill()
+                let g = layout.glyphRange(forCharacterRange: r, actualCharacterRange: nil)
+                layout.enumerateEnclosingRects(forGlyphRange: g, withinSelectedGlyphRange: g, in: container) { rect, _ in
+                    NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2).fill()
+                }
+            }
+        }
         if selected.length > 0 {
             let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             NSColor(Theme.accent).withAlphaComponent(dark ? 0.4 : 0.3).setFill()
@@ -361,6 +429,13 @@ final class SelectableTextNSView: NSView {
             layout.enumerateEnclosingRects(forGlyphRange: g, withinSelectedGlyphRange: g, in: container) { r, _ in r.fill() }
         }
         layout.drawGlyphs(forGlyphRange: glyphs, at: .zero)
+    }
+
+    /// Where a range of the text is drawn, in the view.
+    func rect(for range: NSRange) -> NSRect {
+        layOut(width: bounds.width)
+        let g = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        return layout.boundingRect(forGlyphRange: g, in: container)
     }
 
     /// The character boundary nearest a point in the view.
@@ -483,7 +558,13 @@ extension SelectableTextNSView: NSMenuItemValidation {
 private struct TextSelectionGroupKey: EnvironmentKey {
     static let defaultValue: TextSelectionGroup? = nil
 }
+private struct FindBlockKey: EnvironmentKey { static let defaultValue: Int? = nil }
 extension EnvironmentValues {
+    /// The transcript block the text under it belongs to, by seq (find's matches are counted per block).
+    var findBlock: Int? {
+        get { self[FindBlockKey.self] }
+        set { self[FindBlockKey.self] = newValue }
+    }
     /// The page's selection, which every `SelectableText` under it joins.
     var textSelectionGroup: TextSelectionGroup? {
         get { self[TextSelectionGroupKey.self] }
@@ -496,6 +577,7 @@ struct SelectableText: NSViewRepresentable {
     var text: NSAttributedString
     var cell = false
     @Environment(\.textSelectionGroup) private var group
+    @Environment(\.findBlock) private var findBlock
 
     init(_ text: NSAttributedString, cell: Bool = false) { self.text = text; self.cell = cell }
     /// Plain text in a font and colour.
@@ -506,11 +588,13 @@ struct SelectableText: NSViewRepresentable {
     func makeNSView(context: Context) -> SelectableTextNSView {
         let v = SelectableTextNSView(frame: .zero)
         v.isCell = cell
+        v.findBlock = findBlock
         v.join(group)
         v.set(text)
         return v
     }
     func updateNSView(_ v: SelectableTextNSView, context: Context) {
+        v.findBlock = findBlock
         v.join(group)
         v.set(text)
     }

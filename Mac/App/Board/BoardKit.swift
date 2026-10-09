@@ -39,6 +39,34 @@ func boardCall(_ operation: String, _ arguments: JSON = [:], timeout: TimeInterv
     catch let e as APIError { return .failure(e) }
     catch { return .failure(APIError(.cancelled)) }
 }
+/// Every read of a repository's pull request list goes through here, so a cooldown the server asked for holds for all of
+/// them: while it runs the read is not made (nil), and a 429 or another failure sets the next one.
+@MainActor
+enum PullsGate {
+    private(set) static var cooldown = PullsCooldown()
+    static func deadline(_ repo: String) -> Date? { cooldown.deadline(repo) }
+
+    static func read(_ repo: String, fresh: Bool = false) async -> Result<JSON, APIError>? {
+        guard cooldown.mayRead(repo) else { return nil }
+        var args: JSON = ["repo": .string(repo)]
+        if fresh { args["fresh"] = "1" }
+        let r = await boardCall("pulls", args)
+        switch r {
+        case .success: cooldown.succeeded(repo)
+        case .failure(let e):
+            // A server from before `fresh` refuses the argument it does not know: not a failure of the list.
+            if !(fresh && e.kind == .http && e.status == 400) { cooldown.failed(repo, error: e) }
+        }
+        post(.pullsCooldownChanged, ["repo": repo])
+        return r
+    }
+}
+
+extension Notification.Name {
+    /// A repository's pull request list was read or refused: its cooldown may have changed.
+    static let pullsCooldownChanged = Notification.Name("BriareusPullsCooldownChanged")
+}
+
 extension Result where Failure == APIError {
     var value: Success? { if case .success(let v) = self { return v }; return nil }
     var error: APIError? { if case .failure(let e) = self { return e }; return nil }

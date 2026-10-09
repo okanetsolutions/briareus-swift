@@ -1,5 +1,6 @@
 // The main window's columns and the navigation between them: the sidebar, the detail pane's stack of screens, and the
 // column beside a conversation (the Windows client's pull request panel).
+import Combine
 import SwiftUI
 
 /// The web apps the sidebar strip opens in the detail pane.
@@ -35,6 +36,10 @@ enum Screen: Hashable, Identifiable {
     case envoyerAccountSettings(row: JSON?, defaults: JSON?)
     /// This Mac's meeting assistant settings.
     case meetingSettings
+    /// A mailbox the server keeps synced, or (nil) adding one.
+    case mailSettings(id: Int?)
+    /// The synced mail.
+    case mail
     /// A session's ⚡ Webhook, pushed over its conversation; `session` is the conversation's record.
     case webhook(session: JSON)
 
@@ -58,6 +63,8 @@ enum Screen: Hashable, Identifiable {
         case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
         case .envoyerAccountSettings(let row, _): return "envoyer-account:\(row?["id"].int.map(String.init) ?? "new")"
         case .meetingSettings: return "settings-meeting"
+        case .mailSettings(let id): return id.map { "mail-settings:\($0)" } ?? "mail-settings"
+        case .mail: return "mail"
         case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
         }
     }
@@ -67,12 +74,30 @@ enum Screen: Hashable, Identifiable {
 
 @MainActor
 final class Navigator: ObservableObject {
-    static let shared = Navigator()
+    /// The main window's.
+    static let main = Navigator()
+    /// The navigator of the window in front: a page popped out into a window of its own opens what it opens there.
+    static var shared: Navigator { DetachedWindows.shared.keyNavigator ?? main }
+
+    /// A window of its own (DetachedWindows), not the main window.
+    let detached: Bool
+    init(stack: [Screen] = [.placeholder], detached: Bool = false) {
+        self.stack = stack
+        self.detached = detached
+    }
 
     enum SidebarMode { case projects, settings }
 
     /// The detail pane's stack: its root first.
-    @Published private(set) var stack: [Screen] = [.placeholder]
+    @Published private(set) var stack: [Screen] = [.placeholder] {
+        didSet { Navigator.stacksChanged.send() }
+    }
+    /// Any window's stack changed, or a window closed.
+    static let stacksChanged = PassthroughSubject<Void, Never>()
+    /// Whether any window has the screen on its stack.
+    static func anyHas(_ screen: Screen) -> Bool {
+        main.stack.contains(screen) || DetachedWindows.shared.navigators.contains { $0.stack.contains(screen) }
+    }
     @Published var sidebarMode: SidebarMode = .projects
     /// The session whose column shows beside its conversation; nil takes the column away.
     @Published var panelSession: JSON?
@@ -95,14 +120,40 @@ final class Navigator: ObservableObject {
         return false
     }
 
-    /// Shows a screen as the detail pane's root, unless one with the same id already is.
+    /// Shows a screen as the detail pane's root, unless one with the same id already is. A page already in another window
+    /// brings that window forward instead.
     func show(_ screen: Screen) {
         if stack.count == 1 && root == screen { narrowShowsDetail = true; return }
+        if DetachedWindows.shared.bringForward(screen, from: self) { return }
         guard mayLeave() else { return }
         panelSession = nil
-        BrowserDock.shared.detailChanged(to: screen)
+        if !detached { BrowserDock.shared.detailChanged(to: screen) }
         stack = [screen]
         narrowShowsDetail = true
+    }
+    /// Pops the page out into a window of its own, as it is, leaving the detail empty (the main window's alone).
+    func popOut() {
+        guard !detached, DetachedWindows.detachable(root), mayLeave() else { return }
+        let moved = stack, panel = panelSession
+        panelSession = nil
+        BrowserDock.shared.dock(nil)
+        stack = [.placeholder]
+        narrowShowsDetail = false
+        DetachedWindows.shared.open(moved, panel: panel)
+    }
+    /// The main window takes a popped-out page back, as it is.
+    func adopt(_ moved: [Screen], panel: JSON?) {
+        guard !detached, mayLeave() else { return }
+        BrowserDock.shared.detailChanged(to: moved.first ?? .placeholder)
+        stack = moved.isEmpty ? [.placeholder] : moved
+        panelSession = panel
+        narrowShowsDetail = true
+    }
+    /// Back to the page at the bottom of the stack.
+    func popToRoot() {
+        guard stack.count > 1, mayLeave() else { narrowShowsDetail = true; return }
+        if top.id.hasPrefix("conversation:") { panelSession = nil }
+        stack = [root]
     }
     func push(_ screen: Screen) {
         if top == screen { return }
@@ -137,6 +188,7 @@ final class Navigator: ObservableObject {
         leaveGuard = nil
         panelSession = nil
         BrowserDock.shared.reset()
+        DetachedWindows.shared.closeAll()
         stack = [.placeholder]
         sidebarMode = .projects
         narrowShowsDetail = false
@@ -168,6 +220,12 @@ struct PaneHeader: View {
     var titleAction: (() -> Void)? = nil
     var sidebar = false
     @Environment(\.paneBack) private var back
+    @Environment(\.paneDetach) private var detach
+
+    private var shownButtons: [HeaderButton] {
+        guard let detach else { return buttons }
+        return buttons + [HeaderButton(glyph: detach.glyph, tip: detach.tip, action: detach.action)]
+    }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -177,7 +235,7 @@ struct PaneHeader: View {
         .padding(.horizontal, 18).padding(.vertical, 10)
         // pane.c refresh_header: a 40px title and subtitle, 32px buttons (or the back button), or a 22px title alone, plus
         // `py-2.5` and the border.
-        .frame(minHeight: subtitle != nil ? 61 : !buttons.isEmpty || back != nil ? 53 : 43)
+        .frame(minHeight: subtitle != nil ? 61 : !shownButtons.isEmpty || back != nil ? 53 : 43)
         .background(sidebar ? Theme.sidebar : Theme.canvas)
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
@@ -210,7 +268,7 @@ struct PaneHeader: View {
             .frame(minWidth: labels ? 120 : 0, alignment: .leading)
             .layoutPriority(1)
             Spacer(minLength: 8)
-            ForEach(buttons) { b in
+            ForEach(shownButtons) { b in
                 Group {
                     if let label = b.label, labels {
                         Button(action: b.action) { Text(label) }.dashButton(b.prominent ? .prominent : b.destructive ? .destructive : .bordered)
@@ -231,6 +289,16 @@ struct HoverInkStyle: ButtonStyle {
     @State private var hovered = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.foregroundStyle(hovered ? Theme.ink : Theme.muted).onHover { hovered = $0 }
+    }
+}
+
+/// The header's last button on a page that can live in a window of its own: pop it out, or dock it back.
+struct PaneDetach { var glyph: String; var tip: String; var action: () -> Void }
+private struct PaneDetachKey: EnvironmentKey { static let defaultValue: PaneDetach? = nil }
+extension EnvironmentValues {
+    var paneDetach: PaneDetach? {
+        get { self[PaneDetachKey.self] }
+        set { self[PaneDetachKey.self] = newValue }
     }
 }
 
