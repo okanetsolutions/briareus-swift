@@ -273,6 +273,11 @@ struct APIRoute: Sendable {
         .init(name: "memories_health", method: "GET", path: "memories/health"),
         .init(name: "memory_policy", method: "POST", path: "memories/{id}/policy"),
         .init(name: "memories_merge", method: "POST", path: "memories/merge"),
+        // The prompts kept for the composer: a project's own (`repo`) and those offered everywhere.
+        .init(name: "prompts", method: "GET", path: "prompts"),
+        .init(name: "create_prompt", method: "POST", path: "prompts"),
+        .init(name: "update_prompt", method: "PUT", path: "prompts/{id}"),
+        .init(name: "delete_prompt", method: "DELETE", path: "prompts/{id}"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
