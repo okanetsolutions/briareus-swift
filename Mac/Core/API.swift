@@ -244,6 +244,13 @@ struct APIRoute: Sendable {
         .init(name: "preview_feedback", method: "POST", path: "sessions/{sessionId}/preview/feedback"),
         // A video a test run recorded, as its links name it; read with the token by openWebURL (ServerVideo).
         .init(name: "video", method: "GET", path: "videos/{file}"),
+        // What waits on the operator, an Admin token's: questions, failures, stopped loops, and the SSH commands and Slack
+        // messages agents ask approval for, each approved or denied.
+        .init(name: "attention", method: "GET", path: "attention"),
+        .init(name: "ssh_requests", method: "GET", path: "ssh/requests"),
+        .init(name: "ssh_decision", method: "POST", path: "ssh/requests/{id}/decision"),
+        .init(name: "slack_requests", method: "GET", path: "slack/requests"),
+        .init(name: "slack_decision", method: "POST", path: "slack/requests/{id}/decision"),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
