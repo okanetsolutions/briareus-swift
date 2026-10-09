@@ -879,11 +879,20 @@ final class CodeEditorView: NSView {
         return (text.string as NSString).substring(with: r)
     }
 
-    /// Opens the find bar, as ⌘F does in the text.
+    /// Opens the find bar (⌘F), its query the selected text when there is some, as PhpStorm's Find does.
     func showFindBar() {
         window?.makeFirstResponder(text)
+        if text.selectedRange().length > 0 { finder(.setSearchString) }
+        finder(.showFindInterface)
+    }
+    /// The next match of the find bar's query (⌘G), or the previous one (⇧⌘G).
+    func findNext(backward: Bool) {
+        window?.makeFirstResponder(text)
+        finder(backward ? .previousMatch : .nextMatch)
+    }
+    private func finder(_ action: NSTextFinder.Action) {
         let item = NSMenuItem()
-        item.tag = NSTextFinder.Action.showFindInterface.rawValue
+        item.tag = action.rawValue
         text.performTextFinderAction(item)
     }
 }
