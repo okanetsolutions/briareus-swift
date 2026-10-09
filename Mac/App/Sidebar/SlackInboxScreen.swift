@@ -212,7 +212,8 @@ final class SlackInboxModel: ObservableObject {
         if older { args.merge(page.arguments) }
         let r = await boardCall("slack_history", args)
         loadingHistory = false
-        guard gen == generation else { return }
+        // Another conversation opened meanwhile: its own load was turned away by this one, so it runs now.
+        guard gen == generation else { await loadHistory(older: false); return }
         switch r {
         case .failure(let e): failed(e, into: \.historyError)
         case .success(let v):
@@ -246,7 +247,8 @@ final class SlackInboxModel: ObservableObject {
         args.merge(threadPage.arguments)
         let r = await boardCall("slack_thread", args)
         loadingThread = false
-        guard gen == generation, thread == t else { return }
+        // Another thread opened meanwhile: its own load was turned away by this one, so it runs now.
+        guard gen == generation, thread == t else { await loadThread(); return }
         switch r {
         case .failure(let e): failed(e, into: \.historyError)
         case .success(let v):
