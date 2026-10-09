@@ -136,11 +136,12 @@ private struct SidebarProjectsScreen: View {
     @ObservedObject private var model = ProjectsModel.shared
     @ObservedObject private var navigator = Navigator.main
     @ObservedObject private var store = Store.shared
+    @ObservedObject private var attention = AttentionModel.shared
 
     var body: some View {
         SidebarScreenFrame(sessions: nil) {
             Color.clear.frame(height: 10)
-            SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting) {
+            SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting + attention.approvals) {
                 SidebarCommon.perform($0, newSessionRepo: model.projects.first?.repo)
             }
             Color.clear.frame(height: 14)
@@ -176,13 +177,14 @@ private struct SidebarSessionsScreen: View {
     @ObservedObject var model: SidebarSessions
     @ObservedObject private var projects = ProjectsModel.shared
     @ObservedObject private var navigator = Navigator.main
+    @ObservedObject private var attention = AttentionModel.shared
     @State private var keyMonitor: Any?
 
     var body: some View {
         let selected = navigator.selectedID
         SidebarScreenFrame(sessions: model) {
             Color.clear.frame(height: 10)
-            SidebarStrip(selected: selected, waiting: projects.findingsWaiting) {
+            SidebarStrip(selected: selected, waiting: projects.findingsWaiting + attention.approvals) {
                 SidebarCommon.perform($0, newSessionRepo: model.project.repo)
             }
             Color.clear.frame(height: 14)

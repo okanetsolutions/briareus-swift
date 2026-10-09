@@ -23,6 +23,7 @@ extension Notification.Name {
     static let forgeAccountsChanged = Notification.Name("BriareusForgeAccountsChanged")
     /// The settings sidebar reads the Slack workspaces again.
     static let slackWorkspacesChanged = Notification.Name("BriareusSlackWorkspacesChanged")
+    static let mcpServersChanged = Notification.Name("BriareusMcpServersChanged")
     /// The project list changed (a project saved, cloned, deleted or reordered): the sidebar reads it again.
     static let projectsChanged = Notification.Name("BriareusProjectsChanged")
     /// Runs a session operation (`compact`, `clear`, `rename` with compaction settings) through its open conversation, which

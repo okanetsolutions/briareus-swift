@@ -242,6 +242,15 @@ struct APIRoute: Sendable {
         .init(name: "task", method: "GET", path: "tasks/{id}"),
         // Feedback on a session's preview page: a comment on a marked spot, with the uploaded screenshot, sent to its agent.
         .init(name: "preview_feedback", method: "POST", path: "sessions/{sessionId}/preview/feedback"),
+        // A video a test run recorded, as its links name it; read with the token by openWebURL (ServerVideo).
+        .init(name: "video", method: "GET", path: "videos/{file}"),
+        // What waits on the operator, an Admin token's: questions, failures, stopped loops, and the SSH commands and Slack
+        // messages agents ask approval for, each approved or denied.
+        .init(name: "attention", method: "GET", path: "attention"),
+        .init(name: "ssh_requests", method: "GET", path: "ssh/requests"),
+        .init(name: "ssh_decision", method: "POST", path: "ssh/requests/{id}/decision"),
+        .init(name: "slack_requests", method: "GET", path: "slack/requests"),
+        .init(name: "slack_decision", method: "POST", path: "slack/requests/{id}/decision"),
         // The operator's WhatsApp through the server's WAHA, an Admin token's: the linked phone (started, its QR code to
         // link it, unlinked), its chats, a chat's history, a message sent, a chat marked read.
         .init(name: "whatsapp_accounts", method: "GET", path: "whatsapp/accounts"),
@@ -306,6 +315,14 @@ struct APIRoute: Sendable {
         .init(name: "update_mail_account", method: "PUT", path: "settings/mail/accounts/{id}"),
         .init(name: "delete_mail_account", method: "DELETE", path: "settings/mail/accounts/{id}"),
         .init(name: "sync_mail_account", method: "POST", path: "settings/mail/accounts/{id}/sync"),
+        // The MCP servers whose tools sessions get beside Briareus's own: checked on save, and signed in to with OAuth in the
+        // browser (`connect` starts a sign-in; a loopback one is finished with the address it ended on).
+        .init(name: "settings_mcp_servers", method: "GET", path: "settings/mcp/servers"),
+        .init(name: "create_mcp_server", method: "POST", path: "settings/mcp/servers"),
+        .init(name: "update_mcp_server", method: "PUT", path: "settings/mcp/servers/{id}"),
+        .init(name: "delete_mcp_server", method: "DELETE", path: "settings/mcp/servers/{id}"),
+        .init(name: "connect_mcp_server", method: "POST", path: "settings/mcp/servers/{id}/connect"),
+        .init(name: "finish_mcp_sign_in", method: "POST", path: "settings/mcp/servers/{id}/finish-sign-in"),
         .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
         .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
         .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),
