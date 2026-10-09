@@ -2,6 +2,7 @@
 // queues them: each review round held on a conversation, grouped by the pull request it was left on. A round on the
 // user's own pull request takes a verdict on every finding and is completed from here, which starts the fix session;
 // a review of somebody else's is read, replied to on its findings' threads, and taken off the queue.
+import Combine
 import SwiftUI
 
 // MARK: - Model
@@ -768,13 +769,35 @@ final class AttentionModel: ObservableObject {
     @Published private(set) var deciding: Set<String> = []
     @Published private(set) var results: [String: String] = [:]
 
+    private var generation = 0
+    private var signOut: AnyCancellable?
+
+    private init() {
+        // Signing out (or a revoked token) takes what the last server was waiting on with it.
+        signOut = Store.shared.$client.map { $0 != nil }.removeDuplicates().dropFirst().sink { connected in
+            guard !connected else { return }
+            MainActor.assumeIsolated { AttentionModel.shared.reset() }
+        }
+    }
+
     static var offered: Bool { Store.shared.isAdmin && Store.shared.supports("attention") }
     /// The approvals waiting, which the ⚑ counts beside the held rounds.
     var approvals: Int { items.filter(\.isApproval).count }
 
+    private func reset() {
+        generation += 1
+        items = []; error = nil; deciding = []; results = [:]
+    }
+
     func load() async -> APIError? {
-        guard Self.offered else { return nil }
+        // A token that may not see them (or a server without them) leaves nothing from the last one standing.
+        guard Self.offered else {
+            if !items.isEmpty || error != nil || !results.isEmpty || !deciding.isEmpty { reset() }
+            return nil
+        }
+        let mine = generation
         let r = await boardCall("attention")
+        guard mine == generation else { return nil }
         switch r {
         case .success(let v):
             items = AttentionItem.parse(v)
@@ -794,8 +817,10 @@ final class AttentionModel: ObservableObject {
             guard Dialogs.confirm("Send this Slack message as you?", item.summary, continueLabel: "Send") else { return }
         }
         deciding.insert(item.id)
+        let mine = generation
         Task {
             let r = await boardCall(op, ["id": .string(rid), "decision": .string(approve ? "approve" : "deny")])
+            guard mine == generation else { return }
             deciding.remove(item.id)
             switch r {
             case .success(let v):
