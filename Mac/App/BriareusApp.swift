@@ -307,6 +307,8 @@ struct ScreenView: View {
         case .meetingSettings: MeetingSettingsScreen()
         case .mailSettings(let id): MailSettingsScreen(accountID: id).id(id ?? 0)
         case .mail: MailScreen()
+        case .serverSettings: ServerSettingsScreen()
+        case .templatesSettings: TemplatesSettingsScreen()
         case .webhook(let session): WebhookScreen(session: session)
         }
     }

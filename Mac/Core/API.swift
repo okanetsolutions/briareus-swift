@@ -142,6 +142,8 @@ func retryAfterSeconds(_ value: String?, now: Date = Date()) -> Double? {
 struct APIRoute: Sendable {
     let name: String, method: String, path: String
     var set: String? = nil, filter: String? = nil, list: String? = nil
+    /// Arguments of a write that go in its query string, not its body.
+    var query: [String] = []
 
     static func named(_ name: String) -> APIRoute? { table[name] }
 
@@ -265,6 +267,24 @@ struct APIRoute: Sendable {
         .init(name: "create_prompt", method: "POST", path: "prompts"),
         .init(name: "update_prompt", method: "PUT", path: "prompts/{id}"),
         .init(name: "delete_prompt", method: "DELETE", path: "prompts/{id}"),
+        // The server, an Admin token's: draining it for maintenance, its workspace clone slots (cleaned or set up afresh
+        // when idle), the prompt templates its agents are briefed with, and a project's local checkout's own update.
+        .init(name: "maintenance", method: "GET", path: "maintenance"),
+        .init(name: "set_maintenance", method: "POST", path: "maintenance"),
+        .init(name: "settings_workspaces", method: "GET", path: "settings/workspaces"),
+        .init(name: "clean_workspace", method: "POST", path: "settings/workspaces/{slot}/clean"),
+        .init(name: "reset_workspace_setup", method: "POST", path: "settings/workspaces/{slot}/reset-setup"),
+        .init(name: "settings_templates", method: "GET", path: "settings/templates"),
+        .init(name: "set_templates", method: "PUT", path: "settings/templates"),
+        .init(name: "project_update", method: "GET", path: "settings/projects/{id}/update"),
+        .init(name: "run_project_update", method: "POST", path: "settings/projects/{id}/update"),
+        // A project's deployments through a GitHub workflow, an Admin token's (`repo` in the query): what GitHub records,
+        // the workflow's settings, a plan (the commit and its checks), running it, and acknowledging the last request.
+        .init(name: "deployments", method: "GET", path: "deployments"),
+        .init(name: "configure_deployments", method: "POST", path: "deployments/config", query: ["repo"]),
+        .init(name: "plan_deployment", method: "POST", path: "deployments/plan", query: ["repo"]),
+        .init(name: "dispatch_deployment", method: "POST", path: "deployments/dispatch", query: ["repo"]),
+        .init(name: "acknowledge_deployment", method: "POST", path: "deployments/acknowledge", query: ["repo"]),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
@@ -546,6 +566,12 @@ final class APIClient: @unchecked Sendable {
             path += APIClient.query(rest)
             result = try await request(path, method: route.method, body: nil, timeout: t)
         } else {
+            var sep = "?"
+            for key in route.query {
+                guard let arg = rest.removeValue(forKey: key), let value = APIClient.urlValue(arg, inPath: false) else { continue }
+                path += "\(sep)\(APIClient.encode(key))=\(value)"
+                sep = "&"
+            }
             if let set = route.set { rest[set] = .bool(true) }
             result = try await request(path, method: route.method, body: .object(rest), timeout: t)
         }
