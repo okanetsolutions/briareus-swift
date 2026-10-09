@@ -326,13 +326,32 @@ struct ProjectFilesTab: View {
     @ObservedObject var model: ProjectFilesModel
     @FocusState private var searching: Bool
     @State private var hoveredMatch: Int?
+    /// The tree's share of the tab's width, 30% until the divider is dragged (and then as it was left).
+    @AppStorage("filesTreeFraction") private var treeFraction = 0.3
+    @State private var dragStart: CGFloat?
 
     var body: some View {
-        HSplitView {
-            projectPane
-                .frame(minWidth: 200, idealWidth: 290, maxWidth: 520)
-            editorPane
-                .frame(minWidth: 320, maxWidth: .infinity)
+        GeometryReader { g in
+            let total = max(g.size.width - 1, 1)
+            let tree = min(max(total * treeFraction, 200), max(total - 320, 200))
+            HStack(spacing: 0) {
+                projectPane.frame(width: tree)
+                ZStack {
+                    Color.clear
+                    Rectangle().fill(dragStart != nil ? Theme.accent : Theme.line).frame(width: 1)
+                }
+                .frame(width: 7)
+                .contentShape(Rectangle())
+                .onHover { on in if on { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+                .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { v in
+                        let start = dragStart ?? tree
+                        if dragStart == nil { dragStart = start }
+                        treeFraction = min(max((start + v.translation.width) / total, 0.1), 0.8)
+                    }
+                    .onEnded { _ in dragStart = nil })
+                editorPane.frame(maxWidth: .infinity)
+            }
         }
         .onAppear { model.load() }
         // The shortcuts while the tab is on show, and the popups they open over it.
