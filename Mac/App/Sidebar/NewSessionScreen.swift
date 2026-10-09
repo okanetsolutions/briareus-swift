@@ -16,9 +16,13 @@ final class NewSessionModel: ObservableObject {
     private var remembers = true
     @Published private(set) var branches: [String] = []
     @Published private(set) var defaultBranch: String?
-    /// Nil: a new branch off the default.
+    /// Nil: a new branch off the default (a worktree), or the checkout's current branch (local).
     @Published private(set) var branch: String?
-    @Published var reviewLoop = true
+    @Published private(set) var workspace = WorkspaceMode.worktree
+    /// Starts as it was last set, and is remembered for the next new session whenever it changes.
+    @Published var reviewLoop = LastReviewLoop.load() {
+        didSet { if reviewLoop != oldValue { LastReviewLoop.save(reviewLoop) } }
+    }
     @Published private(set) var busy = false
     @Published private(set) var uncertain = false
     @Published private(set) var error: String?
@@ -76,6 +80,8 @@ final class NewSessionModel: ObservableObject {
     func loadChoices() {
         choicesTask?.cancel()
         catalog = nil; quietly { runtime = nil }; branches = []; defaultBranch = nil; branch = nil
+        // A project without a local checkout cannot keep Local.
+        if workspace == .local && !(project?.hasLocal ?? false) { workspace = .worktree }
         guard let p = project else { return }
         let store = Store.shared
         if store.supports("runtimes"), let saved = store.cache.value("runtimes:\(p.repo)") { adopt(RuntimeCatalog(saved)) }
@@ -120,9 +126,9 @@ final class NewSessionModel: ObservableObject {
     func chipLabel(_ chip: ComposerChip) -> String {
         let eff = effective
         switch chip {
-        case .workspace: return "\u{2317} Worktree"
+        case .workspace: return workspace.chip
         case .project: return project?.title ?? "Project"
-        case .branch: return branch ?? "New branch off \(defaultBranch ?? "main")"
+        case .branch: return branch ?? workspace.noBranchLabel(defaultBranch: defaultBranch)
         case .provider: return eff.flatMap { catalog?.provider($0.providerId)?.label } ?? "Provider"
         case .model:
             if let eff, let m = catalog?.model(for: eff) { return m.title }
@@ -135,12 +141,12 @@ final class NewSessionModel: ObservableObject {
         switch chip {
         case .provider, .model: return !(catalog?.providers.isEmpty ?? true)
         case .effort: return effective.map { !(catalog?.efforts(for: $0).isEmpty ?? true) } ?? false
-        case .branch: return Store.shared.supports("branches")
-        case .loop: return Store.shared.supports("review_loop")
+        case .branch: return workspace != .orchestrator && Store.shared.supports("branches")
+        case .loop: return workspace.hasReviewLoop && Store.shared.supports("review_loop")
         default: return true
         }
     }
-    static func isPicker(_ chip: ComposerChip) -> Bool { chip != .loop && chip != .workspace }
+    static func isPicker(_ chip: ComposerChip) -> Bool { chip != .loop }
 
     func pick(_ chip: ComposerChip) {
         if busy { return }
@@ -150,7 +156,7 @@ final class NewSessionModel: ObservableObject {
             let rows = projects.enumerated().map { MenuRow(title: $0.element.title, checked: $0.offset == chosen) }
             if let i = popUpMenu(rows), i != chosen { chosen = i; loadChoices() }
         case .branch:
-            var rows = [MenuRow(title: "New branch off \(defaultBranch ?? "main")", checked: branch == nil)]
+            var rows = [MenuRow(title: workspace.noBranchLabel(defaultBranch: defaultBranch), checked: branch == nil)]
             let shown = Array(branches.prefix(60))
             if !shown.isEmpty { rows.append(.divider) }
             rows += shown.map { MenuRow(title: $0, checked: branch == $0) }
@@ -176,7 +182,12 @@ final class NewSessionModel: ObservableObject {
             guard let i = popUpMenu(rows) else { return }
             runtime = RuntimeChoice(providerId: eff.providerId, model: eff.model, effort: efforts[i])
         case .loop: reviewLoop.toggle()
-        case .workspace: break
+        case .workspace:
+            let hasLocal = project?.hasLocal ?? false
+            let modes = WorkspaceMode.allCases
+            let rows = modes.map { MenuRow(title: $0.menuTitle(hasLocal: hasLocal), checked: $0 == workspace, enabled: $0 != .local || hasLocal) }
+            // Each mode starts with its own branch default; an orchestrator cannot take a branch at all.
+            if let i = popUpMenu(rows), modes[i] != workspace { workspace = modes[i]; branch = nil }
         }
     }
 
@@ -187,10 +198,10 @@ final class NewSessionModel: ObservableObject {
         var args: JSON = ["repo": .string(p.repo)]
         if !composer.trimmedEmpty { args["prompt"] = .string(composer.text) }
         if let ids = files.ids { args["attachments"] = ids }
-        if let branch { args["branch"] = .string(branch) }
+        args.merge(workspace.arguments(branch: branch))
         if let runtime { args.merge(runtime.arguments) }
         busy = true; error = nil
-        let loop = reviewLoop
+        let loop = reviewLoop, ownLoop = workspace.hasReviewLoop
         startTask = Task {
             do {
                 let answer = try await Store.shared.call("start_session", args)
@@ -199,8 +210,9 @@ final class NewSessionModel: ObservableObject {
                 guard let started = Session(answer["session"]) else { error = "The server returned an unexpected response."; return }
                 composer.text = ""
                 files.sent(args["attachments"].isNull ? nil : args["attachments"])
-                // The loop the chip asked for that the server does not arm by default.
-                if !loop && Store.shared.supports("review_loop") && started.canReviewLoop {
+                // The loop the chip asked for that the server does not arm by default. Only a worktree session has the chip;
+                // a local session or an orchestrator never has a loop of its own.
+                if ownLoop && !loop && Store.shared.supports("review_loop") && started.canReviewLoop {
                     Task { _ = try? await Store.shared.call("review_loop", ["sessionId": .string(started.id), "on": false]) }
                 }
                 post(.sessionsChanged, ["repo": p.repo])
@@ -251,9 +263,9 @@ struct NewSessionScreen: View {
     private var welcome: some View {
         VStack(spacing: 0) {
             Text("Welcome back").font(Theme.largeTitle).foregroundStyle(Theme.ink).lineLimit(1)
-            (Text("Start a session in a fresh ").foregroundColor(Theme.muted)
+            (Text(model.workspace.welcome.before).foregroundColor(Theme.muted)
              + Text(model.project?.title ?? "project").foregroundColor(Theme.accent)
-             + Text(" checkout with its own database.").foregroundColor(Theme.muted))
+             + Text(model.workspace.welcome.after).foregroundColor(Theme.muted))
                 .font(Theme.body).multilineTextAlignment(.center).lineSpacing(5)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
@@ -285,7 +297,7 @@ private struct NewSessionFooter: View {
                 FlowLayout(spacing: 4, lineSpacing: 4) {
                     ForEach(ComposerChip.allCases.filter(model.chipShown), id: \.self) { chip in
                         ComposerChipView(label: model.chipLabel(chip), on: chip == .loop && model.reviewLoop,
-                                         live: !(chip == .workspace || model.busy), picker: NewSessionModel.isPicker(chip),
+                                         live: !model.busy, picker: NewSessionModel.isPicker(chip),
                                          action: { model.pick(chip) })
                     }
                 }

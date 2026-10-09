@@ -7,7 +7,7 @@ import WebKit
 struct BriareusApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = Store.shared
-    @StateObject private var navigator = Navigator.shared
+    @StateObject private var navigator = Navigator.main
 
     init() {
         // Started by ssh as its SSH_ASKPASS: asks, answers and exits before the app proper starts.
@@ -148,7 +148,10 @@ struct MainWindow: View {
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.ink)
-        .onChange(of: store.connected) { _, connected in if !connected { navigator.reset() } }
+        .onChange(of: store.connected) { _, connected in
+            if !connected { navigator.reset(); SessionFeed.shared.stop() } else { SessionFeed.shared.start() }
+        }
+        .onAppear { if store.connected { SessionFeed.shared.start() } }
     }
 
     /// main.c layout(): the 268px sidebar, the main column and, beside a conversation, the 272px panel, the dividers drawn
@@ -253,16 +256,27 @@ private struct ColumnsLayout: Layout {
     }
 }
 
-/// The detail pane: the top of the navigator's stack, with a back button when it can go back.
+/// The detail pane: the top of the navigator's stack, with a back button when it can go back, and on a page that can
+/// live in a window of its own, the button that pops it out (or, in its window, docks it back).
 struct DetailPane: View {
     var rootBack: (() -> Void)? = nil
     @EnvironmentObject private var navigator: Navigator
+
+    private var detach: PaneDetach? {
+        if navigator.detached {
+            let nav = navigator
+            return PaneDetach(glyph: "rectangle.portrait.and.arrow.right", tip: "Put it back in the main window") { DetachedWindows.shared.dock(nav) }
+        }
+        guard navigator.stack.count == 1, DetachedWindows.detachable(navigator.root) else { return nil }
+        return PaneDetach(glyph: "macwindow.badge.plus", tip: "Open in a window of its own") { navigator.popOut() }
+    }
 
     var body: some View {
         let top = navigator.top
         ScreenView(screen: top)
             .id(top.id)
             .environment(\.paneBack, navigator.stack.count > 1 ? { navigator.pop() } : rootBack)
+            .environment(\.paneDetach, detach)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.canvas)
     }
@@ -290,6 +304,8 @@ struct ScreenView: View {
         case .forgeAccountSettings(let row, let defaults): ForgeAccountSettingsScreen(row: row, defaults: defaults)
         case .slackWorkspaceSettings(let row, let defaults): SlackWorkspaceSettingsScreen(row: row, defaults: defaults)
         case .meetingSettings: MeetingSettingsScreen()
+        case .mailSettings(let id): MailSettingsScreen(accountID: id).id(id ?? 0)
+        case .mail: MailScreen()
         case .serverSettings: ServerSettingsScreen()
         case .templatesSettings: TemplatesSettingsScreen()
         case .webhook(let session): WebhookScreen(session: session)

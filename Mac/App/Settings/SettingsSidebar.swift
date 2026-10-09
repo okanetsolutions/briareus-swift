@@ -37,6 +37,8 @@ struct SettingsSidebar: View {
     @ViewBuilder private var content: some View {
         // This computer's own settings come first: they need no Admin token.
         MeetingSettingsRow(selected: selected == Screen.meetingSettings.id)
+        // Mail under This computer, each mailbox a row as a project is (Windows #141).
+        if MailSettingsModel.offered { MailSettingsRows(selected: selected) }
         let why = settingsUnavailable("settings_projects", path: "settings/projects", what: "Project settings", manage: "projects")
         SectionHeader(title: "Projects", onNew: why == nil ? { model.newProject() } : nil)
         if let why {
@@ -425,5 +427,29 @@ private struct Tag: View {
         Text(text).font(Theme.caption2).foregroundStyle(Theme.muted).lineLimit(1).fixedSize()
             .padding(.horizontal, 6).padding(.vertical, 1)
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Theme.line, lineWidth: 1))
+    }
+}
+
+/// The mailboxes the server keeps synced, each a row (its label or address, its provider and address, lit when connected
+/// and enabled); ＋ New connects another.
+private struct MailSettingsRows: View {
+    var selected: String?
+    @ObservedObject private var mail = MailSettingsModel.shared
+    @ObservedObject private var store = Store.shared
+    var body: some View {
+        let a = mail.accounts
+        SectionHeader(title: "Mail", onNew: mail.loaded && (a.gmail || a.outlook) && store.supports("connect_mail_account") ? { Navigator.shared.show(.mailSettings(id: nil)) } : nil)
+        if let e = mail.error, !mail.loaded { Notice(message: e).padding(.horizontal, 8).padding(.bottom, 8) }
+        ForEach(a.accounts, id: \.id) { m in
+            ItemRow(label: m.label.cTrimmed.isEmpty ? m.email : m.label,
+                    sub: "\(m.providerName) · \(m.needsSignIn ? "needs sign-in" : m.label.cTrimmed.isEmpty ? m.statusLine : m.email)",
+                    enabled: m.enabled && m.status == "connected",
+                    selected: selected == Screen.mailSettings(id: m.id).id) { Navigator.shared.show(.mailSettings(id: m.id)) }
+        }
+        if selected == "mail-settings" { ItemRow(label: "New mailbox", sub: "not connected yet", enabled: false, selected: true) {} }
+        if mail.loaded && a.accounts.isEmpty { Explanation(text: "No mailboxes yet. ＋ New signs in to Gmail or Outlook.") }
+        if !mail.loaded { LoadingNote(text: "Loading mail accounts…") }
+        Color.clear.frame(height: 16)
+            .task { await mail.load() }
     }
 }
