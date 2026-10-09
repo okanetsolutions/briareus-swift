@@ -145,6 +145,13 @@ final class Store: ObservableObject {
     /// Asks the server again before refusing voice notes: nil when they work, else what is missing.
     func voiceNotesOff() async -> String? {
         guard transcribes != true, let client else { return Discovery.voiceNotesOff(transcribes) }
+        // The lighter `GET /transcribe` where the server has it, else the whole discovery.
+        if supports("transcribe_status"), let v = try? await client.call("transcribe_status"), let on = v["available"].bool {
+            guard self.client === client else { return nil }
+            transcribes = on
+            if let device { saveConnection(Connection(device: device, routes: routes, transcribe: on)) }
+            return Discovery.voiceNotesOff(on)
+        }
         do {
             let d = try await client.discovery()
             guard self.client === client else { return nil }
@@ -180,6 +187,11 @@ final class Store: ObservableObject {
     func transcribe(_ audio: Data, contentType: String = "audio/mp4") async throws -> String {
         guard let client, canTranscribe else { throw APIError.refused("This token cannot transcribe voice notes.") }
         return try await finish(client) { try await client.transcribe(audio, contentType: contentType) }
+    }
+    /// Downloads what a file-answering GET sends (`repo_archive`) to a temporary file the caller owns.
+    func download(_ operation: String, _ arguments: JSON = [:], timeout: TimeInterval) async throws -> URL {
+        guard let client, supports(operation) else { throw APIError.refused("This token cannot perform that action.") }
+        return try await finish(client) { try await client.download(operation, arguments, timeout: timeout) }
     }
     /// Stores a file on the server for the next message; the answer is the id to send.
     func upload(name: String, bytes: Data) async throws -> String {

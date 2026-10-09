@@ -153,6 +153,10 @@ struct APIRoute: Sendable {
         .init(name: "projects", method: "GET", path: "projects"),
         .init(name: "branches", method: "GET", path: "branches"),
         .init(name: "runtimes", method: "GET", path: "runtimes"),
+        // The providers sessions start on, with every account's login and quota (`fresh` reads them again).
+        .init(name: "providers", method: "GET", path: "providers"),
+        // Whether the server can transcribe voice notes.
+        .init(name: "transcribe_status", method: "GET", path: "transcribe"),
         .init(name: "usage", method: "GET", path: "usage"),
         .init(name: "usage_all", method: "GET", path: "usage/all"),   // every project's spend; a filter given as an array repeats
         .init(name: "actions", method: "GET", path: "actions"),
@@ -174,6 +178,12 @@ struct APIRoute: Sendable {
         .init(name: "update_pull_branch", method: "POST", path: "pulls/{pr}/update-branch"),   // merges its base into it, at the `headSha` and `baseRef` read
         .init(name: "serve_pull", method: "POST", path: "pulls/{prNumber}/serve"),
         .init(name: "commit", method: "GET", path: "commits/{sha}"),
+        // The repository at a branch, for the Files tab: every path (pinned to the commit `sha` it answers), and one file's
+        // text at a `ref`, or only its size when it is binary or over 1 MB.
+        .init(name: "repo_tree", method: "GET", path: "repo/tree"),
+        .init(name: "repo_file", method: "GET", path: "repo/file"),
+        // The repository at a commit as a gzipped tarball, downloaded to a file (`APIClient.download`) for the local index.
+        .init(name: "repo_archive", method: "GET", path: "repo/archive"),
         // Issues
         .init(name: "issue", method: "GET", path: "issues/{issue}"),
         .init(name: "issue_timeline", method: "GET", path: "issues/{issue}/timeline"),   // comments and events, 100 a `page`, oldest first
@@ -189,6 +199,10 @@ struct APIRoute: Sendable {
         .init(name: "review", method: "POST", path: "sessions", set: "review"),
         .init(name: "qa", method: "POST", path: "sessions", set: "qa"),
         .init(name: "session", method: "GET", path: "sessions/{sessionId}"),
+        // One session followed live (an event stream): transcript lines as they are written, and its record on change.
+        .init(name: "session_events", method: "GET", path: "sessions/{sessionId}/events"),
+        // Every session of the token's projects followed on one connection (an event stream).
+        .init(name: "events", method: "GET", path: "events"),
         .init(name: "rename", method: "PATCH", path: "sessions/{sessionId}"),
         .init(name: "delete", method: "DELETE", path: "sessions/{sessionId}"),
         .init(name: "message", method: "POST", path: "sessions/{sessionId}/messages"),
@@ -212,12 +226,22 @@ struct APIRoute: Sendable {
         .init(name: "browser_off", method: "DELETE", path: "sessions/{sessionId}/browser"),
         .init(name: "browser_input", method: "POST", path: "sessions/{sessionId}/browser/input"),
         .init(name: "browser_stream", method: "GET", path: "sessions/{sessionId}/browser/stream"),
+        // A PNG of the tab in view (read by BrowserScreenshot through APIClient.serverFile).
+        .init(name: "browser_screenshot", method: "GET", path: "sessions/{sessionId}/browser/screenshot"),
         // A session's webhook, for an admin token: its settings, URLs and keys, changed, and its keys replaced.
         .init(name: "session_webhook", method: "GET", path: "sessions/{sessionId}/webhook"),
         .init(name: "set_session_webhook", method: "PUT", path: "sessions/{sessionId}/webhook"),
         .init(name: "rotate_session_webhook", method: "POST", path: "sessions/{sessionId}/webhook/rotate"),
         // The Cloudflare Access service token the Run tab's browser sends to ▶ Run preview hosts; a manage token.
         .init(name: "preview_access", method: "GET", path: "preview/access"),
+        // What an interrupted session left in its workspace, and resuming it from that report (by its fingerprint).
+        .init(name: "session_recovery", method: "GET", path: "sessions/{sessionId}/recovery"),
+        .init(name: "resume_session", method: "POST", path: "sessions/{sessionId}/recovery"),
+        // A task's history, an Admin token's: every session filed under it (review, fix and QA rounds) and what they
+        // cost together.
+        .init(name: "task", method: "GET", path: "tasks/{id}"),
+        // Feedback on a session's preview page: a comment on a marked spot, with the uploaded screenshot, sent to its agent.
+        .init(name: "preview_feedback", method: "POST", path: "sessions/{sessionId}/preview/feedback"),
         // The prompts kept for the composer: a project's own (`repo`) and those offered everywhere.
         .init(name: "prompts", method: "GET", path: "prompts"),
         .init(name: "create_prompt", method: "POST", path: "prompts"),
@@ -263,6 +287,17 @@ struct APIRoute: Sendable {
         // The Slack workspaces sessions send messages through: a user token and signing secret (write-only), and the
         // projects it serves with their channels; admin as well.
         .init(name: "settings_slack_workspaces", method: "GET", path: "settings/slack/workspaces"),
+        // Mailboxes the server keeps synced from Gmail and Outlook, an Admin token's: connected with the provider's sign-in
+        // (started here, finished by the server or with the address it ended on), their settings, a sync, a disconnect.
+        .init(name: "settings_mail_accounts", method: "GET", path: "settings/mail/accounts"),
+        // The synced mail, newest first, a page at a time (`cursor`), and one message with its body; read only.
+        .init(name: "mail_messages", method: "GET", path: "mail/messages"),
+        .init(name: "mail_message", method: "GET", path: "mail/accounts/{account}/messages/{id}"),
+        .init(name: "connect_mail_account", method: "POST", path: "settings/mail/accounts/connect"),
+        .init(name: "finish_mail_account", method: "POST", path: "settings/mail/accounts/connect/finish"),
+        .init(name: "update_mail_account", method: "PUT", path: "settings/mail/accounts/{id}"),
+        .init(name: "delete_mail_account", method: "DELETE", path: "settings/mail/accounts/{id}"),
+        .init(name: "sync_mail_account", method: "POST", path: "settings/mail/accounts/{id}/sync"),
         .init(name: "create_slack_workspace", method: "POST", path: "settings/slack/workspaces"),
         .init(name: "update_slack_workspace", method: "PUT", path: "settings/slack/workspaces/{id}"),
         .init(name: "delete_slack_workspace", method: "DELETE", path: "settings/slack/workspaces/{id}"),
@@ -293,6 +328,19 @@ struct HTTPResponse: Sendable {
 /// One round trip. Throws only when nothing was received, with the reason as the error's message.
 protocol HTTPTransport: Sendable {
     func send(method: String, url: URL, headers: [String: String], body: Data?, timeout: TimeInterval) async throws -> HTTPResponse
+    /// A GET whose body goes to a temporary file instead of memory; `body` is empty and the file is the caller's to move.
+    func download(url: URL, headers: [String: String], timeout: TimeInterval) async throws -> (response: HTTPResponse, file: URL)
+}
+
+extension HTTPTransport {
+    /// For a transport with no file downloads of its own (the tests'): the body read whole, then written out.
+    func download(url: URL, headers: [String: String], timeout: TimeInterval) async throws -> (response: HTTPResponse, file: URL) {
+        var r = try await send(method: "GET", url: url, headers: headers, body: nil, timeout: timeout)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try r.body.write(to: file)
+        r.body = Data()
+        return (r, file)
+    }
 }
 
 /// URLSession with no cookies, no cache, no stored credentials and no redirects.
@@ -325,6 +373,24 @@ final class URLSessionTransport: NSObject, HTTPTransport, URLSessionTaskDelegate
             guard let http = response as? HTTPURLResponse else { throw APIError(.network, message: "The server could not be reached.") }
             return HTTPResponse(status: http.statusCode, contentType: http.value(forHTTPHeaderField: "Content-Type"),
                                 retryAfter: http.value(forHTTPHeaderField: "Retry-After"), body: data)
+        } catch let error as URLError {
+            if error.code == .cancelled { throw APIError(.cancelled) }
+            throw APIError(.network, message: URLSessionTransport.text(error))
+        }
+    }
+
+    func download(url: URL, headers: [String: String], timeout: TimeInterval) async throws -> (response: HTTPResponse, file: URL) {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
+        request.httpShouldHandleCookies = false
+        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
+        do {
+            let (temp, response) = try await session.download(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIError(.network, message: "The server could not be reached.") }
+            // URLSession deletes its file once this returns; it is moved somewhere that lasts.
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.moveItem(at: temp, to: file)
+            return (HTTPResponse(status: http.statusCode, contentType: http.value(forHTTPHeaderField: "Content-Type"),
+                                 retryAfter: http.value(forHTTPHeaderField: "Retry-After"), body: Data()), file)
         } catch let error as URLError {
             if error.code == .cancelled { throw APIError(.cancelled) }
             throw APIError(.network, message: URLSessionTransport.text(error))
@@ -393,6 +459,16 @@ final class APIClient: @unchecked Sendable {
         return try await send(method: method, url: address.baseURL + path, contentType: body != nil ? "application/json" : nil, body: data, timeout: timeout)
     }
 
+    /// A file this server serves under its API that needs the token: its bytes, up to `limit`. Nil when `url` is not under
+    /// this server's API at `prefix`.
+    func serverFile(_ url: String, under prefix: String, limit: Int = 512 * 1024 * 1024) async throws -> Data? {
+        guard url.hasPrefix(address.baseURL + prefix), let u = URL(string: url) else { return nil }
+        let r = try await transport.send(method: "GET", url: u, headers: ["Authorization": "Bearer \(token)"], body: nil, timeout: 300)
+        if r.status < 200 || r.status >= 300 { throw APIError(.http, status: r.status, message: APIError.statusText(r.status)) }
+        if r.body.count > limit { throw APIError(.http, status: 413, message: "The file is too large to open here.") }
+        return r.body
+    }
+
     /// `GET /`: the token's own record and what the server can do.
     func discovery() async throws -> Discovery {
         let j = try await request("", method: "GET", body: nil, timeout: APIClient.requestTimeout)
@@ -441,17 +517,7 @@ final class APIClient: @unchecked Sendable {
         let t = timeout ?? APIClient.requestTimeout
         var result: JSON
         if reads {
-            var sep = "?"
-            for key in rest.keys.sorted() {
-                // An array is a repeatable parameter: `project=a&project=b`.
-                let arg = rest[key]!
-                let values = arg.array ?? [arg]
-                for v in values {
-                    guard let value = APIClient.urlValue(v, inPath: false) else { continue }
-                    path += "\(sep)\(APIClient.encode(key))=\(value)"
-                    sep = "&"
-                }
-            }
+            path += APIClient.query(rest)
             result = try await request(path, method: route.method, body: nil, timeout: t)
         } else {
             if let set = route.set { rest[set] = .bool(true) }
@@ -461,6 +527,35 @@ final class APIClient: @unchecked Sendable {
             result[list] = .array(result[list].items.filter { $0[filter].string == kept })
         }
         return result
+    }
+
+    /// A GET's arguments as a query string, "" when there are none. An array is a repeatable parameter: `project=a&project=b`.
+    static func query(_ arguments: [String: JSON]) -> String {
+        var out = "", sep = "?"
+        for key in arguments.keys.sorted() {
+            let arg = arguments[key]!
+            for v in arg.array ?? [arg] {
+                guard let value = APIClient.urlValue(v, inPath: false) else { continue }
+                out += "\(sep)\(APIClient.encode(key))=\(value)"
+                sep = "&"
+            }
+        }
+        return out
+    }
+
+    /// A GET whose answer is a file (`repo_archive`), downloaded to a temporary file the caller then owns. A refusal
+    /// throws as `call` does, with the server's `error` when it sent one.
+    func download(_ name: String, _ arguments: JSON = [:], timeout: TimeInterval) async throws -> URL {
+        guard let route = APIRoute.named(name), route.method == "GET" else { throw APIError(.http, status: 400, message: "Unknown call") }
+        let (path, rest) = try APIClient.resolve(route, arguments)
+        guard let u = URL(string: address.baseURL + path + APIClient.query(rest)) else { throw APIError(.invalidAddress) }
+        let (r, file) = try await transport.download(url: u, headers: ["Authorization": "Bearer \(token)"], timeout: timeout)
+        if r.status >= 200 && r.status < 300 { return file }
+        defer { try? FileManager.default.removeItem(at: file) }
+        if r.status >= 300 && r.status < 400 { throw APIError(.redirected, status: r.status) }
+        let payload = (try? Data(contentsOf: file)).flatMap { JSON.parse($0) }
+        throw APIError(.http, status: r.status, message: payload?["error"].nonEmpty ?? APIError.statusText(r.status),
+                       retryAfter: retryAfterSeconds(r.retryAfter))
     }
 
     /// The text of a recorded voice note, sent with the content type it was recorded in.
