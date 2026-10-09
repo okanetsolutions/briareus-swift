@@ -104,7 +104,7 @@ final class BrowserWindows: NSObject, NSWindowDelegate {
         w.title = "Browser"
         w.contentView = NSHostingView(rootView: SharedBrowserScreen(session: session, detached: true)
             .environmentObject(Store.shared).environmentObject(Navigator.main)
-            .foregroundStyle(Theme.ink))
+            .foregroundStyle(Theme.ink).noWritingTools())
         w.delegate = self
         if let at, at.width > 0, at.height > 0 {
             var frame = w.frameRect(forContentRect: NSRect(x: at.minX + 24, y: at.minY - 24, width: at.width, height: at.height))

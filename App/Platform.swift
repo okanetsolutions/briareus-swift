@@ -1,6 +1,20 @@
 import SwiftUI
 import UIKit
 
+extension View {
+    /// No Writing Tools ("Write with Siri") on the text fields and editors under this view.
+    @ViewBuilder func noWritingTools() -> some View {
+        if #available(iOS 18.0, *) { writingToolsBehavior(.disabled) } else { self }
+    }
+}
+
+extension UITextView {
+    /// No Writing Tools ("Write with Siri") on this text view, which SwiftUI's setting does not reach.
+    func disableWritingTools() {
+        if #available(iOS 18.0, *) { writingToolsBehavior = .none }
+    }
+}
+
 enum Pasteboard {
     static func copy(_ text: String) { UIPasteboard.general.string = text }
 }

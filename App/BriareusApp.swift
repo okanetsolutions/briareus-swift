@@ -16,6 +16,7 @@ struct BriareusApp: App {
                 }
             }
             .tint(Theme.accent)
+            .noWritingTools()
             .environmentObject(store)
             .task { await store.restore() }
             // Polling stops while the app is out of sight; the car's screen keeps it going on its own.

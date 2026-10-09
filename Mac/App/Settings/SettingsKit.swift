@@ -444,6 +444,7 @@ struct SettingsTextArea: NSViewRepresentable {
         scroll.autohidesScrollers = true
         scroll.hasHorizontalScroller = false
         let tv = NSTextView()
+        tv.disableWritingTools()
         tv.delegate = context.coordinator
         tv.drawsBackground = false
         tv.isRichText = false

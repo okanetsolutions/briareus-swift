@@ -35,6 +35,7 @@ struct ComposerTextView: NSViewRepresentable {
         scroll.autohidesScrollers = true
         scroll.hasHorizontalScroller = false
         let tv = ComposerNSTextView()
+        tv.disableWritingTools()
         tv.coordinator = context.coordinator
         tv.isRichText = false
         tv.importsGraphics = false
