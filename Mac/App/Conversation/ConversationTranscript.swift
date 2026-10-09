@@ -58,7 +58,7 @@ struct TranscriptColumn: View, Equatable {
             if blocks.isEmpty && error == nil {
                 SelectableText(loaded ? "No messages yet." : "Waiting for the conversation\u{2026}", font: SelectableFont.system(13), color: Theme.muted)
             }
-            ForEach(blocks, id: \.seq) { block in blockView(block) }
+            ForEach(blocks, id: \.seq) { block in blockView(block).environment(\.findBlock, block.seq) }
             // Why the session failed: the Windows client's `⚠ error` in the head, said where the transcript stops.
             if let failure = session.raw["error"].nonEmpty {
                 DangerBox { DangerText("\u{26A0} \(failure)") }.padding(.top, 10)
@@ -264,6 +264,34 @@ private struct EventView: View, Equatable {
             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.raise))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.accent, lineWidth: 1))
             .padding(.vertical, 10)
+        case "btw":
+            // A side question (/btw): answered from a fork of the conversation the agent never sees.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("By the way").font(Theme.caption2).foregroundStyle(Theme.muted)
+                    .padding(.horizontal, 6).frame(height: 16).overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Theme.line, lineWidth: 1))
+                SelectableText(event.text ?? "", font: SelectableFont.system(14), color: Theme.ink)
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 12).padding(.bottom, 4)
+            .help("A side question: the agent does not see it or its answer")
+        case "btw_answer":
+            VStack(alignment: .leading, spacing: 4) {
+                if event.isError == true {
+                    SelectableText(event.text ?? "No answer", font: SelectableFont.system(13), color: Theme.danger)
+                } else {
+                    MarkdownView(source: event.text ?? "")
+                }
+                let cost = event.costUsd.map { String(format: "$%.4f", $0) }
+                let secs = event.durationMs.map { "\(Int(($0 / 1000).rounded()))s" }
+                if let line = [cost, secs].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
+                    Text("side answer · \(line)").font(Theme.caption).foregroundStyle(Theme.muted)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.sunken))
+            .overlay(alignment: .leading) { Rectangle().fill(Theme.accentDim).frame(width: 2) }
+            .padding(.bottom, 10)
         case "result":
             // "— $2.9565 · 455s · 57 turns · …", under a dashed rule.
             let text = turnFooterText(event)
@@ -383,3 +411,5 @@ private struct TriageBox: View {
 struct Rule: View {
     var body: some View { Rectangle().fill(Theme.line).frame(height: 1) }
 }
+
+private extension String { var nilIfEmpty: String? { isEmpty ? nil : self } }
