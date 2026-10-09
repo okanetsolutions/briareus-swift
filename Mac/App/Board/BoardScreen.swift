@@ -4,7 +4,7 @@
 import Combine
 import SwiftUI
 
-enum BoardTab: Int { case pulls, issues, ssh, sftp, board, run, db, forge, meeting, review, files, envoyer }
+enum BoardTab: Int { case pulls, issues, ssh, sftp, board, run, db, forge, meeting, review, files, memories, deploy, envoyer }
 
 @MainActor
 final class BoardModel: ObservableObject {
@@ -48,6 +48,8 @@ final class BoardModel: ObservableObject {
     private(set) lazy var forge = adoptTab(ProjectForgeModel(repo: repo))
     /// The Files tab: the repository's tree and the files open from it (ProjectFilesTab.swift).
     private(set) lazy var files = adoptTab(ProjectFilesModel(repo: repo))
+    private(set) lazy var memories = adoptTab(ProjectMemoriesModel(repo: repo))
+    private(set) lazy var deployments = adoptTab(ProjectDeploymentsModel(repo: repo))
     private(set) lazy var envoyer = adoptTab(ProjectEnvoyerModel(repo: repo))
     private var tabSinks: [AnyCancellable] = []
     private func adoptTab<T: ObservableObject>(_ m: T) -> T where T.ObjectWillChangePublisher == ObservableObjectPublisher {
@@ -337,7 +339,7 @@ struct BoardScreen: View {
                 .onReceive(projects.objectWillChange) { _ in
                     DispatchQueue.main.async { if model.tab == .board && !ProjectBoardModel.offered(repo) { model.tab = .pulls } }
                 }
-            case .ssh, .sftp, .run, .db, .forge, .files, .envoyer:
+            case .ssh, .sftp, .run, .db, .forge, .files, .memories, .deploy, .envoyer:
                 VStack(alignment: .leading, spacing: 0) {
                     tabs.padding(.horizontal, Theme.paneMargin)
                     Spacer().frame(height: 14)
@@ -431,6 +433,11 @@ struct BoardScreen: View {
             buttons = model.forge.headerButtons
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read it from Forge again") { model.refresh() })
         case .meeting: break
+        case .memories:
+            sub = "\(repo) · \(model.memories.memories.filter { !$0.archived }.count) memories"
+            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the memories again") { Task { await model.memories.load() } })
+        case .deploy:
+            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the deployments from GitHub again") { Task { await model.deployments.load() } })
         case .envoyer:
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read it from Envoyer again") { Task { await model.envoyer.loadAccounts(); await model.envoyer.loadProject() } })
         case .review:
@@ -497,6 +504,8 @@ struct BoardScreen: View {
         }
         if ProjectDBModel.offered { labels.append((.db, "⛁ Database")) }
         if ProjectForgeModel.offered { labels.append((.forge, "☁ Forge")) }
+        if ProjectMemoriesModel.offered { labels.append((.memories, "🧠 Memories")) }
+        if ProjectDeploymentsModel.offered { labels.append((.deploy, "🚀 Deploy")) }
         if ProjectEnvoyerModel.offered { labels.append((.envoyer, "🚢 Envoyer")) }
         // The meeting's transcript, while one runs on this project and after it.
         if meeting.transcript(for: repo) != nil { labels.append((.meeting, meeting.isFor(repo) ? "🎙 Meeting ●" : "🎙 Meeting")) }
@@ -521,6 +530,8 @@ struct BoardScreen: View {
         case .db: return ProjectDBModel.offered
         case .forge: return ProjectForgeModel.offered
         case .files: return ProjectFilesModel.offered
+        case .memories: return ProjectMemoriesModel.offered
+        case .deploy: return ProjectDeploymentsModel.offered
         case .envoyer: return ProjectEnvoyerModel.offered
         default: return false
         }
@@ -532,6 +543,8 @@ struct BoardScreen: View {
         case .db: ProjectDBTab(model: model.db)
         case .forge: ProjectForgeTab(model: model.forge)
         case .files: ProjectFilesTab(model: model.files)
+        case .memories: ProjectMemoriesTab(model: model.memories)
+        case .deploy: ProjectDeploymentsTab(model: model.deployments)
         case .envoyer: ProjectEnvoyerTab(model: model.envoyer)
         default: EmptyView()
         }

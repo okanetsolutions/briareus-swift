@@ -208,3 +208,90 @@ struct AttachButton: View {
         .help("Attach files")
     }
 }
+
+// MARK: - Saved prompts
+
+/// The prompts kept for the composer (core /prompts): a project's own and the ones offered everywhere, read once per
+/// project and kept while the app runs.
+@MainActor
+final class SavedPrompts {
+    static let shared = SavedPrompts()
+    private var byRepo: [String: [JSON]] = [:]
+
+    static var offered: Bool { Store.shared.supports("prompts") }
+
+    func list(_ repo: String?) async -> [JSON] {
+        let key = repo ?? ""
+        if let l = byRepo[key] { return l }
+        var args: JSON = [:]
+        if let repo { args["repo"] = .string(repo) }
+        guard let v = await boardCall("prompts", args).value else { return [] }
+        let l = v["prompts"].items.filter { $0["title"].nonEmpty != nil && $0["body"].string != nil }
+            .sorted { ($0["sortOrder"].number ?? .infinity, $0["title"].string ?? "") < ($1["sortOrder"].number ?? .infinity, $1["title"].string ?? "") }
+        byRepo[key] = l
+        return l
+    }
+    func forget() { byRepo = [:] }
+
+    /// 📚's menu: the prompts to put in the composer, then Save the text as a prompt and Delete a prompt.
+    func pick(repo: String?, text: String, insert: @escaping (String) -> Void) {
+        Task {
+            let prompts = await list(repo)
+            var rows = prompts.map { p in MenuRow(title: (p["repo"].nonEmpty == nil ? "🌐 " : "") + (p["title"].string ?? "")) }
+            if prompts.isEmpty { rows.append(MenuRow(title: "No saved prompts yet", enabled: false)) }
+            rows.append(.divider)
+            let canSave = Store.shared.supports("create_prompt") && !text.cTrimmed.isEmpty
+            rows.append(MenuRow(title: "Save the message as a prompt…", enabled: canSave))
+            let canDelete = Store.shared.supports("delete_prompt") && !prompts.isEmpty
+            rows.append(MenuRow(title: "Delete a prompt…", enabled: canDelete))
+            guard let i = popUpMenu(rows) else { return }
+            if i < prompts.count { insert(prompts[i]["body"].string ?? ""); return }
+            let actions = rows.count - 2
+            if i == actions { save(repo: repo, text: text) }
+            else if i == actions + 1 { delete(from: prompts) }
+        }
+    }
+
+    private func save(repo: String?, text: String) {
+        guard let title = Dialogs.text("Save as a prompt", label: "Its title, as the 📚 menu lists it.", okLabel: "Save")?.cTrimmed, !title.isEmpty else { return }
+        var everywhere = true
+        if repo != nil {
+            guard let c = Dialogs.choose("Offer it on", choices: ["This project only", "Every project"]) else { return }
+            everywhere = c == 1
+        }
+        var body: JSON = ["title": .string(title), "body": .string(text)]
+        if let repo, !everywhere { body["repo"] = .string(repo) }
+        Task {
+            let r = await boardCall("create_prompt", body)
+            if let e = r.error { Dialogs.alert("The prompt was not saved", e.description) }
+            forget()
+        }
+    }
+    private func delete(from prompts: [JSON]) {
+        guard let i = popUpMenu(prompts.map { MenuRow(title: $0["title"].string ?? "") }), let id = prompts[i]["id"].truncatedInt,
+              Dialogs.confirm("Delete the prompt \(prompts[i]["title"].string ?? "")?", continueLabel: "Delete", destructive: true) else { return }
+        Task {
+            let r = await boardCall("delete_prompt", ["id": JSON(id)])
+            if let e = r.error { Dialogs.alert("The prompt was not deleted", e.description) }
+            forget()
+        }
+    }
+}
+
+/// 📚: the saved prompts.
+struct PromptsButton: View {
+    var repo: String?
+    var text: String
+    var insert: (String) -> Void
+    var body: some View {
+        Button { SavedPrompts.shared.pick(repo: repo, text: text, insert: insert) } label: {
+            Text("\u{1F4DA}").font(.system(size: 14))
+                .frame(width: 32, height: 30)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.raise))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Saved prompts")
+    }
+}

@@ -142,6 +142,8 @@ func retryAfterSeconds(_ value: String?, now: Date = Date()) -> Double? {
 struct APIRoute: Sendable {
     let name: String, method: String, path: String
     var set: String? = nil, filter: String? = nil, list: String? = nil
+    /// Arguments of a write that go in its query string, not its body.
+    var query: [String] = []
 
     static func named(_ name: String) -> APIRoute? { table[name] }
 
@@ -242,6 +244,60 @@ struct APIRoute: Sendable {
         .init(name: "task", method: "GET", path: "tasks/{id}"),
         // Feedback on a session's preview page: a comment on a marked spot, with the uploaded screenshot, sent to its agent.
         .init(name: "preview_feedback", method: "POST", path: "sessions/{sessionId}/preview/feedback"),
+        // A video a test run recorded, as its links name it; read with the token by openWebURL (ServerVideo).
+        .init(name: "video", method: "GET", path: "videos/{file}"),
+        // What waits on the operator, an Admin token's: questions, failures, stopped loops, and the SSH commands and Slack
+        // messages agents ask approval for, each approved or denied.
+        .init(name: "attention", method: "GET", path: "attention"),
+        .init(name: "ssh_requests", method: "GET", path: "ssh/requests"),
+        .init(name: "ssh_decision", method: "POST", path: "ssh/requests/{id}/decision"),
+        .init(name: "slack_requests", method: "GET", path: "slack/requests"),
+        .init(name: "slack_decision", method: "POST", path: "slack/requests/{id}/decision"),
+        // The operator's WhatsApp through the server's WAHA, an Admin token's: the linked phone (started, its QR code to
+        // link it, unlinked), its chats, a chat's history, a message sent, a chat marked read.
+        .init(name: "whatsapp_accounts", method: "GET", path: "whatsapp/accounts"),
+        .init(name: "whatsapp_account", method: "GET", path: "whatsapp/accounts/{id}"),
+        .init(name: "whatsapp_start", method: "POST", path: "whatsapp/accounts/{id}/start"),
+        .init(name: "whatsapp_qr", method: "GET", path: "whatsapp/accounts/{id}/qr"),
+        .init(name: "whatsapp_logout", method: "POST", path: "whatsapp/accounts/{id}/logout"),
+        .init(name: "whatsapp_conversations", method: "GET", path: "whatsapp/accounts/{id}/conversations"),
+        .init(name: "whatsapp_messages", method: "GET", path: "whatsapp/accounts/{id}/conversations/{chat}/messages"),
+        .init(name: "whatsapp_send", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/messages"),
+        .init(name: "whatsapp_read", method: "POST", path: "whatsapp/accounts/{id}/conversations/{chat}/read"),
+        // An attachment's bytes, through the server (fetched by APIClient.serverFile, with the token).
+        .init(name: "whatsapp_media", method: "GET", path: "whatsapp/accounts/{id}/conversations/{chat}/messages/{message}/media"),
+        // A project's memories, what its agents remember between sessions; and for an Admin token their health (what
+        // needs verifying, what looks duplicated), verify, archive or restore, and a merge of two.
+        .init(name: "memories", method: "GET", path: "memories"),
+        .init(name: "create_memory", method: "POST", path: "memories"),
+        .init(name: "update_memory", method: "PUT", path: "memories/{id}"),
+        .init(name: "delete_memory", method: "DELETE", path: "memories/{id}"),
+        .init(name: "memories_health", method: "GET", path: "memories/health"),
+        .init(name: "memory_policy", method: "POST", path: "memories/{id}/policy"),
+        .init(name: "memories_merge", method: "POST", path: "memories/merge"),
+        // The prompts kept for the composer: a project's own (`repo`) and those offered everywhere.
+        .init(name: "prompts", method: "GET", path: "prompts"),
+        .init(name: "create_prompt", method: "POST", path: "prompts"),
+        .init(name: "update_prompt", method: "PUT", path: "prompts/{id}"),
+        .init(name: "delete_prompt", method: "DELETE", path: "prompts/{id}"),
+        // The server, an Admin token's: draining it for maintenance, its workspace clone slots (cleaned or set up afresh
+        // when idle), the prompt templates its agents are briefed with, and a project's local checkout's own update.
+        .init(name: "maintenance", method: "GET", path: "maintenance"),
+        .init(name: "set_maintenance", method: "POST", path: "maintenance"),
+        .init(name: "settings_workspaces", method: "GET", path: "settings/workspaces"),
+        .init(name: "clean_workspace", method: "POST", path: "settings/workspaces/{slot}/clean"),
+        .init(name: "reset_workspace_setup", method: "POST", path: "settings/workspaces/{slot}/reset-setup"),
+        .init(name: "settings_templates", method: "GET", path: "settings/templates"),
+        .init(name: "set_templates", method: "PUT", path: "settings/templates"),
+        .init(name: "project_update", method: "GET", path: "settings/projects/{id}/update"),
+        .init(name: "run_project_update", method: "POST", path: "settings/projects/{id}/update"),
+        // A project's deployments through a GitHub workflow, an Admin token's (`repo` in the query): what GitHub records,
+        // the workflow's settings, a plan (the commit and its checks), running it, and acknowledging the last request.
+        .init(name: "deployments", method: "GET", path: "deployments"),
+        .init(name: "configure_deployments", method: "POST", path: "deployments/config", query: ["repo"]),
+        .init(name: "plan_deployment", method: "POST", path: "deployments/plan", query: ["repo"]),
+        .init(name: "dispatch_deployment", method: "POST", path: "deployments/dispatch", query: ["repo"]),
+        .init(name: "acknowledge_deployment", method: "POST", path: "deployments/acknowledge", query: ["repo"]),
         // Composer. These two send raw bytes (upload, transcribe); the entries say whether the server has them.
         .init(name: "upload", method: "POST", path: "uploads"),
         .init(name: "transcribe", method: "POST", path: "transcribe"),
@@ -293,6 +349,14 @@ struct APIRoute: Sendable {
         .init(name: "update_mail_account", method: "PUT", path: "settings/mail/accounts/{id}"),
         .init(name: "delete_mail_account", method: "DELETE", path: "settings/mail/accounts/{id}"),
         .init(name: "sync_mail_account", method: "POST", path: "settings/mail/accounts/{id}/sync"),
+        // The MCP servers whose tools sessions get beside Briareus's own: checked on save, and signed in to with OAuth in the
+        // browser (`connect` starts a sign-in; a loopback one is finished with the address it ended on).
+        .init(name: "settings_mcp_servers", method: "GET", path: "settings/mcp/servers"),
+        .init(name: "create_mcp_server", method: "POST", path: "settings/mcp/servers"),
+        .init(name: "update_mcp_server", method: "PUT", path: "settings/mcp/servers/{id}"),
+        .init(name: "delete_mcp_server", method: "DELETE", path: "settings/mcp/servers/{id}"),
+        .init(name: "connect_mcp_server", method: "POST", path: "settings/mcp/servers/{id}/connect"),
+        .init(name: "finish_mcp_sign_in", method: "POST", path: "settings/mcp/servers/{id}/finish-sign-in"),
         // Laravel Envoyer accounts, an Admin token's, each with its token and the one project that may use it; and that
         // project's view of them: its Envoyer projects, servers and deployments, and a deployment started (`repo` names it).
         .init(name: "settings_envoyer_accounts", method: "GET", path: "settings/envoyer/accounts"),
@@ -526,6 +590,12 @@ final class APIClient: @unchecked Sendable {
             path += APIClient.query(rest)
             result = try await request(path, method: route.method, body: nil, timeout: t)
         } else {
+            var sep = "?"
+            for key in route.query {
+                guard let arg = rest.removeValue(forKey: key), let value = APIClient.urlValue(arg, inPath: false) else { continue }
+                path += "\(sep)\(APIClient.encode(key))=\(value)"
+                sep = "&"
+            }
             if let set = route.set { rest[set] = .bool(true) }
             result = try await request(path, method: route.method, body: .object(rest), timeout: t)
         }

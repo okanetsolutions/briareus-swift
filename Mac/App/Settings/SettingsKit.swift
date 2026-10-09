@@ -25,6 +25,7 @@ final class SettingsModel: ObservableObject {
     @Published var ssh = Section()
     @Published var forge = Section()
     @Published var slack = Section()
+    @Published var mcp = Section()
     @Published var envoyer = Section()
     /// A Move up or Move down is on its way.
     @Published private(set) var ordering = false
@@ -56,6 +57,9 @@ final class SettingsModel: ObservableObject {
         center.addObserver(forName: .slackWorkspacesChanged, object: nil, queue: .main) { _ in
             Task { @MainActor in SettingsModel.shared.loadSlack() }
         }
+        center.addObserver(forName: .mcpServersChanged, object: nil, queue: .main) { _ in
+            Task { @MainActor in SettingsModel.shared.loadMcp() }
+        }
         center.addObserver(forName: .envoyerAccountsChanged, object: nil, queue: .main) { _ in
             Task { @MainActor in SettingsModel.shared.loadEnvoyer() }
         }
@@ -70,12 +74,12 @@ final class SettingsModel: ObservableObject {
     func start() {
         tasks.values.forEach { $0.cancel() }
         tasks = [:]
-        projects = Section(); providers = Section(); servers = Section(); ssh = Section(); forge = Section(); slack = Section(); envoyer = Section()
+        projects = Section(); providers = Section(); servers = Section(); ssh = Section(); forge = Section(); slack = Section(); mcp = Section(); envoyer = Section()
         ordering = false
         openFirstProvider = false; openFirstServer = false
         refresh()
     }
-    func refresh() { loadProjects(); loadSSH(); loadProviders(); loadServers(); loadForge(); loadSlack(); loadEnvoyer() }
+    func refresh() { loadProjects(); loadSSH(); loadProviders(); loadServers(); loadForge(); loadSlack(); loadMcp(); loadEnvoyer() }
 
     private func load(_ section: ReferenceWritableKeyPath<SettingsModel, Section>, _ call: String, _ listKey: String, done: @escaping () -> Void = {}) {
         tasks[call]?.cancel()
@@ -106,6 +110,7 @@ final class SettingsModel: ObservableObject {
     func loadForge() { load(\.forge, "settings_forge_accounts", "accounts") }
     /// The open Slack form marks the projects another workspace already serves from this list.
     func loadSlack() { load(\.slack, "settings_slack_workspaces", "workspaces") }
+    func loadMcp() { load(\.mcp, "settings_mcp_servers", "servers") }
     func loadEnvoyer() { load(\.envoyer, "settings_envoyer_accounts", "accounts") }
     func loadProviders() {
         load(\.providers, "settings_providers", "providers") { [weak self] in
@@ -128,8 +133,9 @@ final class SettingsModel: ObservableObject {
     /// A settings form in the detail pane.
     static func isSettingsScreen(_ screen: Screen) -> Bool {
         switch screen {
-        case .projectSettings, .providerSettings, .dbServerSettings, .sshServerSettings, .forgeAccountSettings, .slackWorkspaceSettings, .envoyerAccountSettings: return true
-        case .meetingSettings, .mailSettings: return true
+        case .projectSettings, .providerSettings, .dbServerSettings, .sshServerSettings, .forgeAccountSettings, .slackWorkspaceSettings,
+             .mcpServerSettings, .envoyerAccountSettings: return true
+        case .meetingSettings, .mailSettings, .serverSettings, .templatesSettings: return true
         default: return false
         }
     }
@@ -166,6 +172,11 @@ final class SettingsModel: ObservableObject {
         Navigator.shared.show(.slackWorkspaceSettings(row: slack.list[i], defaults: slack.defaults))
     }
     func newSlack() { Navigator.shared.show(.slackWorkspaceSettings(row: nil, defaults: slack.defaults)) }
+    func openMcp(_ i: Int) {
+        guard mcp.list.indices.contains(i), mcp.list[i].isObject else { return }
+        Navigator.shared.show(.mcpServerSettings(row: mcp.list[i], defaults: mcp.defaults))
+    }
+    func newMcp() { Navigator.shared.show(.mcpServerSettings(row: nil, defaults: mcp.defaults)) }
 
     // MARK: Order
 
