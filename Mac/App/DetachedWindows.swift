@@ -1,4 +1,4 @@
-// Pages in windows of their own (the Windows client's detached.c): a conversation, Findings, Usage, WhatsApp or Slack
+// Pages in windows of their own (the Windows client's detached.c): a conversation, Findings, Usage or WhatsApp
 // pops out of the main window's detail, as it is, into a window over where it was, so several can sit side by side; the
 // window's dock button puts it back. Each window has a navigator of its own, so what a page there opens stays there, and
 // picking a page that already has a window brings that window forward.

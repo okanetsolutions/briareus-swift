@@ -1,12 +1,12 @@
-// WhatsApp Web and Slack in the detail pane, from the sidebar strip's buttons. One browser per app serves every visit:
+// WhatsApp Web in the detail pane, from the sidebar strip's button. One browser per app serves every visit:
 // leaving the screen keeps it instead of closing it, so the chats stay loaded and coming back is instant. Its profile is
-// kept on disk, so the QR code is scanned, or the workspace signed in to, once.
+// kept on disk, so the QR code is scanned once.
 import SwiftUI
 
 extension WebApp {
-    var name: String { self == .whatsapp ? "WhatsApp" : "Slack" }
-    var host: String { self == .whatsapp ? "web.whatsapp.com" : "app.slack.com" }
-    var url: String { self == .whatsapp ? "https://web.whatsapp.com/" : "https://app.slack.com/client" }
+    var name: String { "WhatsApp" }
+    var host: String { "web.whatsapp.com" }
+    var url: String { "https://web.whatsapp.com/" }
     var reloadTip: String { "Reload \(name)" }
 }
 
