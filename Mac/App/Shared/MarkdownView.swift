@@ -152,25 +152,37 @@ struct CodeBlock: View {
 }
 
 /// A table sized to its content: a header tint, a grid, and each column's alignment, with Copy table above its right edge
-/// (copying it as Markdown). Each cell is a text of the page's selection, so a drag selects across cells and copies them
-/// tab-separated, a line per row; links in cells open as they do elsewhere.
+/// (copying it as Markdown). Each column takes its widest cell, at most 420px, and the columns narrow to fit the width
+/// there is, wrapping their cells, before the table scrolls sideways. Each cell is a text of the page's selection, so a
+/// drag selects across cells and copies them tab-separated, a line per row; links in cells open as they do elsewhere.
 private struct MarkdownTable: View {
     var block: MdBlock
     var size: MarkdownSize
+    @State private var available: CGFloat = 0
+    private static let pad: CGFloat = 8, maxText: CGFloat = 420, minText: CGFloat = 80
+
     var body: some View {
         let cellSize: MarkdownSize = size == .body ? .callout : size
+        let texts = block.cells.enumerated().map { r, row in
+            row.enumerated().map { c, cell in
+                cellText(cell, size: cellSize, bold: r == 0, align: c < block.aligns.count ? block.aligns[c] : .left)
+            }
+        }
+        let widths = columnWidths(texts)
         ScrollView(.horizontal, showsIndicators: false) {
             // A table narrower than the button lets it run past its right edge, so the label is not clipped.
             VStack(alignment: .trailing, spacing: 2) {
                 TableCopyButton(source: Markdown.tableSource(block))
                 Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
-                    ForEach(Array(block.cells.enumerated()), id: \.offset) { r, row in
+                    ForEach(Array(texts.enumerated()), id: \.offset) { r, row in
                         GridRow {
-                            ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
+                            ForEach(Array(row.enumerated()), id: \.offset) { c, text in
                                 let align = c < block.aligns.count ? block.aligns[c] : .left
-                                SelectableText(cellText(cell, size: cellSize, bold: r == 0, align: align), cell: true)
-                                    .frame(minWidth: 32, maxWidth: 420, alignment: align == .right ? .trailing : align == .center ? .center : .leading)
-                                    .padding(.horizontal, 8).padding(.vertical, 5)
+                                // A set width, so each cell measures its height wrapped as it is drawn.
+                                SelectableText(text, cell: true)
+                                    .frame(width: c < widths.count ? widths[c] : Self.minText,
+                                           alignment: align == .right ? .trailing : align == .center ? .center : .leading)
+                                    .padding(.horizontal, Self.pad).padding(.vertical, 5)
                                     .frame(maxHeight: .infinity, alignment: .top)
                                     .background(r == 0 ? Theme.raise : .clear)
                                     .overlay(Rectangle().strokeBorder(Theme.line, lineWidth: 0.5))
@@ -181,6 +193,36 @@ private struct MarkdownTable: View {
                 .overlay(Rectangle().strokeBorder(Theme.line, lineWidth: 1))
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
+    }
+
+    /// Each column's text width: its widest cell up to 420px; when they do not fit, the widest columns give way first,
+    /// down to 80px each (or their own width, if less).
+    private func columnWidths(_ texts: [[NSAttributedString]]) -> [CGFloat] {
+        let count = texts.map(\.count).max() ?? 0
+        var natural = Array(repeating: CGFloat(0), count: count)
+        for row in texts {
+            for (c, t) in row.enumerated() {
+                let w = ceil(t.boundingRect(with: NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                                            options: [.usesLineFragmentOrigin, .usesFontLeading]).width) + 1
+                natural[c] = max(natural[c], min(w, Self.maxText))
+            }
+        }
+        natural = natural.map { max($0, 32) }
+        let room = available - CGFloat(count) * Self.pad * 2
+        guard available > 0, natural.reduce(0, +) > room else { return natural }
+        // Fill evenly: columns narrower than an even share keep their width, the rest split what is left.
+        var widths = natural, open = Set(0..<count), left = room
+        while !open.isEmpty {
+            let share = left / CGFloat(open.count)
+            let fits = open.filter { natural[$0] <= share }
+            if fits.isEmpty {
+                for c in open { widths[c] = max(share, min(natural[c], Self.minText)) }
+                break
+            }
+            for c in fits { widths[c] = natural[c]; left -= natural[c]; open.remove(c) }
+        }
+        return widths.map { floor($0) }
     }
 
     /// A cell's inline Markdown, aligned as its column.
