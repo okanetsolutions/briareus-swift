@@ -1,4 +1,4 @@
-// The sidebar, as the Windows client draws it (screen_projects.c): the ＋ New session strip with WhatsApp and Slack, the 📊 and ⚑
+// The sidebar, as the Windows client draws it (screen_projects.c): the ＋ New session strip with WhatsApp, the 📊 and ⚑
 // switches, the projects with their session counts, and inside a project its conversations; what Spotify plays, and
 // ⚙ Settings, ☑ Select and ⎋ along the foot. The project's conversations are pushed inside the sidebar, as on Windows, with
 // `‹ All projects` to come back.
@@ -33,7 +33,6 @@ enum SidebarCommon {
         case .newSession: nav.show(.newSession(repo: newSessionRepo))
         case .usage: nav.show(.usage)
         case .whatsapp: nav.show(.webApp(.whatsapp))
-        case .slack: nav.show(SlackInboxModel.offered ? .slackInbox : .webApp(.slack))
         case .mail: nav.show(MailInboxModel.offered ? .mail : .mailSettings(id: nil))
         case .findings: nav.show(.findings)
         }

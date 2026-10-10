@@ -1,11 +1,11 @@
-// The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then WhatsApp, Slack, 📊, ⚑ with
-// its count, as 26px squares (⚙ Settings is at the foot's left). WhatsApp's and Slack's marks are drawn, as no font has them.
+// The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then WhatsApp, 📊, ⚑ with
+// its count, as 26px squares (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
 import SwiftUI
 
-enum StripAction { case newSession, whatsapp, slack, mail, usage, findings }
+enum StripAction { case newSession, whatsapp, mail, usage, findings }
 
 struct SidebarStrip: View {
-    /// The detail pane's root id, for the WhatsApp, Slack, 📊 and ⚑ switches' accent.
+    /// The detail pane's root id, for the WhatsApp, 📊 and ⚑ switches' accent.
     var selected: String?
     var waiting: Int
     var action: (StripAction) -> Void
@@ -25,8 +25,6 @@ struct SidebarStrip: View {
             .help("New session")
             StripButton(active: selected == "whatsapp", action: { action(.whatsapp) }) { WhatsAppMark() }
                 .frame(width: Self.iconWidth).help("WhatsApp")
-            StripButton(active: selected == "slack" || selected == "slack-inbox", action: { action(.slack) }) { SlackMark() }
-                .frame(width: Self.iconWidth).help("Slack")
             // The synced mail, on a server that has it for an Admin token.
             if MailInboxModel.offered || MailSettingsModel.offered {
                 StripButton(active: selected == "mail" || selected == "mail-settings", action: { action(.mail) }) {
@@ -98,31 +96,5 @@ struct WhatsAppMark: View {
             Image(systemName: "phone.fill").font(.system(size: 11)).foregroundStyle(.white)
         }
         .frame(width: d, height: d)
-    }
-}
-
-/// paint_slack_mark: four pills turning about the centre, blue, green, yellow and red, each with a round nub that carries
-/// the other line of the # past it.
-struct SlackMark: View {
-    private static let colors: [Color] = [(0x36, 0xC5, 0xF0), (0x2E, 0xB6, 0x7D), (0xEC, 0xB2, 0x2E), (0xE0, 0x1E, 0x5A)].map {
-        Color(.sRGB, red: Double($0.0) / 255, green: Double($0.1) / 255, blue: Double($0.2) / 255)
-    }
-    var body: some View {
-        Canvas { ctx, size in
-            let cx = size.width / 2, cy = size.height / 2
-            let r: CGFloat = 10, t: CGFloat = 4, g: CGFloat = 3, top = -g - t / 2
-            // The blue pieces, before turning: a pill across the upper line from the left edge to the centre, and above it
-            // the nub of the left line. A quarter turn maps (x, y) to (-y, x).
-            let pieces: [[CGFloat]] = [[-r, top, 0, top + t], [top, top - 1 - t, top + t, top - 1]]
-            for k in 0..<4 {
-                for p in pieces {
-                    var (x1, y1, x2, y2) = (p[0], p[1], p[2], p[3])
-                    for _ in 0..<k { let nx1 = -y2, nx2 = -y1; y1 = x1; y2 = x2; x1 = nx1; x2 = nx2 }
-                    let box = CGRect(x: cx + x1, y: cy + y1, width: x2 - x1, height: y2 - y1)
-                    ctx.fill(Path(roundedRect: box, cornerRadius: t / 2), with: .color(Self.colors[k]))
-                }
-            }
-        }
-        .frame(width: 24, height: 24)
     }
 }
