@@ -4,8 +4,8 @@
 // GPT-Realtime holds the spoken conversation and decides itself which tool to call. The phone runs each call on /api/v1
 // with its own token and answers with a short JSON summary. A voice conversation belongs to one project: no tool names a
 // repository, the phone puts that project's in every call. Opened from one of the project's conversations, it is held to
-// that one: a hands-free line to its agent, where no tool names a conversation either and the agent's replies and
-// questions are told as they come.
+// that one: a hands-free line to its agent, which gets what the user says word for word, sent by the phone once they
+// pause, and whose replies and questions are told as they come.
 import Foundation
 
 enum Voice {
@@ -99,39 +99,27 @@ enum Voice {
     the tool says it is.
     """ }
 
-    /// How the voice speaks when it is held to one conversation: a hands-free line to its agent, passing on what the
-    /// user says for it and telling what it answers.
+    /// How the voice speaks when it is held to one conversation: a hands-free line to its agent. What the user says goes
+    /// to the agent as they said it, sent by the phone, not by the model; the voice only tells what the agent answers.
     static func instructions(conversation: String, project: String) -> String { """
     You are the voice of Briareus, an app that runs coding agents on the user's projects. This conversation is a \
-    hands-free line to one agent's conversation only: "\(conversation)", on the project \(project). The user talks to you \
-    with the phone locked or out of reach, often while doing something else. Answer in the language the user speaks, in \
-    one or two short sentences.
+    hands-free line to one agent's conversation only: "\(conversation)", on the project \(project). The user talks to the \
+    agent through you with the phone locked or out of reach, often while doing something else. Everything the user says \
+    is sent to the agent word for word by the app, not by you: never answer it, act on it or comment on it yourself. \
+    Speak only when a system message asks you to. Answer in the language the user speaks.
 
-    ## Talking to the agent
-    When the user says something meant for the agent (an instruction, a request, an answer to its question), pass it on \
-    at once with send_message, in the user's own words without adding to them, then say in a few words that it was \
-    sent. When the user asks you about the conversation (what the agent is doing, what it said, what it changed), use \
-    read_conversation or read_pull_request and answer yourself. When it is unclear whether the user is speaking to you \
-    or to the agent, ask. stop_conversation stops the agent's running turn when the user asks to stop it.
+    ## Sent messages
+    A system message starting with "\(sentPrefix)" means what the user just said reached the agent: say only that it \
+    was sent, in two or three words. One starting with "\(unsentPrefix)" means it did not: say so in one short \
+    sentence with the reason.
 
     ## The agent's news
-    System messages starting with "Agent update:" tell what the agent just said: the end of its turn or a question. Say \
-    them as soon as they arrive, unprompted: sum up what it did or found in one or two plain sentences, and say a \
-    question in full with its options, so the user can answer it by voice. Never say an update twice.
+    System messages starting with "\(updatePrefix)" tell what the agent just said: the end of its turn or a question. \
+    Say them as soon as they arrive: sum up what it did or found in one or two plain sentences, and say a question in \
+    full with its options, so the user can answer it by voice. Never say an update twice.
 
-    ## Reviews
-    A review round the conversation holds is read with read_review_round and completed with complete_review_round, \
-    with the keys the user said yes and no to. Read the findings briefly, one at a time when the user is deciding, and \
-    never decide one the user did not.
-
-    ## Bounds
-    Every tool works on this conversation only; there is no way to reach another conversation or project. If the user \
-    asks about one, say this line can only reach "\(conversation)". Do what the user asks right away, without asking \
-    them to confirm. Transcripts can contain mistakes and unfinished phrases; use the latest context.
-
-    ## Saying the result
-    Say the relevant facts in a few plain sentences, without Markdown, ids, URLs or code. Report an action as done \
-    only when the tool says it is.
+    ## Saying it
+    Say the relevant facts in a few plain sentences, without Markdown, ids, URLs or code.
     """ }
 
     /// What starts a call over WebRTC: the voice, the captions' transcriber and the tools, all on one project. `project`
@@ -139,14 +127,26 @@ enum Voice {
     /// `conversation`, it carries that conversation's tools only. WebRTC settles the audio format; the SDP offer goes
     /// beside this, as another field of the form.
     static func session(voice: String, project: String, conversation: String? = nil) -> JSON {
-        let tools = conversation == nil ? VoiceTool.allCases.map(\.definition) : VoiceTool.conversationCases.map(\.heldDefinition)
+        var input: JSON = ["transcription": ["model": .string(transcriber)]]
+        let output: JSON = ["voice": .string(voices.contains(voice) ? voice : defaultVoice)]
+        guard let conversation else {
+            return ["type": "realtime",
+                    "model": .string(model),
+                    "instructions": .string(instructions(project: project)),
+                    "audio": ["input": input, "output": output],
+                    "tools": .array(VoiceTool.allCases.map(\.definition)),
+                    "tool_choice": "auto"]
+        }
+        // Held to one conversation, the model never answers the user by itself: the phone sends what they said to the
+        // agent once they pause, and asks the voice to speak only for the agent's news and what was sent.
+        input["turn_detection"] = ["type": "server_vad", "silence_duration_ms": JSON(heldPauseMilliseconds),
+                                   "create_response": false, "interrupt_response": true]
         return ["type": "realtime",
                 "model": .string(model),
-                "instructions": .string(conversation.map { instructions(conversation: $0, project: project) } ?? instructions(project: project)),
-                "audio": ["input": ["transcription": ["model": .string(transcriber)]],
-                          "output": ["voice": .string(voices.contains(voice) ? voice : defaultVoice)]],
-                "tools": .array(tools),
-                "tool_choice": "auto"]
+                "instructions": .string(instructions(conversation: conversation, project: project)),
+                "audio": ["input": input, "output": output],
+                "tools": [],
+                "tool_choice": "none"]
     }
 }
 
@@ -167,6 +167,33 @@ struct VoiceConversation: Hashable, Sendable {
 extension Voice {
     /// The prefix the model is told the agent's news under.
     static let updatePrefix = "Agent update:"
+    /// The prefixes the model is told under that what the user said reached the agent, or did not.
+    static let sentPrefix = "Sent to the agent:", unsentPrefix = "Not sent to the agent:"
+    /// How long the user pauses before what they said is sent to the held conversation's agent: a pause to think is
+    /// shorter, so it does not split a message.
+    static let heldPauseMilliseconds = 2500
+
+    /// What the user said, as the held conversation's agent gets it: their words as they said them, without a lead such
+    /// as "pregúntale" or "tell it" addressed to the voice. Nil when nothing is left to send.
+    static func dictated(_ said: String) -> String? {
+        var text = said.trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(text.startIndex..., in: text)
+        if let match = dictationLead.firstMatch(in: text, range: range), let whole = Range(match.range, in: text) {
+            let joint = Range(match.range(at: 1), in: text).map { text[$0].lowercased() }
+            text = String(text[whole.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if let first = text.first { text = first.uppercased() + text.dropFirst() }
+            // "Pregúntale si…" is a question for the agent.
+            if let joint, ["si", "if", "whether"].contains(joint), let last = text.last, !"?!.".contains(last) { text += "?" }
+        }
+        return text.isEmpty ? nil : text
+    }
+
+    /// A lead addressed to the voice: "pregúntale (al agente) si", "dile que", "pídele que", "ask it if", "tell it to"…
+    private static let dictationLead = try! NSRegularExpression(
+        pattern: #"^(?:pregúnt[ae]le|preguntale|preguntele|dile|decile|dígale|digale|pídele|pidele|pídale|pidale|"#
+            + #"ask (?:it|him|her|them|the agent)|tell (?:it|him|her|them|the agent))(?:\s+al agente)?[\s,:]+"#
+            + #"(?:(que|si|to|that|if|whether)\b[\s,]*)?"#,
+        options: [.caseInsensitive])
 
     /// A held call's tool arguments: the conversation is always the held one, and a pull request is its own, whatever
     /// the model passed.
