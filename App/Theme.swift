@@ -1,29 +1,42 @@
 import SwiftUI
 
-// Warm neutrals and a clay accent, in the spirit of the Claude apps.
+// The look every Briareus client shares, the Mac app's included, light or dark as the system says: the palette and the status
+// colours come from briareus-client-contracts (Mac/Core/BriareusTokens.swift, generated there and copied in by its
+// `node scripts/sync.mjs`). Text keeps the system's text styles (.body, .caption, …) and .primary/.secondary, so Dynamic Type,
+// Bold Text and Increase Contrast go on working; the shared pixel sizes are the Mac's and Windows'.
 enum Theme {
-    static let accent = Color(light: 0xC96442, dark: 0xD97757)
-    static let background = Color(light: 0xFAF9F5, dark: 0x1F1E1D)
-    static let surface = Color(light: 0xF0EEE6, dark: 0x2A2927)
-    static let elevated = Color(light: 0xFFFFFF, dark: 0x302F2C)
-    static let bubble = Color(light: 0xEAE7DD, dark: 0x3A3936)
-    static let border = Color(light: 0xDEDBD0, dark: 0x3E3D39)
-    static let code = Color(light: 0xF3F1EA, dark: 0x262523)
-    static let success = Color(light: 0x3D8C5A, dark: 0x6FBF8B)
-    static let danger = Color(light: 0xC0392B, dark: 0xE5776A)
-    static let warning = Color(light: 0xB7791F, dark: 0xE3B25C)
+    // The roles as the Mac app uses them: canvas behind a screen, sidebar for recessed bars and panels, raise for cards, rows
+    // and bubbles, field for inputs, chips and buttons, sunken for code and wells, line for hairlines.
+    static let canvas = Color(light: BriareusPalette.light.canvas, dark: BriareusPalette.dark.canvas)
+    static let sidebar = Color(light: BriareusPalette.light.sidebar, dark: BriareusPalette.dark.sidebar)
+    static let raise = Color(light: BriareusPalette.light.raise, dark: BriareusPalette.dark.raise)
+    static let field = Color(light: BriareusPalette.light.field, dark: BriareusPalette.dark.field)
+    static let sunken = Color(light: BriareusPalette.light.sunken, dark: BriareusPalette.dark.sunken)
+    static let line = Color(light: BriareusPalette.light.line, dark: BriareusPalette.dark.line)
+    static let lineStrong = Color(light: BriareusPalette.light.lineStrong, dark: BriareusPalette.dark.lineStrong)
+    static let ink = Color(light: BriareusPalette.light.ink, dark: BriareusPalette.dark.ink)
+    static let muted = Color(light: BriareusPalette.light.muted, dark: BriareusPalette.dark.muted)
+    static let accent = Color(light: BriareusPalette.light.accent, dark: BriareusPalette.dark.accent)
+    static let accentDim = Color(light: BriareusPalette.light.accentDim, dark: BriareusPalette.dark.accentDim)
+    static let onAccent = Color(light: BriareusPalette.light.onAccent, dark: BriareusPalette.dark.onAccent)
+    static let ok = Color(light: BriareusPalette.light.ok, dark: BriareusPalette.dark.ok)
+    static let warn = Color(light: BriareusPalette.light.warn, dark: BriareusPalette.dark.warn)
+    static let danger = Color(light: BriareusPalette.light.danger, dark: BriareusPalette.dark.danger)
+    static let dot = Color(light: BriareusPalette.light.dot, dark: BriareusPalette.dark.dot)
 
     /// Behind a list row: a card, tinted while an iPad's right-hand side shows it.
     static var row: Color { row(selected: false) }
-    static func row(selected: Bool) -> Color { selected ? accent.opacity(0.16) : elevated }
+    static func row(selected: Bool) -> Color { selected ? accent.opacity(0.16) : raise }
 
-    static func statusColor(_ status: String) -> Color {
-        switch status {
-        case "running": return success
-        case "queued", "preparing", "starting": return warning
-        case "failed", "error", "cancelled": return danger
-        case "closed": return .secondary.opacity(0.6)
-        default: return .secondary
+    /// The status dot's colour, as every client gives it: working in the accent, idle green, waiting, interrupted or cancelled
+    /// amber, failed red, closed and the rest grey.
+    static func statusColor(_ status: String?) -> Color {
+        switch BriareusStatusRole(status: status) {
+        case .active: return accent
+        case .idle: return ok
+        case .attention: return warn
+        case .failed: return danger
+        case .inactive: return dot
         }
     }
 }
@@ -41,11 +54,11 @@ struct StatusDot: View {
     let status: String
     @State private var pulse = false
     var body: some View {
-        Circle().fill(Theme.statusColor(status)).frame(width: 7, height: 7)
+        Circle().fill(Theme.statusColor(status)).frame(width: CGFloat(BriareusLayout.statusDot), height: CGFloat(BriareusLayout.statusDot))
             .overlay {
                 if status == "running" {
                     Circle().stroke(Theme.statusColor(status), lineWidth: 1.5).scaleEffect(pulse ? 2.4 : 1).opacity(pulse ? 0 : 0.8)
-                        .onAppear { withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { pulse = true } }
+                        .onAppear { withAnimation(.easeOut(duration: BriareusMotion.pulse).repeatForever(autoreverses: false)) { pulse = true } }
                 }
             }
             .accessibilityHidden(true)
@@ -101,11 +114,11 @@ struct MarkdownText: View, Equatable {
                 case .quote:
                     Text(inlineMarkdown(block.text)).foregroundStyle(.secondary)
                         .padding(.leading, 12)
-                        .overlay(alignment: .leading) { Capsule().fill(Theme.border).frame(width: 3) }
+                        .overlay(alignment: .leading) { Capsule().fill(Theme.line).frame(width: 3) }
                 case .code:
                     CodeBlock(language: block.language, text: block.text)
                 case .rule:
-                    Rectangle().fill(Theme.border).frame(height: 1).padding(.vertical, 4)
+                    Rectangle().fill(Theme.line).frame(height: 1).padding(.vertical, 4)
                 case .table:
                     MarkdownTable(block: block)
                 }
@@ -123,7 +136,7 @@ func inlineMarkdown(_ text: String) -> AttributedString {
         var run = AttributedString(span.text)
         if span.flags.contains(.code) {
             run.font = .system(.callout, design: .monospaced)
-            run.backgroundColor = Theme.code
+            run.backgroundColor = Theme.sunken
             run.foregroundColor = Theme.accent
         } else {
             var intent: InlinePresentationIntent = []
@@ -168,13 +181,13 @@ private struct MarkdownTable: View {
                                     .frame(minWidth: 32, maxWidth: 280, alignment: align == .right ? .trailing : align == .center ? .center : .leading)
                                     .padding(.horizontal, 8).padding(.vertical, 5)
                                     .frame(maxHeight: .infinity, alignment: .top)
-                                    .background(r == 0 ? Theme.surface : .clear)
-                                    .overlay(Rectangle().strokeBorder(Theme.border, lineWidth: 0.5))
+                                    .background(r == 0 ? Theme.field : .clear)
+                                    .overlay(Rectangle().strokeBorder(Theme.line, lineWidth: 0.5))
                             }
                         }
                     }
                 }
-                .overlay(Rectangle().strokeBorder(Theme.border, lineWidth: 1))
+                .overlay(Rectangle().strokeBorder(Theme.line, lineWidth: 1))
             }
             // A sideways ScrollView doesn't take its content's height on its own; without this the rows below the first are clipped
             .fixedSize(horizontal: false, vertical: true)
@@ -200,13 +213,13 @@ struct CodeBlock: View {
                 }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel(copied ? "Copied" : "Copy code")
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
-            Divider().overlay(Theme.border)
+            Divider().overlay(Theme.line)
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(text).font(.system(.footnote, design: .monospaced)).fixedSize(horizontal: true, vertical: false)
                     .textSelection(.enabled).padding(12)
             }
         }
-        .background(Theme.code, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+        .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
     }
 }

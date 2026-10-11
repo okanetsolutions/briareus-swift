@@ -113,8 +113,8 @@ private struct FoldedSteps<Content: View>: View {
             if open {
                 VStack(alignment: .leading, spacing: 4) { content }
                     .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.code, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+                    .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
             }
         }
         .animation(.snappy(duration: 0.2), value: open)
@@ -129,8 +129,8 @@ private struct ToolStepRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(toolTitle(event)).font(.caption2.weight(.medium)).foregroundStyle(error ? Theme.danger : .primary).lineLimit(1)
                 .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 5))
-                .overlay(RoundedRectangle(cornerRadius: 5).stroke(error ? Theme.danger : Theme.border, lineWidth: 0.5))
+                .background(Theme.raise, in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(error ? Theme.danger : Theme.line, lineWidth: 0.5))
                 .fixedSize()
             Text(firstLine(event.detail)).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(2)
                 .textSelection(.enabled)
@@ -166,12 +166,13 @@ private struct TranscriptEventView: View, Equatable {
                 VStack(alignment: .trailing, spacing: 6) {
                     Text(event.text ?? "").textSelection(.enabled)
                         .padding(.horizontal, 14).padding(.vertical, 10)
-                        .background(Theme.bubble, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .background(Theme.raise, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
                     ForEach(Array((event.attachments?.items ?? []).enumerated()), id: \.offset) { _, attachment in
                         Label(attachment["name"].string ?? "Attachment", systemImage: "paperclip")
                             .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Theme.surface, in: Capsule())
+                            .background(Theme.field, in: Capsule())
                     }
                     EventTimeText(event: event)
                 }
@@ -188,14 +189,14 @@ private struct TranscriptEventView: View, Equatable {
             let failed = event.isError == true
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: failed ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                    .foregroundStyle(failed ? Theme.danger : Theme.success)
+                    .foregroundStyle(failed ? Theme.danger : Theme.ok)
                 Text(String(turnFooterText(event).dropFirst(2))).lineLimit(2)
             }
             .font(.caption).foregroundStyle(failed ? Theme.danger : .secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 2)
             .overlay(alignment: .top) {
-                Rectangle().fill(Theme.border).frame(height: 0.5).offset(y: -8)
+                Rectangle().fill(Theme.line).frame(height: 0.5).offset(y: -8)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(failed ? "Turn failed" : "Turn complete")
@@ -244,8 +245,8 @@ private struct AskCard: View {
                                     Image(systemName: "arrow.turn.down.left").font(.caption).foregroundStyle(.secondary)
                                 }
                                 .padding(.horizontal, 12).padding(.vertical, 10)
-                                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+                                .background(Theme.field, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -256,7 +257,7 @@ private struct AskCard: View {
             }
         }
         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Theme.raise, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.accent.opacity(0.4), lineWidth: 1))
     }
 }
@@ -272,7 +273,7 @@ private struct QueuedBubble: View {
             VStack(alignment: .trailing, spacing: 4) {
                 Text(text).foregroundStyle(.secondary).textSelection(.enabled)
                     .padding(.horizontal, 14).padding(.vertical, 10)
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.border, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.line, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
                 HStack(spacing: 8) {
                     Label("Queued for the next turn", systemImage: "clock").font(.caption2).foregroundStyle(.secondary)
                     if removable {

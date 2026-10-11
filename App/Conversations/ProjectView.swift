@@ -90,7 +90,7 @@ struct ProjectView: View {
     private func chrome(_ list: some View) -> some View {
         list
             .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden).background(Theme.background)
+            .scrollContentBackground(.hidden).background(Theme.canvas)
             .environment(\.editMode, $editMode)
             .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
             .searchable(text: $search, prompt: "Find a conversation")
@@ -187,7 +187,7 @@ struct ProjectView: View {
         .font(.body.weight(.medium))
         .padding(.horizontal, 20).padding(.vertical, 12)
         .background(.bar)
-        .overlay(alignment: .top) { Rectangle().fill(Theme.border).frame(height: 0.5) }
+        .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 0.5) }
     }
 
     // MARK: Rows
@@ -205,10 +205,10 @@ struct ProjectView: View {
                 }
                 if s.status == "closed" {
                     if store.supports("reopen") {
-                        Button("Reopen", systemImage: "arrow.uturn.backward") { asked = RowAction(session: s, action: "reopen") }.tint(Theme.success)
+                        Button("Reopen", systemImage: "arrow.uturn.backward") { asked = RowAction(session: s, action: "reopen") }.tint(Theme.ok)
                     }
                 } else if store.supports("close") {
-                    Button("Close", systemImage: "archivebox") { asked = RowAction(session: s, action: "close") }.tint(Theme.warning)
+                    Button("Close", systemImage: "archivebox") { asked = RowAction(session: s, action: "close") }.tint(Theme.warn)
                 }
             }
             .swipeActions(edge: .leading) {
@@ -301,7 +301,7 @@ private struct FindingsCountIcon: View {
             .padding(.horizontal, 8).padding(.vertical, 6)
             .overlay(alignment: .topTrailing) {
                 Text(String(count)).font(.caption2.weight(.bold).monospacedDigit()).foregroundStyle(.white)
-                    .padding(.horizontal, 4).frame(minWidth: 15, minHeight: 15).background(Theme.warning, in: Capsule())
+                    .padding(.horizontal, 4).frame(minWidth: 15, minHeight: 15).background(Theme.warn, in: Capsule())
             }
     }
 }
@@ -322,7 +322,7 @@ struct ConversationRowLabel: View {
             Spacer(minLength: 0)
             if working { ProgressView().controlSize(.small) }
             if session.heldRound != nil {
-                Image(systemName: "flag.fill").font(.caption).foregroundStyle(Theme.warning).accessibilityLabel("Findings waiting")
+                Image(systemName: "flag.fill").font(.caption).foregroundStyle(Theme.warn).accessibilityLabel("Findings waiting")
             }
         }
         .padding(.vertical, 3)
@@ -350,8 +350,8 @@ struct ConversationMark: View {
         case "merged": return .purple
         case "closed", "draft": return .secondary
         case "failing": return Theme.danger
-        case "pending": return Theme.warning
-        default: return Theme.success
+        case "pending": return Theme.warn
+        default: return Theme.ok
         }
     }
 }

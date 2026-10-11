@@ -40,7 +40,7 @@ struct PullScreen: View {
                     sectionBar.padding(.vertical, 6)
                     PullRunArea(model: model)
                 }
-                .background(Theme.background)
+                .background(Theme.canvas)
             } else {
                 list
             }
@@ -139,7 +139,7 @@ struct PullScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden).background(Theme.background)
+        .scrollContentBackground(.hidden).background(Theme.canvas)
         .refreshable {
             // Pulling down is how an uncertain start is checked: its conversation is listed here if it began.
             errands.checked()
@@ -260,7 +260,7 @@ struct PullScreen: View {
     }
     private var stateColor: Color {
         let state = model.pr["state"].string
-        return state == "merged" ? Theme.accent : state == "closed" ? Theme.danger : model.draft ? .secondary : Theme.success
+        return state == "merged" ? Theme.accent : state == "closed" ? Theme.danger : model.draft ? .secondary : Theme.ok
     }
 
     private var header: some View {
@@ -282,7 +282,7 @@ struct PullScreen: View {
                     if review != .none { BoardBadge(text: review.text, systemImage: reviewStyle(review).symbol, color: reviewStyle(review).color) }
                     if let add = model.pr["additions"].int, let del = model.pr["deletions"].int {
                         HStack(spacing: 4) {
-                            Text("+\(add)").foregroundStyle(Theme.success)
+                            Text("+\(add)").foregroundStyle(Theme.ok)
                             Text("\u{2212}\(del)").foregroundStyle(Theme.danger)
                         }
                         .font(.caption.monospacedDigit().weight(.semibold))
@@ -425,8 +425,8 @@ struct PullScreen: View {
                             }
                             .padding(.horizontal, 12).padding(.vertical, 7)
                             .foregroundStyle(on ? .white : .primary)
-                            .background(on ? Theme.accent : Theme.elevated, in: Capsule())
-                            .overlay(Capsule().stroke(on ? Color.clear : Theme.border, lineWidth: 0.5))
+                            .background(on ? Theme.accent : Theme.raise, in: Capsule())
+                            .overlay(Capsule().stroke(on ? Color.clear : Theme.line, lineWidth: 0.5))
                             .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
@@ -468,7 +468,7 @@ struct PullScreen: View {
             if let add = model.pr["additions"].int, let del = model.pr["deletions"].int {
                 LabeledContent("Lines") {
                     HStack(spacing: 6) {
-                        Text("+\(add)").foregroundStyle(Theme.success)
+                        Text("+\(add)").foregroundStyle(Theme.ok)
                         Text("\u{2212}\(del)").foregroundStyle(Theme.danger)
                     }
                     .monospacedDigit()
@@ -599,12 +599,12 @@ struct PullScreen: View {
                 if let severity = f["severity"].string {
                     let label = findingSeverityLabel(severity)
                     Text(label).font(.caption2.weight(.bold))
-                        .foregroundStyle(label == "CRIT" || label == "HIGH" ? Theme.danger : label == "LOW" ? Color.secondary : Theme.warning)
+                        .foregroundStyle(label == "CRIT" || label == "HIGH" ? Theme.danger : label == "LOW" ? Color.secondary : Theme.warn)
                 }
-                if fixed { Text("Fixed").foregroundStyle(Theme.success) }
+                if fixed { Text("Fixed").foregroundStyle(Theme.ok) }
                 else if let d = decision {
                     Text(Self.decisionIDs.firstIndex(of: d).map { Self.decisionTitles[$0] } ?? d.asciiCapitalized)
-                        .foregroundStyle(d == "fix" ? Theme.warning : Color.secondary)
+                        .foregroundStyle(d == "fix" ? Theme.warn : Color.secondary)
                 }
                 if let key = f["key"].string, model.deciding == key { ProgressView().controlSize(.mini) }
             }
@@ -650,9 +650,9 @@ private struct CheckCounts: View {
     var body: some View {
         let passed = checks["passed"].int32 ?? 0, failed = checks["failed"].int32 ?? 0, pending = checks["pending"].int32 ?? 0
         HStack(spacing: 12) {
-            Label("\(passed)", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.success)
+            Label("\(passed)", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.ok)
             Label("\(failed)", systemImage: "xmark.circle.fill").foregroundStyle(Theme.danger)
-            Label("\(pending)", systemImage: "clock.fill").foregroundStyle(Theme.warning)
+            Label("\(pending)", systemImage: "clock.fill").foregroundStyle(Theme.warn)
         }
         .font(.subheadline.weight(.semibold).monospacedDigit())
         .labelStyle(CompactLabelStyle())
@@ -710,7 +710,7 @@ private struct PullTimeline: View {
         case .reviews:
             let v = reviews[e.index]
             let verdict = ReviewVerdict(v)
-            let style: (String, Color) = verdict == .approved ? ("checkmark.seal.fill", Theme.success)
+            let style: (String, Color) = verdict == .approved ? ("checkmark.seal.fill", Theme.ok)
                 : verdict == .changesRequested ? ("xmark.octagon.fill", Theme.danger)
                 : verdict == .dismissed ? ("minus.circle", .secondary) : ("text.bubble", .secondary)
             let t = visibleMarkdown(v["body"].string ?? "")
@@ -766,7 +766,7 @@ private struct PullThread: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+        .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
     }
 }

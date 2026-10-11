@@ -11,7 +11,7 @@ struct BriareusApp: App {
                     if store.client != nil { RootTabs() } else { PairingView() }
                 }
                 if phase != .active {
-                    Theme.background.ignoresSafeArea()
+                    Theme.canvas.ignoresSafeArea()
                     Label("Briareus", systemImage: "square.stack.3d.up.fill").font(.largeTitle.bold()).foregroundStyle(Theme.accent)
                 }
             }
@@ -87,7 +87,7 @@ struct PairingView: View {
                                     .focused($focusedField, equals: .server)
                                     .submitLabel(.next).onSubmit { focusedField = .token }
                             }.padding(.horizontal, 14).padding(.vertical, 14)
-                            Divider().overlay(Theme.border).padding(.leading, 44)
+                            Divider().overlay(Theme.line).padding(.leading, 44)
                             HStack(spacing: 10) {
                                 Image(systemName: "key").foregroundStyle(.secondary).frame(width: 20)
                                 SecureField("Device token", text: $token)
@@ -97,8 +97,8 @@ struct PairingView: View {
                                     .submitLabel(.done).onSubmit { focusedField = nil }
                             }.padding(.horizontal, 14).padding(.vertical, 14)
                         }
-                        .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+                        .background(Theme.raise, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
                         Text("Issue a token on the server with `npm run create-token`.")
                             .font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 4)
                     }
@@ -112,7 +112,7 @@ struct PairingView: View {
                         }
                         .foregroundStyle(canConnect || store.connecting ? Color.white : Color.secondary)
                         .frame(maxWidth: .infinity).padding(.vertical, 15)
-                        .background(canConnect || store.connecting ? Theme.accent : Theme.surface, in: Capsule())
+                        .background(canConnect || store.connecting ? Theme.accent : Theme.field, in: Capsule())
                     }
                     .buttonStyle(.plain).disabled(!canConnect)
                     .accessibilityIdentifier("connectButton")
@@ -125,7 +125,7 @@ struct PairingView: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Theme.background)
+            .background(Theme.canvas)
         }
     }
 }

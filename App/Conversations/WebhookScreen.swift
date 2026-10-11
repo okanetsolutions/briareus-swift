@@ -230,10 +230,10 @@ struct WebhookScreen: View {
         if (unfit != nil && !model.armed) || paused != nil || held > 0 {
             Section {
                 if let unfit, !model.armed { notice(unfit, "exclamationmark.triangle.fill", Theme.danger) }
-                if let paused { notice("Paused. \(paused) Saving this form lifts the pause.", "pause.circle.fill", Theme.warning) }
+                if let paused { notice("Paused. \(paused) Saving this form lifts the pause.", "pause.circle.fill", Theme.warn) }
                 if held > 0 {
                     notice(held == 1 ? "1 delivery is waiting for the turn under way, or for your answer."
-                           : "\(held) deliveries are waiting for the turn under way, or for your answer.", "tray.full", Theme.warning)
+                           : "\(held) deliveries are waiting for the turn under way, or for your answer.", "tray.full", Theme.warn)
                 }
             }
             .listRowBackground(Theme.row)

@@ -158,7 +158,7 @@ struct ProjectForgeScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden).background(Theme.background)
+        .scrollContentBackground(.hidden).background(Theme.canvas)
         .refreshable { await model.load() }
         .task { if !model.loaded { await model.load() } }
     }
@@ -187,7 +187,7 @@ struct ProjectForgeScreen: View {
                 HStack(spacing: 6) {
                     Image(systemName: "server.rack")
                     Text(server["name"].nonEmpty ?? "Forge server").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
-                    if server["is_ready"].is(false) { Text("Provisioning").font(.caption).foregroundStyle(Theme.warning) }
+                    if server["is_ready"].is(false) { Text("Provisioning").font(.caption).foregroundStyle(Theme.warn) }
                 }
                 let detail = Forge.joined([Forge.serverDetail(server), Forge.fieldText(server["php_version"]).map { "PHP \($0)" },
                                            Forge.fieldText(server["ubuntu_version"]).map { "Ubuntu \($0)" }, server["database_type"].string])
@@ -203,7 +203,7 @@ struct ProjectForgeScreen: View {
 func forgeToneColor(_ state: String?) -> Color {
     switch Forge.tone(state) {
     case .danger: return Theme.danger
-    case .ok: return Theme.success
+    case .ok: return Theme.ok
     case .accent: return Theme.accent
     case .muted: return .secondary
     }
@@ -225,7 +225,7 @@ private struct ForgeSiteRow: View {
             HStack(spacing: 8) {
                 if let state = site["status"].nonEmpty { Text(state).foregroundStyle(forgeToneColor(state)) }
                 if let deploy = site["deployment_status"].nonEmpty { Text("Deployment \(deploy)").foregroundStyle(forgeToneColor(deploy)) }
-                if site["quick_deploy"].is(true) { Label("Quick deploy", systemImage: "bolt").foregroundStyle(Theme.success) }
+                if site["quick_deploy"].is(true) { Label("Quick deploy", systemImage: "bolt").foregroundStyle(Theme.ok) }
             }
             .font(.caption)
             let repo = site["repository"]

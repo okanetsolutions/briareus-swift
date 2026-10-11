@@ -283,7 +283,7 @@ struct BranchRunScreen: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .navigationTitle(model.branch ?? "Default branch").navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
         .onAppear { model.shown = true; model.open() }
@@ -372,8 +372,8 @@ struct BranchRunScreen: View {
                     .textSelection(.enabled)
                 }
                 .defaultScrollAnchor(.bottom)
-                .background(Theme.code, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+                .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
                 .frame(maxHeight: .infinity, alignment: .top)
             }
         }

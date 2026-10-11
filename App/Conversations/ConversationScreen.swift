@@ -35,13 +35,13 @@ struct ConversationScreen: View {
             if model.deleted {
                 ContentUnavailableView("Conversation deleted", systemImage: "trash",
                                        description: Text("The conversation and its transcript are gone."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.background)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.canvas)
             } else {
                 content
             }
         }
         .navigationTitle(session.displayTitle).navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.background, for: .navigationBar)
+        .toolbarBackground(Theme.canvas, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) { heading }
             ToolbarItem(placement: .topBarTrailing) {
@@ -100,7 +100,7 @@ struct ConversationScreen: View {
             }
             .conversationStartsAtBottom()
             .scrollDismissesKeyboard(.interactively)
-            .background(Theme.background)
+            .background(Theme.canvas)
             // Pulling down reads the whole transcript again, in case the saved one drifted from the server's.
             .refreshable { await model.refresh(full: true) }
             .onChange(of: model.transcript.events.count) { old, _ in
@@ -124,8 +124,8 @@ struct ConversationScreen: View {
                     Button { scrollToBottom(proxy) } label: {
                         Image(systemName: "arrow.down").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
                             .frame(width: 36, height: 36)
-                            .background(Theme.elevated, in: Circle())
-                            .overlay(Circle().stroke(Theme.border, lineWidth: 0.5))
+                            .background(Theme.raise, in: Circle())
+                            .overlay(Circle().stroke(Theme.line, lineWidth: 0.5))
                             .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
                     }
                     .accessibilityLabel("Latest message")
@@ -188,8 +188,8 @@ struct ConversationScreen: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .background(Theme.background)
-            .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 0.5) }
+            .background(Theme.canvas)
+            .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 0.5) }
             .accessibilityLabel("Details: \(text)")
         }
     }
@@ -202,7 +202,7 @@ struct ConversationScreen: View {
                 HStack(spacing: 8) {
                     Text("\u{1F310}").font(.caption)
                     Text(browser.running ? "Shared browser" : "Shared browser starts next turn").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    if browser.running { Circle().fill(Theme.success).frame(width: 6, height: 6).accessibilityHidden(true) }
+                    if browser.running { Circle().fill(Theme.ok).frame(width: 6, height: 6).accessibilityHidden(true) }
                     Spacer(minLength: 0)
                     Text("Open").font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
                 }
@@ -210,8 +210,8 @@ struct ConversationScreen: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .background(Theme.background)
-            .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 0.5) }
+            .background(Theme.canvas)
+            .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 0.5) }
             .accessibilityLabel(browser.running ? "Shared browser, running" : "Shared browser, starts next turn")
             .accessibilityHint("Opens the session's shared browser")
         }
@@ -224,7 +224,7 @@ struct ConversationScreen: View {
             let count = triage["findings"].count
             Button { showingTriage = true } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: "flag.fill").foregroundStyle(Theme.warning)
+                    Image(systemName: "flag.fill").foregroundStyle(Theme.warn)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(triageTitle(triage)).font(.subheadline.weight(.medium)).lineLimit(1)
                         Text("\(count) finding\(count == 1 ? "" : "s") waiting for a verdict").font(.caption).foregroundStyle(.secondary)
@@ -233,12 +233,12 @@ struct ConversationScreen: View {
                     Text("Review").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.accent)
                 }
                 .padding(12)
-                .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Theme.warn.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 12).padding(.top, 6)
-            .background(Theme.background)
+            .background(Theme.canvas)
         }
     }
 
@@ -251,7 +251,7 @@ struct ConversationScreen: View {
                 }
                 .padding(16)
             }
-            .background(Theme.background)
+            .background(Theme.canvas)
             .navigationTitle(session.heldTriage.map(triageTitle) ?? "Review findings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingTriage = false } } }
         }

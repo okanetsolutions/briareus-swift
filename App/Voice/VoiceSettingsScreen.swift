@@ -13,7 +13,7 @@ struct VoiceSettingsScreen: View {
         Form {
             Section {
                 if settings.hasKey {
-                    Label("API key saved on this iPhone", systemImage: "checkmark.seal.fill").foregroundStyle(Theme.success)
+                    Label("API key saved on this iPhone", systemImage: "checkmark.seal.fill").foregroundStyle(Theme.ok)
                 }
                 SecureField(settings.hasKey ? "Replace the API key" : "OpenAI API key", text: $key)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().privacySensitive()
@@ -49,7 +49,7 @@ struct VoiceSettingsScreen: View {
             usage
         }
         .scrollContentBackground(.hidden)
-        .background(Theme.background)
+        .background(Theme.canvas)
         .navigationTitle("Voice")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Clear the usage?", isPresented: $clearing, titleVisibility: .visible) {

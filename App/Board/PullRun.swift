@@ -171,8 +171,8 @@ struct PullRunArea: View {
                     .textSelection(.enabled)
                 }
                 .defaultScrollAnchor(.bottom)
-                .background(Theme.code, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+                .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
                 .frame(maxHeight: .infinity, alignment: .top)
             }
         }

@@ -1,5 +1,6 @@
-// The Windows client's own look, dark or light as macOS's appearance says: its palette (canvas, sidebar, raise, field, sunken,
-// line, ink, muted, accent), its pixel sizes for the system font and the monospaced one, and the pieces the screens share.
+// The look every Briareus client shares, dark or light as macOS's appearance says: the palette (canvas, sidebar, raise, field,
+// sunken, line, ink, muted, accent), the status colours, the type sizes, the columns and the working indicator all come from
+// briareus-client-contracts (Mac/Core/BriareusTokens.swift, generated there and copied in by its `node scripts/sync.mjs`).
 import AppKit
 import SwiftUI
 
@@ -7,9 +8,7 @@ enum Theme {
     // MARK: Palette
 
     private static func dynamic(_ dark: UInt32, _ light: UInt32) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(hex: dark) : NSColor(hex: light)
-        })
+        Color(nsColor: nsDynamic(dark, light))
     }
     static func nsDynamic(_ dark: UInt32, _ light: UInt32) -> NSColor {
         NSColor(name: nil) { appearance in
@@ -17,85 +16,96 @@ enum Theme {
         }
     }
 
-    // The Windows client's `@theme` block, verbatim, dark; light is the same warm palette on paper, with the accents darkened.
-    static let canvas = dynamic(0x262624, 0xFAF9F5)
-    static let sidebar = dynamic(0x1F1E1D, 0xF0EEE6)
-    static let raise = dynamic(0x30302E, 0xFFFFFF)
-    static let field = dynamic(0x3D3D3A, 0xE9E6DC)
-    static let sunken = dynamic(0x1C1C1A, 0xF3F1EA)
-    static let line = dynamic(0x3E3E3A, 0xE0DDD3)
-    static let lineStrong = dynamic(0x5A5850, 0xC4C0B4)
-    static let ink = dynamic(0xE8E6E1, 0x1F1E1D)
-    static let muted = dynamic(0xA29E93, 0x6B675E)
-    static let accent = dynamic(0xD97757, 0xC96442)
-    static let accentDim = dynamic(0xB35C3E, 0xE0A58E)
-    static let ok = dynamic(0x7FBF7F, 0x3D8B4A)
-    static let warn = dynamic(0xE0AF68, 0xA86E12)
-    static let danger = dynamic(0xE06C75, 0xC2404B)
-    static let onAccent = dynamic(0x1B1B19, 0xFFFFFF)
-    static let dot = dynamic(0x6B6862, 0xA29E93)
-    static let thumb = dynamic(0x3C3B38, 0xCFCBC0)
+    static let canvas = dynamic(BriareusPalette.dark.canvas, BriareusPalette.light.canvas)
+    static let sidebar = dynamic(BriareusPalette.dark.sidebar, BriareusPalette.light.sidebar)
+    static let raise = dynamic(BriareusPalette.dark.raise, BriareusPalette.light.raise)
+    static let field = dynamic(BriareusPalette.dark.field, BriareusPalette.light.field)
+    static let sunken = dynamic(BriareusPalette.dark.sunken, BriareusPalette.light.sunken)
+    static let line = dynamic(BriareusPalette.dark.line, BriareusPalette.light.line)
+    static let lineStrong = dynamic(BriareusPalette.dark.lineStrong, BriareusPalette.light.lineStrong)
+    static let ink = dynamic(BriareusPalette.dark.ink, BriareusPalette.light.ink)
+    static let muted = dynamic(BriareusPalette.dark.muted, BriareusPalette.light.muted)
+    static let accent = dynamic(BriareusPalette.dark.accent, BriareusPalette.light.accent)
+    static let accentDim = dynamic(BriareusPalette.dark.accentDim, BriareusPalette.light.accentDim)
+    static let ok = dynamic(BriareusPalette.dark.ok, BriareusPalette.light.ok)
+    static let warn = dynamic(BriareusPalette.dark.warn, BriareusPalette.light.warn)
+    static let danger = dynamic(BriareusPalette.dark.danger, BriareusPalette.light.danger)
+    static let onAccent = dynamic(BriareusPalette.dark.onAccent, BriareusPalette.light.onAccent)
+    static let dot = dynamic(BriareusPalette.dark.dot, BriareusPalette.light.dot)
+    static let thumb = dynamic(BriareusPalette.dark.thumb, BriareusPalette.light.thumb)
     /// `text-muted/70`.
     static let tertiary = muted.opacity(0.7)
 
-    /// The `.dot` colours: running/queued in the accent, idle green, waiting amber, failed red, the rest grey.
+    /// The status dot's colour, as every client gives it: working in the accent, idle green, waiting amber, failed red, the
+    /// rest grey.
     static func statusColor(_ status: String?) -> Color {
-        switch status {
-        case "running", "queued", "preparing", "starting": return accent
-        case "idle": return ok
-        case "waiting", "interrupted", "cancelled": return warn
-        case "failed", "error": return danger
-        default: return dot
+        switch BriareusStatusRole(status: status) {
+        case .active: return accent
+        case .idle: return ok
+        case .attention: return warn
+        case .failed: return danger
+        case .inactive: return dot
         }
     }
 
     // MARK: Type
 
-    // The Windows client's type at its own pixel sizes: body 15px (`text-sm`), the smallest chrome 13px (`text-xs`), the sidebar
-    // rows 14px, metadata 12px and 11px. The Mac's system font stands in for Segoe UI and its monospaced one for Cascadia Code.
-    static let body = Font.system(size: 15)
-    static let bodyMedium = Font.system(size: 15, weight: .medium)
-    static let bodySemibold = Font.system(size: 15, weight: .semibold)
-    static let headline = Font.system(size: 15, weight: .semibold)
-    static let subheadline = Font.system(size: 14)
-    static let subheadlineSemibold = Font.system(size: 14, weight: .semibold)
-    static let title3 = Font.system(size: 17, weight: .semibold)
-    static let largeTitle = Font.system(size: 26, weight: .semibold)
-    static let callout = Font.system(size: 14)
-    static let footnote = Font.system(size: 13)
-    static let footnoteSemibold = Font.system(size: 13, weight: .semibold)
-    static let caption = Font.system(size: 12)
-    static let captionMedium = Font.system(size: 12, weight: .medium)
-    static let captionSemibold = Font.system(size: 12, weight: .semibold)
-    static let caption2 = Font.system(size: 11)
-    static let bodyItalic = Font.system(size: 15).italic()
-    static let mono = Font.system(size: 13, design: .monospaced)
-    static let monoSmall = Font.system(size: 12, design: .monospaced)
-    static let monoCaption2 = Font.system(size: 11, design: .monospaced)
-    static let tinySemibold = Font.system(size: 10, weight: .semibold)
+    // The shared text styles at their pixel sizes: body 15px, the smallest chrome 13px, the sidebar rows 14px, metadata 12px and
+    // 11px. The Mac's system font stands in for Segoe UI and its monospaced one for Cascadia Code.
+    private static func font(_ style: BriareusTextStyle, design: Font.Design? = nil) -> Font {
+        let weight: Font.Weight
+        switch style.weight {
+        case ..<450: weight = .regular
+        case ..<550: weight = .medium
+        default: weight = .semibold
+        }
+        let font = Font.system(size: CGFloat(style.size), weight: weight, design: design ?? (style.monospaced ? .monospaced : .default))
+        return style.italic ? font.italic() : font
+    }
+    static let body = font(BriareusType.body)
+    static let bodyMedium = font(BriareusType.bodyMedium)
+    static let bodySemibold = font(BriareusType.bodySemibold)
+    static let headline = font(BriareusType.headline)
+    static let subheadline = font(BriareusType.subheadline)
+    static let subheadlineSemibold = font(BriareusType.subheadlineSemibold)
+    static let title3 = font(BriareusType.title3)
+    static let largeTitle = font(BriareusType.largeTitle)
+    static let callout = font(BriareusType.callout)
+    static let footnote = font(BriareusType.footnote)
+    static let footnoteSemibold = font(BriareusType.footnoteSemibold)
+    static let caption = font(BriareusType.caption)
+    static let captionMedium = font(BriareusType.captionMedium)
+    static let captionSemibold = font(BriareusType.captionSemibold)
+    static let caption2 = font(BriareusType.caption2)
+    static let bodyItalic = font(BriareusType.bodyItalic)
+    static let mono = font(BriareusType.mono)
+    static let monoSmall = font(BriareusType.monoSmall)
+    static let monoCaption2 = font(BriareusType.monoCaption2)
+    static let tinySemibold = font(BriareusType.tinySemibold)
     /// 23px semibold: a pull request's title.
-    static let title = Font.system(size: 23, weight: .semibold)
+    static let title = font(BriareusType.title)
     /// 22px semibold: the Windows client tiles.
-    static let stat = Font.system(size: 22, weight: .semibold)
-    static let monogram = Font.system(size: 17, weight: .semibold, design: .serif)
+    static let stat = font(BriareusType.stat)
+    /// The project monogram, in the Mac's serif.
+    static let monogram = font(BriareusType.monogram, design: .serif)
 
     // MARK: Layout
 
-    /// The Windows client's columns: a 268px sidebar, the main column, and a 272px pull request panel beside a conversation.
-    static let sidebarWidth: CGFloat = 268
-    static let panelWidth: CGFloat = 272
-    /// Below the Windows client's `lg` breakpoint (64rem) the columns become one at a time.
-    static let narrowWidth: CGFloat = 1024
-    /// Pane margins: the sidebar's 10px, the others' 18px.
-    static let sidebarMargin: CGFloat = 10
-    static let paneMargin: CGFloat = 18
+    /// The columns: the sidebar, the main column, and the pull request panel beside a conversation.
+    static let sidebarWidth = CGFloat(BriareusLayout.sidebarWidth)
+    static let panelWidth = CGFloat(BriareusLayout.panelWidth)
+    /// Below this width (the Windows client's `lg` breakpoint, 64rem) the columns become one at a time.
+    static let narrowWidth = CGFloat(BriareusLayout.narrowWidth)
+    /// Pane margins: the sidebar's, and the other panes'.
+    static let sidebarMargin = CGFloat(BriareusLayout.sidebarMargin)
+    static let paneMargin = CGFloat(BriareusLayout.paneMargin)
 
     // MARK: Working indicator
 
-    static let workingGlyphs = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"]
-    static let workingVerbs = ["Working", "Thinking", "Reasoning", "Tinkering", "Crafting", "Pondering"]
-    static func workingGlyph(_ tick: Int) -> String { workingGlyphs[((tick % 10) + 10) % 10] }
-    static func workingVerb(_ tick: Int) -> String { workingVerbs[((tick / 25) % 6 + 6) % 6] }
+    static let workingGlyphs = BriareusWorking.glyphs
+    static let workingVerbs = BriareusWorking.verbs
+    static func workingGlyph(_ tick: Int) -> String { BriareusWorking.glyph(tick) }
+    static func workingVerb(_ tick: Int) -> String { BriareusWorking.verb(tick) }
 }
 
 extension NSColor {

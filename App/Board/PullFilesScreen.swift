@@ -111,7 +111,7 @@ struct PullFilesScreen: View {
                         Text(list.pr["changedFiles"].int.map { "\($0) file\($0 == 1 ? "" : "s") changed" } ?? "Files changed")
                         Spacer()
                         if let add = list.pr["additions"].int, let del = list.pr["deletions"].int {
-                            Text("+\(add)").foregroundStyle(Theme.success)
+                            Text("+\(add)").foregroundStyle(Theme.ok)
                             Text("\u{2212}\(del)").foregroundStyle(Theme.danger)
                         }
                     }
@@ -124,7 +124,7 @@ struct PullFilesScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden).background(Theme.background)
+        .scrollContentBackground(.hidden).background(Theme.canvas)
         .navigationTitle(Text(verbatim: "#\(number) files")).navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.refresh() }
         .task { if !model.loading && model.error == nil { await model.load() } }
@@ -136,10 +136,10 @@ private struct FileRow: View {
     let file: PullFile
     private var mark: (icon: String, color: Color) {
         switch file.status {
-        case "added": return ("plus.square.fill", Theme.success)
+        case "added": return ("plus.square.fill", Theme.ok)
         case "removed": return ("minus.square.fill", Theme.danger)
         case "renamed", "copied": return ("arrow.right.square.fill", Theme.accent)
-        default: return ("square.and.pencil", Theme.warning)
+        default: return ("square.and.pencil", Theme.warn)
         }
     }
     var body: some View {
@@ -156,7 +156,7 @@ private struct FileRow: View {
             }
             Spacer(minLength: 6)
             HStack(spacing: 5) {
-                Text("+\(file.additions ?? 0)").foregroundStyle(Theme.success)
+                Text("+\(file.additions ?? 0)").foregroundStyle(Theme.ok)
                 Text("\u{2212}\(file.deletions ?? 0)").foregroundStyle(Theme.danger)
             }
             .font(.caption.monospacedDigit())
@@ -181,7 +181,7 @@ struct PullFileDiffScreen: View {
     private var files: [PullFile] { model.list.files }
 
     var body: some View {
-        if files.indices.contains(index) { diff(files[index]) } else { Color.clear.background(Theme.background) }
+        if files.indices.contains(index) { diff(files[index]) } else { Color.clear.background(Theme.canvas) }
     }
 
     private func diff(_ file: PullFile) -> some View {
@@ -193,7 +193,7 @@ struct PullFileDiffScreen: View {
                         Text("Renamed from \(previous)").font(.caption.monospaced()).foregroundStyle(.secondary)
                     }
                     HStack(spacing: 6) {
-                        Text("+\(file.additions ?? 0)").foregroundStyle(Theme.success)
+                        Text("+\(file.additions ?? 0)").foregroundStyle(Theme.ok)
                         Text("\u{2212}\(file.deletions ?? 0)").foregroundStyle(Theme.danger)
                     }
                     .font(.caption.monospacedDigit())
@@ -211,7 +211,7 @@ struct PullFileDiffScreen: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .id(file.filename)
-        .background(Theme.background)
+        .background(Theme.canvas)
         .navigationTitle(file.name).navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -236,7 +236,7 @@ private struct DiffRow: View {
     let line: DiffLine
     private var tint: Color {
         switch line.kind {
-        case .added: return Theme.success
+        case .added: return Theme.ok
         case .removed: return Theme.danger
         default: return .clear
         }
@@ -255,7 +255,7 @@ private struct DiffRow: View {
             Text(text).font(.caption2.monospaced()).foregroundStyle(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, line.kind == .hunk ? 6 : 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(line.kind == .hunk ? Theme.surface : Color.clear)
+                .background(line.kind == .hunk ? Theme.accent.opacity(0.08) : Color.clear)
         default:
             let n = line.newLine != 0 ? line.newLine : line.oldLine
             HStack(alignment: .firstTextBaseline, spacing: 6) {

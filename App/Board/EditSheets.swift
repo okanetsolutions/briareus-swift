@@ -153,7 +153,7 @@ private struct EditDetailsSheet: View {
                 }
                 .listRowBackground(Theme.row)
             }
-            .scrollContentBackground(.hidden).background(Theme.background)
+            .scrollContentBackground(.hidden).background(Theme.canvas)
             .navigationTitle(caption).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -191,7 +191,7 @@ private struct EditNamesSheet: View {
                 }
                 .listRowBackground(Theme.row)
             }
-            .scrollContentBackground(.hidden).background(Theme.background)
+            .scrollContentBackground(.hidden).background(Theme.canvas)
             .navigationTitle(caption).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

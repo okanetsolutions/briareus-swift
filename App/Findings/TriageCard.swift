@@ -46,7 +46,7 @@ func triageSeverityColor(_ severity: String?) -> Color {
     switch findingSeverityLabel(severity) {
     case "CRIT", "HIGH": return Theme.danger
     case "LOW": return .secondary
-    default: return Theme.warning
+    default: return Theme.warn
     }
 }
 
@@ -107,8 +107,8 @@ struct TriageCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.warning.opacity(0.4), lineWidth: 0.5))
+        .background(Theme.raise, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.warn.opacity(0.4), lineWidth: 0.5))
         .disabled(writing != nil)
         .alert(triageConfirmTitle(takesVerdicts: takes, fixes: fixes), isPresented: $confirming) {
             Button(takes && fixes > 0 ? "Start the fix session" : "Complete") { complete(triage, key: key) }
@@ -132,7 +132,7 @@ struct TriageCard: View {
     private func header(_ triage: JSON, key: String, takes: Bool, canComplete: Bool, empty: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
-                Label(triageTitle(triage), systemImage: "flag.fill").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.warning)
+                Label(triageTitle(triage), systemImage: "flag.fill").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.warn)
                 Text(Findings.roundMeta(triage)).font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
@@ -184,7 +184,7 @@ struct TriageCard: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     @ViewBuilder
@@ -201,8 +201,8 @@ struct TriageCard: View {
             set: { text in drafts.update(key) { $0.reasons[fkey] = text }; saved = nil }), axis: .vertical)
             .lineLimit(1...4).font(.callout)
             .padding(.horizontal, 10).padding(.vertical, 7)
-            .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+            .background(Theme.raise, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
     }
 
     @ViewBuilder
@@ -242,8 +242,8 @@ struct TriageCard: View {
                 set: { text in drafts.update(key) { $0.note = text }; saved = nil }), axis: .vertical)
                 .lineLimit(1...5).font(.callout)
                 .padding(.horizontal, 10).padding(.vertical, 8)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
         }
         Button { confirming = true } label: {
             HStack(spacing: 8) {
@@ -392,8 +392,8 @@ private struct VerdictSegments: View {
             }
         }
         .padding(2)
-        .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+        .background(Theme.raise, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Verdict")
     }
@@ -401,7 +401,7 @@ private struct VerdictSegments: View {
         switch id {
         case "fix": return Theme.accent
         case "dismissed": return Color.secondary
-        default: return Theme.warning
+        default: return Theme.warn
         }
     }
 }
@@ -425,7 +425,7 @@ private struct FindingReplySheet: View {
                 }
                 .listRowBackground(Theme.row)
             }
-            .scrollContentBackground(.hidden).background(Theme.background)
+            .scrollContentBackground(.hidden).background(Theme.canvas)
             .navigationTitle("Reply").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

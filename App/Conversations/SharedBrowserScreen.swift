@@ -361,7 +361,7 @@ final class BrowserCanvas: UIView, UIKeyInput, UIGestureRecognizerDelegate {
         super.init(frame: frame)
         contentMode = .redraw
         isOpaque = true
-        backgroundColor = UIColor(Theme.surface)
+        backgroundColor = UIColor(Theme.sunken)
         isMultipleTouchEnabled = true
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         addGestureRecognizer(tap)
@@ -376,7 +376,7 @@ final class BrowserCanvas: UIView, UIKeyInput, UIGestureRecognizerDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func draw(_ rect: CGRect) {
-        UIColor(Theme.surface).setFill()
+        UIColor(Theme.sunken).setFill()
         UIRectFill(bounds)
         if let p = picture {
             let r = browserFit(viewW: Int(bounds.width), viewH: Int(bounds.height), frameW: p.width, frameH: p.height)
@@ -592,10 +592,10 @@ struct SharedBrowserScreen: View {
                 if running { live } else { off }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(Theme.background)
+            .background(Theme.canvas)
             .navigationTitle(running ? state.activeTab?.label ?? "Browser" : "Browser")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.background, for: .navigationBar)
+            .toolbarBackground(Theme.canvas, for: .navigationBar)
             .toolbar { toolbar }
         }
         .onAppear { model.setShown(store.active); model.syncAddress() }
@@ -725,7 +725,7 @@ struct SharedBrowserScreen: View {
                         .onSubmit { if model.navigate() { addressFocused = false } }
                 }
                 .padding(.horizontal, 10).frame(height: 36)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 barButton("arrow.clockwise", "Reload", enabled: drive) { model.send(["type": "reload"]) }
             }
             if let notice { ErrorNotice(message: notice) }
@@ -754,7 +754,7 @@ struct SharedBrowserScreen: View {
         // The picture fills what is left.
         BrowserCanvasView(model: model)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .top) { Rectangle().fill(Theme.border).frame(height: 0.5) }
+            .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 0.5) }
     }
 
     private func barButton(_ symbol: String, _ label: String, enabled: Bool, action: @escaping () -> Void) -> some View {

@@ -22,8 +22,8 @@ struct ComposerTextView: NSViewRepresentable {
     var onDrop: ([URL]) -> Void
 
     static let lineHeight: CGFloat = 24
-    static let ink = Theme.nsDynamic(0xE8E6E1, 0x1F1E1D)
-    static let muted = Theme.nsDynamic(0xA29E93, 0x6B675E)
+    static let ink = Theme.nsDynamic(BriareusPalette.dark.ink, BriareusPalette.light.ink)
+    static let muted = Theme.nsDynamic(BriareusPalette.dark.muted, BriareusPalette.light.muted)
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 

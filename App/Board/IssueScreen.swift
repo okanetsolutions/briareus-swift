@@ -200,7 +200,7 @@ struct IssueScreen: View {
             IssueActivity(model: model, repo: repo, open: openEvent)
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden).background(Theme.background)
+        .scrollContentBackground(.hidden).background(Theme.canvas)
         .navigationTitle(Text(verbatim: "#\(issue.number)")).navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar(issue) }
         .refreshable {
@@ -296,7 +296,7 @@ struct IssueScreen: View {
         if let e = loadError, e != model.detailError { Section { ErrorNotice(message: e) }.listRowBackground(Theme.row) }
         if let reason = closedReason {
             Section {
-                Label(reason == "not_planned" ? "Closed as not planned" : "Closed as completed", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.success)
+                Label(reason == "not_planned" ? "Closed as not planned" : "Closed as completed", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.ok)
                 Text("It has left the board. Reopen it on GitHub if it was closed by mistake.").font(.footnote).foregroundStyle(.secondary)
             }
             .listRowBackground(Theme.row)
@@ -313,7 +313,7 @@ struct IssueScreen: View {
     /// The title and number, then the state pill and GitHub's sentence: who opened it, when, and its comments.
     private func header(_ issue: IssueSummary) -> some View {
         let state = self.state
-        let color: Color = state == .open ? Theme.success : state == .closed ? Theme.accent : .secondary
+        let color: Color = state == .open ? Theme.ok : state == .closed ? Theme.accent : .secondary
         return Section {
             VStack(alignment: .leading, spacing: 8) {
                 (Text(issue.title) + Text(verbatim: "  #\(issue.number)").foregroundStyle(.secondary))
@@ -368,7 +368,7 @@ struct IssueScreen: View {
         let open = issue.subIssues - issue.subIssuesDone
         Section {
             HStack {
-                Text("\(issue.subIssuesDone) of \(issue.subIssues) completed").font(.callout).foregroundStyle(open > 0 ? Color.secondary : Theme.success)
+                Text("\(issue.subIssuesDone) of \(issue.subIssues) completed").font(.callout).foregroundStyle(open > 0 ? Color.secondary : Theme.ok)
                 Spacer()
                 BoardEpicProgress(done: issue.subIssuesDone, total: issue.subIssues)
             }
@@ -719,7 +719,7 @@ private struct IssueActivity: View {
     }
 
     @ViewBuilder private func event(_ e: JSON, _ words: TimelineWords) -> some View {
-        let tone: Color = words.tone == .accent ? Theme.accent : words.tone == .ok ? Theme.success : .secondary
+        let tone: Color = words.tone == .accent ? Theme.accent : words.tone == .ok ? Theme.ok : .secondary
         let line = HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: Self.symbol(words.glyph)).font(.caption).foregroundStyle(tone).frame(width: 18)
             sentence(e, words).font(.footnote).frame(maxWidth: .infinity, alignment: .leading)
@@ -784,7 +784,7 @@ private struct CloseCommentSheet: View {
                 }
                 .listRowBackground(Theme.row)
             }
-            .scrollContentBackground(.hidden).background(Theme.background)
+            .scrollContentBackground(.hidden).background(Theme.canvas)
             .navigationTitle("Comment").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
