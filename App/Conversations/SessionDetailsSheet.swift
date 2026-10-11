@@ -37,13 +37,13 @@ struct SessionDetailsSheet: View {
                 if let pull, store.supports("findings"), !pr.isNull { findingsSection(pull) }
                 usageSection
             }
-            .scrollContentBackground(.hidden).background(Theme.background)
+            .scrollContentBackground(.hidden).background(Theme.canvas)
             .navigationTitle("Details").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .refreshable { _ = await load() }
         }
         .presentationDetents([.medium, .large])
-        .presentationBackground(Theme.background)
+        .presentationBackground(Theme.canvas)
         .task(id: pull.map { "\($0.repo)#\($0.number)" } ?? "") {
             pr = .null; findings = []; error = nil
             guard pull != nil else { return }
@@ -185,7 +185,7 @@ struct SessionDetailsSheet: View {
                         }
                     } icon: {
                         Image(systemName: state == "approved" ? "checkmark.circle.fill" : state == "changes_requested" ? "xmark.circle.fill" : "circle")
-                            .foregroundStyle(state == "approved" ? Theme.success : state == "changes_requested" ? Theme.danger : .secondary)
+                            .foregroundStyle(state == "approved" ? Theme.ok : state == "changes_requested" ? Theme.danger : .secondary)
                     }
                     .font(.subheadline)
                 }
@@ -197,7 +197,7 @@ struct SessionDetailsSheet: View {
     @ViewBuilder private func prSummary(_ p: PullKey) -> some View {
         let state = pr["state"].string
         let draft = pr["draft"].is(true)
-        let color: Color = state == "merged" ? .purple : state == "closed" ? Theme.danger : draft ? .secondary : Theme.success
+        let color: Color = state == "merged" ? .purple : state == "closed" ? Theme.danger : draft ? .secondary : Theme.ok
         VStack(alignment: .leading, spacing: 6) {
             Text(pr["title"].string ?? "Pull request #\(p.number)").font(.body.weight(.semibold)).textSelection(.enabled)
             HStack(spacing: 8) {
@@ -211,7 +211,7 @@ struct SessionDetailsSheet: View {
             if add != nil || del != nil {
                 let files = Int((pr["changedFiles"].number ?? 0).rounded(.towardZero)), commits = Int((pr["commits"].number ?? 0).rounded(.towardZero))
                 HStack(spacing: 4) {
-                    Text(verbatim: "+\(Int((add ?? 0).rounded(.towardZero)))").foregroundStyle(Theme.success)
+                    Text(verbatim: "+\(Int((add ?? 0).rounded(.towardZero)))").foregroundStyle(Theme.ok)
                     Text(verbatim: "\u{2212}\(Int((del ?? 0).rounded(.towardZero)))").foregroundStyle(Theme.danger)
                     Text(verbatim: "\u{00B7} \(files) file\(files == 1 ? "" : "s") \u{00B7} \(commits) commit\(commits == 1 ? "" : "s")").foregroundStyle(.secondary)
                 }
@@ -226,8 +226,8 @@ struct SessionDetailsSheet: View {
         let checks = record.raw["prStatus"]["checks"]
         let failed = checks["failed"].int32 ?? 0, pending = checks["pending"].int32 ?? 0, passed = checks["passed"].int32 ?? 0
         if failed > 0 { Text("\u{2717}\(failed)").font(.caption.weight(.semibold)).foregroundStyle(Theme.danger) }
-        else if pending > 0 { Text("\u{2026}\(pending)").font(.caption.weight(.semibold)).foregroundStyle(Theme.warning) }
-        else if passed > 0 { Text("\u{2713}\(passed)").font(.caption.weight(.semibold)).foregroundStyle(Theme.success) }
+        else if pending > 0 { Text("\u{2026}\(pending)").font(.caption.weight(.semibold)).foregroundStyle(Theme.warn) }
+        else if passed > 0 { Text("\u{2713}\(passed)").font(.caption.weight(.semibold)).foregroundStyle(Theme.ok) }
     }
 
     private func findingsSection(_ p: PullKey) -> some View {
@@ -243,7 +243,7 @@ struct SessionDetailsSheet: View {
     private func findingRow(_ f: JSON) -> some View {
         let severity = f["severity"].string
         let label = findingSeverityLabel(severity)
-        let color: Color = label == "CRIT" || label == "HIGH" ? Theme.danger : label == "LOW" ? .secondary : Theme.warning
+        let color: Color = label == "CRIT" || label == "HIGH" ? Theme.danger : label == "LOW" ? .secondary : Theme.warn
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(label).font(.caption2.weight(.bold)).foregroundStyle(color)
@@ -255,7 +255,7 @@ struct SessionDetailsSheet: View {
                     Text(f["title"].string ?? "Finding").font(.subheadline).textSelection(.enabled)
                 }
                 Spacer(minLength: 0)
-                if f["fixed"].is(true) { Label("Fixed", systemImage: "checkmark").font(.caption2).foregroundStyle(Theme.success).fixedSize() }
+                if f["fixed"].is(true) { Label("Fixed", systemImage: "checkmark").font(.caption2).foregroundStyle(Theme.ok).fixedSize() }
             }
             if let location = findingLocation(f) {
                 Text(location).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
@@ -270,7 +270,7 @@ struct SessionDetailsSheet: View {
                             Text(findingDecisionTitles[i]).font(.caption.weight(.medium))
                                 .foregroundStyle(on ? Color.white : .primary)
                                 .padding(.horizontal, 12).padding(.vertical, 6)
-                                .background(on ? Theme.accent : Theme.surface, in: Capsule())
+                                .background(on ? Theme.accent : Theme.field, in: Capsule())
                         }
                         .buttonStyle(.plain)
                         .accessibilityAddTraits(on ? .isSelected : [])
@@ -362,16 +362,10 @@ struct SessionDetailsSheet: View {
         }
     }
 
-    /// The bar's colours, keyed on the category names claude's /context report uses; deferred and buffer rows and unknown
-    /// categories go grey.
+    /// The bar's colours, keyed on the category names claude's /context report uses (BriareusContextPalette, from the tokens).
     private static func contextColor(_ name: String?) -> Color {
         let n = (name ?? "").asciiFolded
-        if n == "free space" { return Theme.border }
-        if n.contains("deferred") || n.contains("autocompact") { return Color(light: 0x55524C, dark: 0x55524C) }
-        let colors: [String: UInt32] = ["messages": 0x6D9EF7, "system prompt": 0xE06C75, "system tools": 0xD98A3F, "mcp tools": 0x4FAE72,
-                                        "skills": 0xC96F9E, "memory files": 0x5FAE5F, "custom agents": 0x8F7EE8, "context": 0x6D9EF7]
-        let hex = colors[n] ?? 0x8A867C
-        return Color(light: hex, dark: hex)
+        return Color(light: BriareusContextPalette.light.color(category: n), dark: BriareusContextPalette.dark.color(category: n))
     }
 
     private func leave(to destination: Destination) {
@@ -397,7 +391,7 @@ private struct ContextUsageBar: View {
                 }
                 Spacer(minLength: 0)
             }
-            .background(Theme.surface)
+            .background(Theme.sunken)
             .clipShape(Capsule())
         }
         .accessibilityHidden(true)

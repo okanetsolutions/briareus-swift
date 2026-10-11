@@ -107,7 +107,7 @@ struct FindingsScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden).background(Theme.background)
+        .scrollContentBackground(.hidden).background(Theme.canvas)
         .navigationTitle(repo.flatMap { projects.project($0)?.title }.map { "Findings · \($0)" } ?? "Findings")
         .navigationBarTitleDisplayMode(repo == nil ? .large : .inline)
         .refreshable { try? await model.load(fresh: true) }
@@ -153,7 +153,7 @@ struct FindingsScreen: View {
                     Text(s.displayTitle).font(.body.weight(.medium)).foregroundStyle(.primary).lineLimit(2).multilineTextAlignment(.leading)
                     Text(Findings.roundMeta(held)).font(.caption).foregroundStyle(.secondary)
                     HStack(spacing: 6) {
-                        Text(PhoneFindings.countLine(held)).font(.caption.weight(.medium)).foregroundStyle(Theme.warning)
+                        Text(PhoneFindings.countLine(held)).font(.caption.weight(.medium)).foregroundStyle(Theme.warn)
                         if !takes { Text("· somebody else’s").font(.caption).foregroundStyle(.secondary) }
                         if held["stale"].isSet { Text("· branch moved").font(.caption).foregroundStyle(Theme.danger) }
                     }
@@ -233,7 +233,7 @@ private struct TriageSheet: View {
                 .padding(.horizontal, 16).padding(.vertical, 12)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Theme.background)
+            .background(Theme.canvas)
             .navigationTitle("Findings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }

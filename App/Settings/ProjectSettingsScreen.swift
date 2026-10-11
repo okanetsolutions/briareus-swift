@@ -267,7 +267,7 @@ struct ProjectSettingsScreen: View {
                             }
                             .padding(.horizontal, 12).frame(minHeight: 34)
                             .foregroundStyle(on ? Color.white : .primary)
-                            .background(on ? Theme.accent : Theme.surface, in: Capsule())
+                            .background(on ? Theme.accent : Theme.field, in: Capsule())
                             .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
@@ -281,8 +281,8 @@ struct ProjectSettingsScreen: View {
             .onChange(of: model.tab) { _, t in withAnimation { proxy.scrollTo(t, anchor: .center) } }
             .onAppear { proxy.scrollTo(model.tab, anchor: .center) }
         }
-        .background(Theme.background)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 0.5) }
+        .background(Theme.canvas)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 0.5) }
     }
 
     static func symbol(_ t: ProjectTab) -> String {

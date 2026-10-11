@@ -36,7 +36,7 @@ struct ProjectsList: View {
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden).background(Theme.background)
+        .scrollContentBackground(.hidden).background(Theme.canvas)
         .navigationTitle("Projects")
         .toolbar {
             if store.supports("start_session") && !model.projects.isEmpty {
@@ -75,7 +75,7 @@ private struct ProjectRowLabel: View {
             if working > 0 {
                 HStack(spacing: 5) {
                     StatusDot(status: "running")
-                    Text("\(working)").font(.caption.weight(.medium).monospacedDigit()).foregroundStyle(Theme.success)
+                    Text("\(working)").font(.caption.weight(.medium).monospacedDigit()).foregroundStyle(Theme.ok)
                 }
             }
             if feed.sessionsLoaded {

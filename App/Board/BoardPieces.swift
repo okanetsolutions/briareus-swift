@@ -180,7 +180,7 @@ private struct ErrandInputSheet: View {
                 }
                 .listRowBackground(Theme.row)
             }
-            .scrollContentBackground(.hidden).background(Theme.background)
+            .scrollContentBackground(.hidden).background(Theme.canvas)
             .navigationTitle(pending.action.label).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -289,9 +289,9 @@ struct BoardLabelChips: View {
 /// A review verdict's symbol and colour.
 func reviewStyle(_ status: ReviewStatus) -> (symbol: String, color: Color) {
     switch status {
-    case .approved: return ("checkmark.seal.fill", Theme.success)
+    case .approved: return ("checkmark.seal.fill", Theme.ok)
     case .changesRequested: return ("xmark.octagon.fill", Theme.danger)
-    case .feedback: return ("text.bubble.fill", Theme.warning)
+    case .feedback: return ("text.bubble.fill", Theme.warn)
     case .requested, .none: return ("clock", .secondary)
     }
 }
@@ -301,9 +301,9 @@ struct ChecksBadge: View {
     let state: String
     var body: some View {
         switch state {
-        case "success": BoardBadge(text: "Checks", systemImage: "checkmark", color: Theme.success).accessibilityLabel("Checks passed")
+        case "success": BoardBadge(text: "Checks", systemImage: "checkmark", color: Theme.ok).accessibilityLabel("Checks passed")
         case "failure", "error": BoardBadge(text: "Checks", systemImage: "xmark", color: Theme.danger).accessibilityLabel("Checks failed")
-        default: BoardBadge(text: "Checks", systemImage: "clock", color: Theme.warning).accessibilityLabel("Checks running")
+        default: BoardBadge(text: "Checks", systemImage: "clock", color: Theme.warn).accessibilityLabel("Checks running")
         }
     }
 }
@@ -332,13 +332,13 @@ struct BoardLinkedRow: View {
             Text(link.reference(repo)).font(.caption.monospaced()).foregroundStyle(.secondary)
             Text(link.title).font(.caption).lineLimit(1)
             if showState, let state = linkedStateText(link) {
-                Text(state).font(.caption2).foregroundStyle(state == "open" ? Theme.success : state == "closed" ? Color.secondary : Theme.warning)
+                Text(state).font(.caption2).foregroundStyle(state == "open" ? Theme.ok : state == "closed" ? Color.secondary : Theme.warn)
             }
             if let status, !status.isEmpty {
                 Text(status).font(.caption2.weight(.medium)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
                     .padding(.horizontal, 6).padding(.vertical, 1)
-                    .background(Theme.surface, in: Capsule())
-                    .overlay(Capsule().stroke(Theme.border, lineWidth: 0.5))
+                    .background(Theme.field, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.line, lineWidth: 0.5))
                     .accessibilityLabel("Status \(status)")
             }
         }
@@ -361,7 +361,7 @@ struct BoardPullRow: View {
     var showsIssues = true
 
     private var review: ReviewStatus { ReviewStatus(decision: pull.reviewDecision, reviewers: pull.reviewers) }
-    private var tint: Color { pull.hasConflicts ? Theme.danger : pull.draft ? .secondary : Theme.success }
+    private var tint: Color { pull.hasConflicts ? Theme.danger : pull.draft ? .secondary : Theme.ok }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -439,7 +439,7 @@ struct BoardIssueRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: issue.isEpic ? "square.stack.3d.up" : "smallcircle.filled.circle").font(.subheadline)
-                .foregroundStyle(issue.pulls.isEmpty ? Theme.success : Theme.accent).accessibilityHidden(true)
+                .foregroundStyle(issue.pulls.isEmpty ? Theme.ok : Theme.accent).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
                 Text(issue.title).font(.body.weight(.medium)).lineLimit(2)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {

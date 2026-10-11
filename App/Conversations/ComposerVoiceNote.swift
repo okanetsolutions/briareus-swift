@@ -148,7 +148,7 @@ struct VoiceNoteControls: View {
                     }
                 }
                 .font(.footnote).frame(width: 32, height: 32)
-                .background(voice.state == .recording ? Theme.danger : Theme.bubble, in: Circle())
+                .background(voice.state == .recording ? Theme.danger : Theme.field, in: Circle())
             }
             .buttonStyle(.plain)
             .disabled(!enabled || voice.state == .starting || voice.state == .transcribing)

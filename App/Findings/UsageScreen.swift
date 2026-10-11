@@ -151,7 +151,7 @@ struct UsageScreen: View {
     var body: some View {
         List { content }
             .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden).background(Theme.background)
+            .scrollContentBackground(.hidden).background(Theme.canvas)
             .navigationTitle("Usage")
             .toolbar { toolbar }
             .refreshable { _ = await model.load() }
@@ -407,7 +407,7 @@ struct UsageScreen: View {
             if let bar {
                 GeometryReader { g in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Theme.surface)
+                        Capsule().fill(Theme.sunken)
                         if bar.0 > 0 { Capsule().fill(bar.1).frame(width: max(g.size.width * bar.0, 6)) }
                     }
                 }
@@ -433,10 +433,10 @@ struct UsageScreen: View {
 
 // MARK: - Pieces
 
-/// The categorical series colours, the only place a hue means which one: four slots and the tail's grey.
+/// The categorical series colours (BriareusChart, from the tokens), the only place a hue means which one: four slots and the
+/// tail's grey, the same in both modes.
 private func usageSeriesColor(_ slot: Int) -> Color {
-    let hex: [UInt32] = [0x3987E5, 0xD95926, 0x199E70, 0xC98500, 0x807B71]
-    let h = hex[min(max(slot, 0), Usage.seriesSlots)]
+    let h = BriareusChart.seriesColor(slot)
     return Color(light: h, dark: h)
 }
 
@@ -454,8 +454,8 @@ private struct UsageTiles: View {
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-                .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+                .background(Theme.raise, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
                 .accessibilityElement(children: .combine)
             }
         }

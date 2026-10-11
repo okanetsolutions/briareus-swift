@@ -250,7 +250,7 @@ struct SettingsVerdict: View {
     var ok: Bool
     var body: some View {
         Label(text, systemImage: ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-            .font(.footnote).foregroundStyle(ok ? Theme.success : Theme.danger)
+            .font(.footnote).foregroundStyle(ok ? Theme.ok : Theme.danger)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -282,7 +282,7 @@ struct SettingsFormChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .scrollContentBackground(.hidden)
-            .background(Theme.background)
+            .background(Theme.canvas)
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
@@ -347,6 +347,6 @@ struct SettingsUnavailableView: View {
             Text(text)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.background)
+        .background(Theme.canvas)
     }
 }

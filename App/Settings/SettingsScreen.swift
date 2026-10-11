@@ -53,7 +53,7 @@ struct SettingsScreen: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Theme.background)
+        .background(Theme.canvas)
         .navigationTitle("Settings")
         .toolbar {
             if store.supports("order_projects") && lists.projects.list.count > 1 {
@@ -82,7 +82,7 @@ struct SettingsScreen: View {
     @ViewBuilder private var connection: some View {
         Section("Connection") {
             Label { Text(store.server).textSelection(.enabled) } icon: {
-                Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.success)
+                Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.ok)
             }
             if let device = store.device {
                 LabeledContent("Device", value: device.label)
@@ -427,6 +427,6 @@ struct SettingsTag: View {
     var body: some View {
         Text(text).font(.caption2).foregroundStyle(.secondary).lineLimit(1).fixedSize()
             .padding(.horizontal, 6).padding(.vertical, 1)
-            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Theme.border, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Theme.line, lineWidth: 1))
     }
 }

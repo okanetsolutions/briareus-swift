@@ -17,7 +17,7 @@ struct ConversationComposer: View {
             if model.canMessage { box } else { closedBox }
         }
         .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
-        .background(Theme.background)
+        .background(Theme.canvas)
     }
 
     private var box: some View {
@@ -40,7 +40,7 @@ struct ConversationComposer: View {
                 if s.isActive && store.supports("cancel") && empty && files.count == 0 {
                     Button(action: stop) {
                         Image(systemName: "stop.fill").font(.footnote).foregroundStyle(.primary)
-                            .frame(width: 32, height: 32).background(Theme.bubble, in: Circle())
+                            .frame(width: 32, height: 32).background(Theme.field, in: Circle())
                     }
                     .buttonStyle(.plain).disabled(blocked).accessibilityLabel("Stop agent")
                 } else {
@@ -57,8 +57,8 @@ struct ConversationComposer: View {
             }
         }
         .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 10)
-        .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+        .background(Theme.raise, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
         .shadow(color: .black.opacity(0.06), radius: 10, y: 2)
         .onTapGesture { focused.wrappedValue = true }
     }
@@ -75,6 +75,6 @@ struct ConversationComposer: View {
             }
         }
         .padding(14)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(Theme.sidebar, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }

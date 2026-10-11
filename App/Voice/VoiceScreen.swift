@@ -26,7 +26,7 @@ struct VoiceScreen: View {
             if mine && !voice.steps.isEmpty { steps }
             controls
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .navigationTitle(subject)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -48,8 +48,9 @@ struct VoiceScreen: View {
                         Text(line.text)
                             .font(.body)
                             .padding(.horizontal, 14).padding(.vertical, 10)
-                            .background(line.user ? Theme.accent.opacity(0.14) : Theme.bubble,
+                            .background(line.user ? Theme.accent.opacity(0.14) : Theme.raise,
                                         in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(line.user ? Color.clear : Theme.line, lineWidth: 0.5))
                             .frame(maxWidth: .infinity, alignment: line.user ? .trailing : .leading)
                             .id(line.id)
                     }
@@ -75,7 +76,7 @@ struct VoiceScreen: View {
             }
             if elsewhere, let other = voice.about {
                 Text("A voice conversation is going on about \(other). End it to talk here.")
-                    .foregroundStyle(Theme.warning)
+                    .foregroundStyle(Theme.warn)
             }
             if !settings.hasKey {
                 Button("Add your OpenAI API key") { navigate(.voiceSettings) }.padding(.top, 4)
@@ -99,14 +100,14 @@ struct VoiceScreen: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface)
+        .background(Theme.sidebar)
     }
 
     @ViewBuilder private func icon(_ state: VoiceSession.Step.State) -> some View {
         switch state {
         case .running: ProgressView().controlSize(.mini).frame(width: 16)
-        case .waiting: Image(systemName: "questionmark.bubble").foregroundStyle(Theme.warning).frame(width: 16)
-        case .done: Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.success).frame(width: 16)
+        case .waiting: Image(systemName: "questionmark.bubble").foregroundStyle(Theme.warn).frame(width: 16)
+        case .done: Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.ok).frame(width: 16)
         case .failed: Image(systemName: "xmark.octagon.fill").foregroundStyle(Theme.danger).frame(width: 16)
         }
     }
@@ -119,7 +120,7 @@ struct VoiceScreen: View {
             HStack(spacing: 28) {
                 Button { voice.toggleMute() } label: {
                     Image(systemName: voice.muted ? "mic.slash.fill" : "mic.fill").font(.title2)
-                        .frame(width: 56, height: 56).background(Theme.surface, in: Circle())
+                        .frame(width: 56, height: 56).background(Theme.field, in: Circle())
                         .foregroundStyle(voice.muted ? Theme.danger : .primary)
                 }
                 .buttonStyle(.plain).disabled(voice.phase != .live || elsewhere)

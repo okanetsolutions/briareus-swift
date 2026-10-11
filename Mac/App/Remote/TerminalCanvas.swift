@@ -49,7 +49,7 @@ final class TerminalCanvas: NSView, NSTextInputClient, NSMenuItemValidation {
     // MARK: - Colours
 
     private var dark: Bool { effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua }
-    private var accent: UInt32 { dark ? 0xD97757 : 0xC96442 }
+    private var accent: UInt32 { dark ? BriareusPalette.dark.accent : BriareusPalette.light.accent }
     private static func color(_ rgb: UInt32) -> NSColor { NSColor(hex: rgb) }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }

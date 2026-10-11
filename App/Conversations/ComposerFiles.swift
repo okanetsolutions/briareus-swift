@@ -168,8 +168,8 @@ struct AttachmentChipRow: View {
                             .accessibilityLabel("Remove \(item.name)")
                         }
                         .padding(.leading, 9).padding(.trailing, 2).padding(.vertical, 2)
-                        .background(Theme.surface, in: Capsule())
-                        .overlay(Capsule().stroke(Theme.border, lineWidth: 0.5))
+                        .background(Theme.field, in: Capsule())
+                        .overlay(Capsule().stroke(Theme.line, lineWidth: 0.5))
                         .accessibilityElement(children: .combine)
                     }
                 }
@@ -192,7 +192,7 @@ struct AttachMenu: View {
             Button("Files", systemImage: "folder") { choosingFiles = true }
         } label: {
             Image(systemName: "paperclip").font(.footnote.weight(.semibold)).foregroundStyle(.primary)
-                .frame(width: 32, height: 32).background(Theme.bubble, in: Circle())
+                .frame(width: 32, height: 32).background(Theme.field, in: Circle())
         }
         .disabled(!enabled || files.full)
         .accessibilityLabel("Attach files")

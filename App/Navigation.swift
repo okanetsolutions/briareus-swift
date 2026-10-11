@@ -171,14 +171,14 @@ struct SplitRoot: View {
             })
             .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 460)
             // The two sides share a background, so a rule marks where the list ends.
-            .overlay(alignment: .trailing) { Rectangle().fill(Theme.border).frame(width: 0.5).ignoresSafeArea() }
+            .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 0.5).ignoresSafeArea() }
         } detail: {
             NavigationStack(path: $detailPath) {
                 Group {
                     if let detail { detail.screen } else {
                         ContentUnavailableView("No conversation selected", systemImage: "bubble.left.and.text.bubble.right",
                                                description: Text("Choose a conversation from the list to read it here."))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.background)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.canvas)
                     }
                 }
                 .navigationDestination(for: Destination.self) { $0.screen }

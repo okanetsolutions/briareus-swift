@@ -174,7 +174,7 @@ struct NewConversationSheet: View {
                 .padding(16)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Theme.background)
+            .background(Theme.canvas)
             .navigationTitle("New conversation").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(model.busy) }
@@ -233,7 +233,7 @@ struct NewConversationSheet: View {
                 if store.canTranscribe { VoiceNoteControls(voice: model.voice, enabled: !model.busy) }
             }
             if store.supports("branches") {
-                Divider().overlay(Theme.border)
+                Divider().overlay(Theme.line)
                 NavigationLink {
                     ConversationBranchPicker(branches: model.branches, defaultBranch: model.defaultBranch, selection: $model.branch)
                 } label: {
@@ -245,7 +245,7 @@ struct NewConversationSheet: View {
             }
             if let catalog = model.catalog, !catalog.providers.isEmpty { runtimeRows(catalog) }
             if store.supports("review_loop") {
-                Divider().overlay(Theme.border)
+                Divider().overlay(Theme.line)
                 Toggle(isOn: $model.reviewLoop) {
                     VStack(alignment: .leading, spacing: 2) {
                         Label("Review loop", systemImage: "repeat").font(.subheadline)
@@ -256,13 +256,13 @@ struct NewConversationSheet: View {
             }
         }
         .padding(14)
-        .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.border, lineWidth: 0.5))
+        .background(Theme.raise, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
     }
 
     @ViewBuilder private func runtimeRows(_ catalog: RuntimeCatalog) -> some View {
         let effective = model.effective
-        Divider().overlay(Theme.border)
+        Divider().overlay(Theme.line)
         Menu {
             if let standard = catalog.defaultChoice {
                 Button { model.runtime = nil } label: {
@@ -293,7 +293,7 @@ struct NewConversationSheet: View {
         .disabled(model.busy)
         .accessibilityLabel("Model: \(effective.map { catalog.label(for: $0) } ?? "none")")
         if let effective, !catalog.efforts(for: effective).isEmpty {
-            Divider().overlay(Theme.border)
+            Divider().overlay(Theme.line)
             Menu {
                 ForEach(catalog.efforts(for: effective), id: \.self) { effort in
                     Button {
@@ -348,7 +348,7 @@ struct ConversationBranchPicker: View {
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden).background(Theme.background)
+        .scrollContentBackground(.hidden).background(Theme.canvas)
         .navigationTitle("Branch").navigationBarTitleDisplayMode(.inline)
         .searchable(text: $search, placement: .pinned, prompt: "Find a branch")
         .textInputAutocapitalization(.never).autocorrectionDisabled()

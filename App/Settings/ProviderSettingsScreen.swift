@@ -486,7 +486,7 @@ struct ProviderSettingsScreen: View {
     @ViewBuilder private var headline: some View {
         if let h = ProviderStatusText.headline(model.status) {
             HStack(spacing: 10) {
-                Circle().fill(h.dot == "failed" ? Theme.danger : h.dot == "idle" ? Theme.success : Color.secondary)
+                Circle().fill(h.dot == "failed" ? Theme.danger : h.dot == "idle" ? Theme.ok : Color.secondary)
                     .frame(width: 8, height: 8).accessibilityHidden(true)
                 Text(h.text).font(.subheadline.weight(.medium)).textSelection(.enabled)
             }
@@ -563,7 +563,7 @@ private struct ProviderQuotaBar: View {
     var window: (label: String, right: String, pct: Double)
     var body: some View {
         let pct = min(max(window.pct, 0), 100)
-        let color = pct >= 90 ? Theme.danger : pct >= 70 ? Theme.warning : Theme.success
+        let color = pct >= 90 ? Theme.danger : pct >= 70 ? Theme.warn : Theme.ok
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(window.label).font(.subheadline)
