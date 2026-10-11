@@ -421,10 +421,10 @@ private struct SessionsCard: View {
 
 // MARK: - Breakdowns
 
-/// The categorical series colours, the only place a hue means which one: four slots and the tail's grey.
+/// The categorical series colours (BriareusChart, from the tokens), the only place a hue means which one: four slots and the
+/// tail's grey.
 private func seriesColor(_ slot: Int) -> Color {
-    let hex: [UInt32] = [0x3987E5, 0xD95926, 0x199E70, 0xC98500, 0x807B71]
-    return Color(nsColor: NSColor(hex: hex[min(slot, Usage.seriesSlots)]))
+    Color(nsColor: NSColor(hex: BriareusChart.seriesColor(slot)))
 }
 
 /// The ring of each row's share of the tokens and its caption, `132px` square.

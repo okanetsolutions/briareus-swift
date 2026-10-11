@@ -362,16 +362,10 @@ struct SessionDetailsSheet: View {
         }
     }
 
-    /// The bar's colours, keyed on the category names claude's /context report uses; deferred and buffer rows and unknown
-    /// categories go grey.
+    /// The bar's colours, keyed on the category names claude's /context report uses (BriareusContextPalette, from the tokens).
     private static func contextColor(_ name: String?) -> Color {
         let n = (name ?? "").asciiFolded
-        if n == "free space" { return Theme.line }
-        if n.contains("deferred") || n.contains("autocompact") { return Color(light: 0x55524C, dark: 0x55524C) }
-        let colors: [String: UInt32] = ["messages": 0x6D9EF7, "system prompt": 0xE06C75, "system tools": 0xD98A3F, "mcp tools": 0x4FAE72,
-                                        "skills": 0xC96F9E, "memory files": 0x5FAE5F, "custom agents": 0x8F7EE8, "context": 0x6D9EF7]
-        let hex = colors[n] ?? 0x8A867C
-        return Color(light: hex, dark: hex)
+        return Color(light: BriareusContextPalette.light.color(category: n), dark: BriareusContextPalette.dark.color(category: n))
     }
 
     private func leave(to destination: Destination) {

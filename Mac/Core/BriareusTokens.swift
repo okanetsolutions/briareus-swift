@@ -145,6 +145,50 @@ public enum BriareusLayout {
     public static let statusDot: Double = 7
 }
 
+/// The usage charts' categorical series as 0xRRGGBB: four slots, then the tail's grey. The same in both modes.
+public enum BriareusChart {
+    public static let series: [UInt32] = [0x3987E5, 0xD95926, 0x199E70, 0xC98500]
+    public static let other: UInt32 = 0x807B71
+    public static var slots: Int { series.count }
+    public static func seriesColor(_ slot: Int) -> UInt32 { series.indices.contains(slot) ? series[slot] : other }
+}
+
+/// The context-usage bar's colours as 0xRRGGBB, by the category names Claude's /context report uses.
+public struct BriareusContextPalette: Sendable, Equatable {
+    public let messages: UInt32
+    public let systemPrompt: UInt32
+    public let systemTools: UInt32
+    public let mcpTools: UInt32
+    public let skills: UInt32
+    public let memoryFiles: UInt32
+    public let customAgents: UInt32
+    /// Reserved but not used yet: a dim step above free space.
+    public let deferred: UInt32
+    /// Free space: the track itself.
+    public let free: UInt32
+    public let unknown: UInt32
+
+    public static let dark = BriareusContextPalette(messages: 0x6D9EF7, systemPrompt: 0xE06C75, systemTools: 0xD98A3F, mcpTools: 0x4FAE72, skills: 0xC96F9E, memoryFiles: 0x5FAE5F, customAgents: 0x8F7EE8, deferred: 0x5A5850, free: 0x3E3E3A, unknown: 0x8A867C)
+    public static let light = BriareusContextPalette(messages: 0x4483F5, systemPrompt: 0xDC5B65, systemTools: 0xC37327, mcpTools: 0x449562, skills: 0xC66698, memoryFiles: 0x4C964C, customAgents: 0x8775E6, deferred: 0xC4C0B4, free: 0xE0DDD3, unknown: 0x8A867C)
+
+    /// A category's colour; the name is matched without regard to case.
+    public func color(category: String?) -> UInt32 {
+        let n = (category ?? "").lowercased()
+        if n.contains("deferred") || n.contains("autocompact") { return deferred }
+        switch n {
+        case "messages", "context": return messages
+        case "system prompt": return systemPrompt
+        case "system tools": return systemTools
+        case "mcp tools": return mcpTools
+        case "skills": return skills
+        case "memory files": return memoryFiles
+        case "custom agents": return customAgents
+        case "free space": return free
+        default: return unknown
+        }
+    }
+}
+
 public enum BriareusMotion {
     /// A running status dot's ring, in seconds.
     public static let pulse: Double = 1.4

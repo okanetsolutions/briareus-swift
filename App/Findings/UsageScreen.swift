@@ -433,10 +433,10 @@ struct UsageScreen: View {
 
 // MARK: - Pieces
 
-/// The categorical series colours, the only place a hue means which one: four slots and the tail's grey.
+/// The categorical series colours (BriareusChart, from the tokens), the only place a hue means which one: four slots and the
+/// tail's grey, the same in both modes.
 private func usageSeriesColor(_ slot: Int) -> Color {
-    let hex: [UInt32] = [0x3987E5, 0xD95926, 0x199E70, 0xC98500, 0x807B71]
-    let h = hex[min(max(slot, 0), Usage.seriesSlots)]
+    let h = BriareusChart.seriesColor(slot)
     return Color(light: h, dark: h)
 }
 

@@ -138,7 +138,7 @@ enum Usage {
             a.slots == b.slots && a.slices.map(\.share) == b.slices.map(\.share) && a.slices.map(\.slot) == b.slices.map(\.slot)
         }
     }
-    static let seriesSlots = 4
+    static let seriesSlots = BriareusChart.slots
     static func shareSeries(_ rows: [JSON]) -> Ring? {
         let total = rows.reduce(0) { $0 + num($1, "totalTokens") }
         guard total > 0 else { return nil }
