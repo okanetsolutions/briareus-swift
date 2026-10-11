@@ -3,8 +3,8 @@ import Foundation
 /// One spoken conversation with GPT-Realtime about one project: the WebRTC call, the captions, and the tools it calls,
 /// each held to that project. It outlives the screen that started it, so it goes on from any tab and with the phone
 /// locked, and ends when the user ends it or after a silence. What it cost and how long it ran are kept.
-/// Opened from one of the project's conversations, it is held to that one: a hands-free line to its agent, whose
-/// transcript it follows to tell the agent's replies and questions as they come.
+/// Opened from one of the project's conversations, it is held to that one: a hands-free line to its agent, which gets
+/// what the user says word for word once they pause, and whose transcript it follows to tell its replies and questions.
 @MainActor
 final class VoiceSession: ObservableObject {
     static let shared = VoiceSession()
@@ -70,6 +70,8 @@ final class VoiceSession: ObservableObject {
     private var responding = false, userSpeaking = false
     /// News was told that no response has said yet.
     private var owed = false
+    /// What the user said to the held conversation's agent and was not sent yet: sent once they pause.
+    private var dictation: [String] = []
     /// A response was asked for and has not started or failed yet; tool calls whose outputs are still to be sent.
     private var requested = false, answering = 0
     /// The voice is free to say news now: nothing it says or hears would be cut, and no tool output is still owed.
@@ -101,7 +103,7 @@ final class VoiceSession: ObservableObject {
         conversation = held
         lines = []; steps = []; heard = 0; calls = [:]; seenCalls = []; readBacks = [:]; merges = [:]; muted = false
         cursor = held?.cursor ?? 0; told = cursor; untold = []; self.held = nil; caughtUp = cursor > 0
-        responding = false; userSpeaking = false; owed = false; requested = false; answering = 0
+        responding = false; userSpeaking = false; owed = false; requested = false; answering = 0; dictation = []
         started = nil; finished = nil
         cost = VoiceCost()
         let call = LiveCall()
@@ -134,6 +136,7 @@ final class VoiceSession: ObservableObject {
         // Muted mid-sentence, the speech may never be heard to stop: news waiting on it is said now.
         if muted && userSpeaking {
             userSpeaking = false
+            dictate()
             if owed && free { respond() }
         }
     }
@@ -191,6 +194,10 @@ final class VoiceSession: ObservableObject {
             caption(user: true, event["transcript"].string.map { lines.last?.user == true ? " " + $0 : $0 })
             cost.add(transcription: event["usage"])
             touch()
+            if conversation != nil {
+                if let said = event["transcript"].string { dictation.append(said) }
+                dictate()
+            }
         case "response.output_audio_transcript.delta":
             caption(user: false, event["delta"].string)
             talking()
@@ -333,6 +340,48 @@ final class VoiceSession: ObservableObject {
         owed = true
         touch()
         if free { respond() }
+    }
+
+    /// Sends the held conversation's agent what the user said, as they said it, once they have paused: the model does
+    /// not choose what is sent, nor reword it.
+    private func dictate() {
+        guard !userSpeaking, !dictation.isEmpty, let id = conversation?.id, phase == .live else { return }
+        let said = dictation.joined(separator: " ")
+        dictation = []
+        guard let text = Voice.dictated(said) else { return }
+        let step = Step(tool: .sendMessage, name: VoiceTool.sendMessage.rawValue, args: ["text": .string(text)], state: .running)
+        steps.append(step)
+        touch()
+        Task {
+            @MainActor func finish(_ state: Step.State) {
+                if let i = self.steps.firstIndex(where: { $0.id == step.id }) { self.steps[i].state = state }
+            }
+            guard Store.shared.supports("message") else {
+                finish(.failed("Not allowed"))
+                return self.confirm("\(Voice.unsentPrefix) this device's token cannot send messages on the server.")
+            }
+            do {
+                _ = try await Store.shared.call("message", ["sessionId": .string(id), "text": .string(text)], timeout: 60)
+                finish(.done)
+                if let repo = self.repo { Task { try? await Store.shared.feed(repo).loadSessions(fresh: true) } }
+                self.confirm("\(Voice.sentPrefix) \(text)")
+            } catch {
+                let said = errorText(error)
+                finish(.failed(said))
+                self.confirm("\(Voice.unsentPrefix) \(said)")
+            }
+        }
+    }
+
+    /// Has the voice say whether what the user said was sent: briefly, and only when it is free, as the user has
+    /// started another message or news is about to be told.
+    private func confirm(_ said: String) {
+        guard let call, phase == .live else { return }
+        call.send(["type": "conversation.item.create", "event_id": .string(nextID()),
+                   "item": ["type": "message", "role": "system", "content": [["type": "input_text", "text": .string(said)]]]])
+        guard free, !owed else { return }
+        requested = true
+        call.send(["type": "response.create", "event_id": .string(nextID())])
     }
 
     private func respond() {

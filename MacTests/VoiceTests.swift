@@ -387,22 +387,38 @@ final class VoiceTests: XCTestCase {
 
     // MARK: One conversation, hands-free
 
-    func testACallHeldToOneConversationCarriesItsToolsOnlyAndNamesNoConversation() {
+    func testACallHeldToOneConversationHasNoToolsAndNeverAnswersTheUserByItself() {
         let session = Voice.session(voice: "marin", project: "HQ (o/hq)", conversation: "Fix the login")
-        let tools = session["tools"].items
-        XCTAssertEqual(tools.compactMap { $0["name"].string }, VoiceTool.conversationCases.map(\.rawValue))
-        for tool in tools {
-            XCTAssertTrue(tool["parameters"]["properties"]["session_id"].isNull, tool["name"].string ?? "")
-            XCTAssertFalse(tool["parameters"]["required"].strings.contains("session_id"))
-        }
-        let pull = tools.first { $0["name"] == "read_pull_request" }!
-        XCTAssertTrue(pull["parameters"]["properties"]["number"].isNull)
-        XCTAssertEqual(tools.first { $0["name"] == "send_message" }!["parameters"]["required"], ["text"])
+        XCTAssertEqual(session["tools"], [])
+        XCTAssertEqual(session["tool_choice"], "none")
+        let turns = session["audio"]["input"]["turn_detection"]
+        XCTAssertEqual(turns["create_response"], false)
+        XCTAssertEqual(turns["silence_duration_ms"].int, Voice.heldPauseMilliseconds)
         let instructions = session["instructions"].string!
         XCTAssertTrue(instructions.contains("\"Fix the login\""))
         XCTAssertTrue(instructions.contains(Voice.updatePrefix))
-        // The project's call keeps every tool, each naming its conversation.
+        XCTAssertTrue(instructions.contains(Voice.sentPrefix))
+        // The project's call keeps every tool, each naming its conversation, and answers the user itself.
+        let project = Voice.session(voice: "marin", project: "HQ (o/hq)")
+        XCTAssertEqual(project["tools"].items.count, VoiceTool.allCases.count)
+        XCTAssertTrue(project["audio"]["input"]["turn_detection"].isNull)
         XCTAssertTrue(VoiceTool.sendMessage.definition["parameters"]["required"].strings.contains("session_id"))
+    }
+
+    func testWhatTheUserSaysReachesTheAgentAsSaidWithoutALeadForTheVoice() {
+        XCTAssertEqual(Voice.dictated("  Run the tests again. "), "Run the tests again.")
+        XCTAssertEqual(Voice.dictated("Pregúntale si ya terminó los tests"), "Ya terminó los tests?")
+        XCTAssertEqual(Voice.dictated("pregúntale al agente, ¿por qué falló el build?"), "¿por qué falló el build?")
+        XCTAssertEqual(Voice.dictated("Dile que use la rama main."), "Use la rama main.")
+        XCTAssertEqual(Voice.dictated("Pídele que abra el pull request"), "Abra el pull request")
+        XCTAssertEqual(Voice.dictated("Pregúntale: cuánto falta"), "Cuánto falta")
+        XCTAssertEqual(Voice.dictated("Tell it to stop touching the CSS"), "Stop touching the CSS")
+        XCTAssertEqual(Voice.dictated("ask the agent whether it pushed"), "It pushed?")
+        // Words that only begin like a lead are the user's own.
+        XCTAssertEqual(Voice.dictated("Pregunta rápida: ¿qué rama es?"), "Pregunta rápida: ¿qué rama es?")
+        XCTAssertEqual(Voice.dictated("Dilema: dos opciones"), "Dilema: dos opciones")
+        XCTAssertNil(Voice.dictated("   "))
+        XCTAssertNil(Voice.dictated("Dile que"))
     }
 
     func testAHeldCallActsOnTheHeldConversationAndItsPullRequestWhateverTheModelSays() {
