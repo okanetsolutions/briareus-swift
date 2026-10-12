@@ -1,7 +1,7 @@
 import SwiftUI
 
 // The look every Briareus client shares, the Mac app's included, light or dark as the system says: the palette and the status
-// colours come from briareus-client-contracts (Mac/Core/BriareusTokens.swift, generated there and copied in by its
+// colours come from briareus-contracts (Mac/Core/BriareusTokens.swift, generated there and copied in by its
 // `node scripts/sync.mjs`). Text keeps the system's text styles (.body, .caption, …) and .primary/.secondary, so Dynamic Type,
 // Bold Text and Increase Contrast go on working; the shared pixel sizes are the Mac's and Windows'.
 enum Theme {
