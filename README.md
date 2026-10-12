@@ -90,7 +90,7 @@ The Mac app is built from `Mac/` by the **Briareus Mac** scheme and does what [B
 
 ## Look
 
-The Mac app and the iPhone and iPad app share one look with Briareus for Windows and Quest: the same warm palette (canvas, sidebar, raise, field, sunken, line, ink, muted and the clay accent), the same colour for each session status (working in the accent, idle green, waiting, interrupted or cancelled amber, failed red, closed grey), light or dark as the system says. The colours, text sizes, column widths and working indicator come from [briareus-client-contracts](https://github.com/okanetsolutions/briareus-client-contracts), whose generated `Mac/Core/BriareusTokens.swift` both apps compile; `Mac/App/Theme.swift` and `App/Theme.swift` only turn its values into SwiftUI colours and fonts. Don't edit that file here: change the tokens in briareus-client-contracts, then refresh the copy from a checkout of it beside this one with `node scripts/sync.mjs`, and regenerate the project if the file is new. The iPhone and iPad app keeps the system's text styles, so Dynamic Type goes on working; the Mac uses the tokens' pixel sizes, as Windows does.
+The Mac app and the iPhone and iPad app share one look with Briareus for Windows and Quest: the same warm palette (canvas, sidebar, raise, field, sunken, line, ink, muted and the clay accent), the same colour for each session status (working in the accent, idle green, waiting, interrupted or cancelled amber, failed red, closed grey), light or dark as the system says. The colours, text sizes, column widths and working indicator come from [briareus-contracts](https://github.com/okanetsolutions/briareus-contracts), whose generated `Mac/Core/BriareusTokens.swift` both apps compile; `Mac/App/Theme.swift` and `App/Theme.swift` only turn its values into SwiftUI colours and fonts. Don't edit that file here: change the tokens in briareus-contracts, then refresh the copy from a checkout of it beside this one with `node scripts/sync.mjs`, and regenerate the project if the file is new. The iPhone and iPad app keeps the system's text styles, so Dynamic Type goes on working; the Mac uses the tokens' pixel sizes, as Windows does.
 
 ## Requirements
 
@@ -269,7 +269,7 @@ App Store Connect rejects an upload whose build number it has already seen for t
 | Path | Contents |
 | --- | --- |
 | `App/` | The iPhone and iPad app: the store, navigation and theme (the shared palette, see [Look](#look)) at the top, and the screens by tab in `Conversations/`, `Board/`, `Findings/` (and Usage), `Settings/` and `Car/` (the CarPlay scene) |
-| `Mac/` | The Mac app (`Mac/App`) and the core both apps compile (`Mac/Core`): the client API, models, saved-response cache, board, diff, Markdown and settings logic, what a car's screen says, and the design tokens from briareus-client-contracts (`BriareusTokens.swift`, generated, not edited here). No UIKit, AppKit or SwiftUI in the core |
+| `Mac/` | The Mac app (`Mac/App`) and the core both apps compile (`Mac/Core`): the client API, models, saved-response cache, board, diff, Markdown and settings logic, what a car's screen says, and the design tokens from briareus-contracts (`BriareusTokens.swift`, generated, not edited here). No UIKit, AppKit or SwiftUI in the core |
 | `MacTests/` | Core tests, run with `swift test` |
 | `UITests/` | The pairing UI test, run in the simulator |
 | `scripts/generate-project.py` | Generates `Briareus.xcodeproj` |
