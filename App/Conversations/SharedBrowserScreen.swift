@@ -575,6 +575,8 @@ struct SharedBrowserScreen: View {
     @StateObject private var model: SharedBrowserModel
     @ObservedObject private var store = Store.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.inOwnWindow) private var inOwnWindow
+    @WindowOpener private var openInWindow
     @FocusState private var addressFocused: Bool
     @State private var confirmOff = false
 
@@ -616,8 +618,11 @@ struct SharedBrowserScreen: View {
     // MARK: The toolbar
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button("Done") { dismiss() }
+        // A window of its own closes as a window does.
+        if !inOwnWindow {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Done") { dismiss() }
+            }
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             if running && !state.tabs.isEmpty { tabsMenu }
@@ -658,6 +663,13 @@ struct SharedBrowserScreen: View {
     private var moreMenu: some View {
         Menu {
             Button("Reload", systemImage: "arrow.clockwise") { model.refresh() }
+            // Out of the conversation it covers, into a window beside it.
+            if let openInWindow {
+                Button("Open in New Window", systemImage: "plus.rectangle.on.rectangle") {
+                    openInWindow(.browser(session: model.session))
+                    dismiss()
+                }
+            }
             if store.canManage && state.on && store.supports("browser_off") {
                 Button("Switch the Browser Off\u{2026}", systemImage: "power", role: .destructive) { confirmOff = true }.disabled(busy)
             } else if store.canManage && store.supports("browser_on") {

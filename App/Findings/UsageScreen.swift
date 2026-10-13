@@ -174,6 +174,7 @@ struct UsageScreen: View {
             }
             ToolbarItem(placement: .topBarTrailing) { filterMenu }
         }
+        ToolbarItem(placement: .topBarTrailing) { OpenInWindowButton(page: .usage) }
     }
 
     /// One submenu per filter: All, then the window's choices; the project and model pickers tick several.
