@@ -193,6 +193,9 @@ private struct MarkdownTable: View {
                 .overlay(Rectangle().strokeBorder(Theme.line, lineWidth: 1))
             }
         }
+        // A sideways ScrollView doesn't take its content's height on its own; without this the grid spreads the height it
+        // is offered over its rows, padding some and clipping the last
+        .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
     }
 
