@@ -33,6 +33,35 @@ final class BoardLogicTests: XCTestCase {
         XCTAssertTrue([0, 1].contains(convThreadRoot(lines, 0)))
     }
 
+    func testConvListKeepsWhatWasReadUntilTheLastPageIsIn() {
+        var list = ConvList(items: j(#"[{"id":9}]"#), read: true)
+        list.begin()
+        XCTAssertTrue(list.loading)
+        XCTAssertEqual(list.take(j(#"{"comments":[{"id":1}],"nextPage":2}"#), feed: .comments, page: 1), 2)
+        XCTAssertEqual(list.items, j(#"[{"id":9}]"#))
+        XCTAssertNil(list.take(j(#"{"comments":[{"id":2}],"nextPage":2}"#), feed: .comments, page: 2))
+        XCTAssertEqual(list, ConvList(items: j(#"[{"id":1},{"id":2}]"#), read: true))
+
+        var lines = ConvList()
+        lines.begin()
+        XCTAssertNil(lines.take(j(#"{"reviewComments":[{"id":5}]}"#), feed: .reviewComments, page: 1))
+        XCTAssertEqual(lines.items.count, 1)
+    }
+
+    func testConvListFailureSaysWhyButACancelDoesNot() {
+        var list = ConvList(items: j(#"[{"id":9}]"#), read: true)
+        list.begin()
+        _ = list.take(j(#"{"reviews":[{"id":1}],"nextPage":2}"#), feed: .reviews, page: 1)
+        list.fail(nil)
+        XCTAssertEqual(list, ConvList(items: j(#"[{"id":9}]"#), read: true))
+        var fresh = ConvList()
+        fresh.begin()
+        fresh.fail("Offline")
+        XCTAssertEqual(fresh, ConvList(read: true, error: "Offline"))
+        XCTAssertTrue(convAllRead([fresh, ConvList(), ConvList()], supports: { $0 == "pull_comments" }))
+        XCTAssertFalse(convAllRead([fresh, ConvList(), ConvList()], supports: { _ in true }))
+    }
+
     func testFileTreeCompactsSortsAndFolds() {
         let files = ["src/b.swift", "src/App/Views/A.swift", "README.md", "src/a.swift", "docs/x/y/z.md"].map(PullFile.init(filename:))
         let tree = FileTree(files)

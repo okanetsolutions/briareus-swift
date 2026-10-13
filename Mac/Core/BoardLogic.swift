@@ -41,6 +41,46 @@ enum ConvFeed: Int, CaseIterable, Sendable {
     var field: String { ["comments", "reviews", "reviewComments"][rawValue] }
 }
 
+/// One of the Conversation tab's lists, read page by page: `incoming` fills up and replaces `items` once the last page is
+/// in, so what was read stays shown while it is read afresh.
+struct ConvList: Equatable, Sendable {
+    var items: JSON = []
+    var incoming: JSON?
+    var read = false
+    var error: String?
+    var loading = false
+
+    /// Starts reading it afresh from page 1.
+    mutating func begin() {
+        incoming = []
+        loading = true
+    }
+    /// Takes page `page` of `feed`: the page to read next, or nil once the last page is in and has replaced the list.
+    mutating func take(_ reply: JSON, feed: ConvFeed, page: Int) -> Int? {
+        var rows = incoming ?? []
+        for row in reply[feed.field].items { rows.append(row) }
+        if let next = reply["nextPage"].number, next > Double(page) {
+            incoming = rows
+            return Int(next)
+        }
+        self = ConvList(items: rows, read: true)
+        return nil
+    }
+    /// A read that failed, with what to say; nil when it was cancelled, which leaves the list as it was.
+    mutating func fail(_ said: String?) {
+        loading = false
+        incoming = nil
+        guard let said else { return }
+        error = said
+        read = true
+    }
+}
+
+/// Whether every list the server offers has been read once.
+func convAllRead(_ lists: [ConvList], supports: (String) -> Bool) -> Bool {
+    ConvFeed.allCases.allSatisfy { !supports($0.operation) || lists[$0.rawValue].read }
+}
+
 /// When a comment or review was made, as seconds since 1970; 0 when the server left it out.
 func convTime(_ v: JSON, _ field: String) -> Int { boardDateEpoch(v[field].string) ?? 0 }
 
