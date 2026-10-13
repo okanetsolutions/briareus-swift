@@ -559,11 +559,12 @@ struct ProviderSettingsScreen: View {
 }
 
 /// A quota window: its label and how much is used, over a bar filled green, amber past 70% and red past 90%.
-private struct ProviderQuotaBar: View {
+struct ProviderQuotaBar: View {
     var window: (label: String, right: String, pct: Double)
     var body: some View {
         let pct = min(max(window.pct, 0), 100)
-        let color = pct >= 90 ? Theme.danger : pct >= 70 ? Theme.warn : Theme.ok
+        let level = ProviderQuota.level(pct)
+        let color = level == .spent ? Theme.danger : level == .close ? Theme.warn : Theme.ok
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(window.label).font(.subheadline)

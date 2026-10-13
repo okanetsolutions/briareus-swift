@@ -518,7 +518,8 @@ struct QuotaBar: View {
     var window: (label: String, right: String, pct: Double)
     var body: some View {
         let pct = min(max(window.pct, 0), 100)
-        let color = pct >= 90 ? Theme.danger : pct >= 70 ? Theme.warn : Theme.ok
+        let level = ProviderQuota.level(pct)
+        let color = level == .spent ? Theme.danger : level == .close ? Theme.warn : Theme.ok
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(window.label).lineLimit(1).truncationMode(.tail)
