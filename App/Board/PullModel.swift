@@ -34,15 +34,6 @@ enum PullSection: String, CaseIterable, Identifiable {
     }
 }
 
-/// One of the comment lists, read page by page: `incoming` fills up and replaces `items` once the last page is in.
-struct PullCommentList {
-    var items: JSON = []
-    var incoming: JSON?
-    var read = false
-    var error: String?
-    var loading = false
-}
-
 /// What stands in the way of a merge, asked about before it goes ahead.
 struct MergeQuestion: Identifiable {
     var base: String
@@ -86,7 +77,7 @@ final class PullScreenModel: ObservableObject {
     @Published private(set) var readingPull = false
     @Published private(set) var deletingRun: String?
     @Published var runError: String?
-    @Published private(set) var comments = Array(repeating: PullCommentList(), count: ConvFeed.allCases.count)
+    @Published private(set) var comments = Array(repeating: ConvList(), count: ConvFeed.allCases.count)
     private var pullGen = 0
     private var commentTasks: [Task<Void, Never>?] = Array(repeating: nil, count: ConvFeed.allCases.count)
     private var sinks: [AnyCancellable] = []
@@ -276,7 +267,7 @@ final class PullScreenModel: ObservableObject {
     // MARK: Comments and reviews
 
     /// Whether every list the server offers has been read once.
-    var commentsRead: Bool { ConvFeed.allCases.allSatisfy { !Store.shared.supports($0.operation) || comments[$0.rawValue].read } }
+    var commentsRead: Bool { convAllRead(comments, supports: Store.shared.supports) }
     var commentItems: JSON { comments[ConvFeed.comments.rawValue].items }
     var reviewItems: JSON { comments[ConvFeed.reviews.rawValue].items }
     var lineItems: JSON { comments[ConvFeed.reviewComments.rawValue].items }
@@ -289,8 +280,7 @@ final class PullScreenModel: ObservableObject {
     /// Reads the comments, reviews and line comments afresh; what was read stays shown until the new lists are in.
     func commentsLoad() {
         for f in ConvFeed.allCases where !comments[f.rawValue].loading && Store.shared.supports(f.operation) {
-            comments[f.rawValue].incoming = []
-            comments[f.rawValue].loading = true
+            comments[f.rawValue].begin()
             commentTasks[f.rawValue] = Task { await commentPages(f) }
         }
     }
@@ -299,25 +289,17 @@ final class PullScreenModel: ObservableObject {
         while true {
             do {
                 let v = try await Store.shared.call(f.operation, ["repo": .string(repo), "pr": JSON(number), "page": JSON(page)])
-                var incoming = comments[f.rawValue].incoming ?? []
-                for row in v[f.field].items { incoming.append(row) }
-                comments[f.rawValue].incoming = incoming
-                if let next = v["nextPage"].number, next > Double(page) { page = Int(next); continue }
-                comments[f.rawValue] = PullCommentList(items: incoming, read: true)
-                return
+                guard let next = comments[f.rawValue].take(v, feed: f, page: page) else { return }
+                page = next
             } catch {
-                comments[f.rawValue].loading = false
-                comments[f.rawValue].incoming = nil
-                guard let said = failure(error) else { return }
-                comments[f.rawValue].error = said
-                comments[f.rawValue].read = true
+                comments[f.rawValue].fail(failure(error))
                 return
             }
         }
     }
     private func commentsCancel() {
         for i in commentTasks.indices { commentTasks[i]?.cancel(); commentTasks[i] = nil }
-        for i in comments.indices where comments[i].loading { comments[i].loading = false; comments[i].incoming = nil }
+        for i in comments.indices where comments[i].loading { comments[i].fail(nil) }
     }
 
     // MARK: Findings

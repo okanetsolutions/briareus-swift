@@ -1,13 +1,16 @@
-// The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then WhatsApp, 📊, ⚑ with
-// its count, as 26px squares (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
+// The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then WhatsApp, ✉, ◉ Status with
+// the count of conversations needing you, 📊, ⚑ with its count, as 26px squares (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
 import SwiftUI
 
-enum StripAction { case newSession, whatsapp, mail, usage, findings }
+enum StripAction { case newSession, whatsapp, mail, status, usage, findings }
 
 struct SidebarStrip: View {
-    /// The detail pane's root id, for the WhatsApp, 📊 and ⚑ switches' accent.
+    /// The detail pane's root id, for the WhatsApp, ◉, 📊 and ⚑ switches' accent.
     var selected: String?
+    /// The ⚑ badge: review rounds and approvals waiting.
     var waiting: Int
+    /// The ◉ badge: conversations waiting for an answer or a decision.
+    var needsYou: Int
     var action: (StripAction) -> Void
 
     static let height: CGFloat = 32, iconWidth: CGFloat = 26, gap: CGFloat = 3
@@ -32,6 +35,8 @@ struct SidebarStrip: View {
                 }
                 .frame(width: Self.iconWidth).help("Mail")
             }
+            StripButton(active: selected == "status", badge: needsYou, action: { action(.status) }) { emoji("◉", active: selected == "status") }
+                .frame(width: Self.iconWidth).help("Status: what waits for you and what is working")
             StripButton(active: selected == "usage", action: { action(.usage) }) { emoji("📊", active: selected == "usage") }
                 .frame(width: Self.iconWidth).help("Usage")
             StripButton(active: selected == "findings", badge: waiting, action: { action(.findings) }) { emoji("⚑", active: selected == "findings") }

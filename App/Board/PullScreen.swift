@@ -750,7 +750,13 @@ private struct PullThread: View {
         let path = first["path"].string ?? ""
         let line = first["line"].int ?? first["originalLine"].int
         VStack(alignment: .leading, spacing: 8) {
-            Text(line.map { "\(path):\($0)" } ?? path).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+            let place = Text(line.map { "\(path):\($0)" } ?? path).font(.caption2.monospaced()).lineLimit(1).truncationMode(.head)
+            // As on the Mac, the file and line open the thread's first comment on GitHub.
+            if safeWebURL(first["url"].string) {
+                Button { boardOpenWeb(first["url"].string) } label: { place }.buttonStyle(.borderless).foregroundStyle(Theme.accent)
+            } else {
+                place.foregroundStyle(.secondary)
+            }
             ForEach(convThread(lines: lines, root: root), id: \.self) { i in
                 let cm = lines[i]
                 VStack(alignment: .leading, spacing: 3) {
