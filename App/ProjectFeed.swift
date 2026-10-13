@@ -64,15 +64,15 @@ final class ProjectFeed: ObservableObject {
     func drop(_ id: String) {
         adopt(sessions.filter { $0.id != id })
     }
-    /// A record from the live stream, in its row's place or first when new; the ⚑ count follows a review round held or
-    /// let go.
+    /// A record from the live stream, in its row's place or first when new; the overview and its badge follow it, as a
+    /// turn starting or ending, a question asked or a review round held all change them.
     func upsert(_ s: Session) {
         guard let list = sessions.upserting(s) else { return }
-        let held = sessions.first { $0.id == s.id }?.heldRound != nil
+        let state = sessions.first { $0.id == s.id }?.state
         sessions = list
         sessionsLoaded = true
         Store.shared.cache.store(Session.json(list), "sessions:\(repo)")
-        if held != (s.heldRound != nil) { ProjectsModel.shared.recount() }
+        if state != s.state { ProjectsModel.shared.recount() }
     }
     /// A conversation the live stream says was deleted, if it is in this list.
     func remove(_ id: String) {
