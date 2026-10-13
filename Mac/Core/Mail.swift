@@ -7,6 +7,8 @@ import Foundation
 struct MailAccount: Equatable, Sendable {
     var id: Int
     var provider: String
+    /// `read`, or `manage` when it was connected to send and file too; empty from a server that does not say.
+    var access: String
     var email: String
     var label: String
     var enabled: Bool
@@ -23,6 +25,7 @@ struct MailAccount: Equatable, Sendable {
     init?(_ j: JSON) {
         guard j.isObject, let id = j["id"].truncatedInt, id > 0, let provider = j["provider"].nonEmpty, let email = j["email"].nonEmpty else { return nil }
         self.id = id; self.provider = provider; self.email = email
+        access = j["access"].string ?? ""
         label = j["label"].string ?? ""
         enabled = j["enabled"].is(true)
         syncDays = j["syncDays"].truncatedInt ?? 30
@@ -35,6 +38,9 @@ struct MailAccount: Equatable, Sendable {
     }
 
     var needsSignIn: Bool { status == "reauth" }
+    /// Connected read-only: the server refuses to move its messages to the trash until it is connected again with
+    /// access: manage. A server that does not say is asked anyway.
+    var readOnly: Bool { access == "read" }
     /// "Work (me@example.com)", or the address alone.
     var title: String { label.cTrimmed.isEmpty ? email : "\(label) (\(email))" }
     var providerName: String { mailProviderName(provider) }

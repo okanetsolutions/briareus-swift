@@ -1,7 +1,7 @@
 // The mail inbox (the Windows client's screen_mail_inbox.c, core #120): the mail the server keeps synced from every
 // connected mailbox or one, newest first, 50 to a page, with a search, a label or folder, a thread and read, inbox and star
-// filters; a message opens beside the list as plain, selectable text. It only reads the server's copy: reading here marks
-// nothing read, and no HTML, image or link of a message is loaded. An Admin token's.
+// filters; a message opens beside the list as plain, selectable text, and Move to Trash moves it to the provider's trash.
+// Reading here marks nothing read, and no HTML, image or link of a message is loaded. An Admin token's.
 import AppKit
 import SwiftUI
 
@@ -21,6 +21,8 @@ final class MailInboxModel: ObservableObject {
     @Published private(set) var body: MailMessage?
     @Published private(set) var bodyError: String?
     @Published private(set) var readingBody = false
+    /// The message being moved to the trash, by key: its button waits, and another cannot be moved meanwhile.
+    @Published private(set) var trashing: String?
     /// The message whose body is being read: opening another while one loads reads the new one, and the old answer is dropped.
     private var readingKey: String?
     @Published private(set) var notice: String?
@@ -140,6 +142,46 @@ final class MailInboxModel: ObservableObject {
         }
     }
     var selectedSummary: MailMessage? { messages.first { $0.key == selected } }
+
+    // MARK: Moving to the trash
+
+    /// Whether a message's mailbox may move it to the trash: the server has the route and the mailbox was not connected
+    /// read-only.
+    func canTrash(_ m: MailMessage) -> Bool {
+        Store.shared.supports("delete_mail_message") && accounts.readable.contains(m.accountID) && !(accounts.find(m.accountID)?.readOnly ?? false)
+    }
+    /// Moves the message, not its thread, to Gmail's Trash or Outlook's Deleted Items once confirmed; the provider keeps
+    /// it there, so it is not erased. Gone from the list once the server says so.
+    func trash(_ m: MailMessage) {
+        guard canTrash(m), trashing == nil else { return }
+        let account = accounts.find(m.accountID)
+        let bin = account?.provider == "outlook" ? "Deleted Items" : "the Trash"
+        guard Dialogs.confirm("Move “\(m.shownSubject)” to \(bin)?",
+                              "Only this message moves, not its thread. It stays in \(bin) at \(account?.providerName ?? "the provider") until emptied there.",
+                              continueLabel: "Move to Trash", destructive: true) else { return }
+        trashing = m.key
+        Task {
+            let r = await boardCall("delete_mail_message", ["account": JSON(m.accountID), "id": .string(m.id)])
+            trashing = nil
+            if case .failure(let e) = r, e.status != 404 {
+                if e.kind != .cancelled { Dialogs.alert("The message was not moved to the trash", mailTrashError(e)) }
+                return
+            }
+            // Gone either way: a 404 means the synced copy was already removed.
+            messages.removeAll { $0.key == m.key }
+            if selected == m.key { close() }
+        }
+    }
+}
+
+/// What a refused move to the trash means, in words.
+func mailTrashError(_ e: APIError) -> String {
+    switch e.status {
+    case 409: return "This mailbox was connected read-only. Connect it again in Mail accounts with access to manage mail, then try again."
+    case 401, 403, 429, 503: return mailReadError(status: e.status, detail: true)
+    case 502: return "The provider did not answer clearly, so the server kept its copy. Refresh before trying again: it may already be in the trash."
+    default: return e.description
+    }
 }
 
 /// What a refused read means, in words (`detail`: one message's).
@@ -365,6 +407,11 @@ private struct MailReader: View {
                 Spacer()
                 if let url = model.body?.webURL {
                     Button("Open at \(model.accounts.find(m?.accountID ?? 0)?.providerName ?? "the provider") ↗") { openWebURL(url) }.dashButton(.bordered)
+                }
+                if let m, model.canTrash(m) {
+                    Button(model.trashing == m.key ? "Moving…" : "Move to Trash") { model.trash(m) }
+                        .dashButton(.bordered).disabled(model.trashing != nil)
+                        .help("Move this message to the provider's trash")
                 }
                 Button { model.close() } label: { Image(systemName: "xmark") }.buttonStyle(IconButtonStyle()).help("Close the message")
             }
