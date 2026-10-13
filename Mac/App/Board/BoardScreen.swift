@@ -71,21 +71,13 @@ final class BoardModel: ObservableObject {
 
     // MARK: Filters, kept on disk per repository
 
-    private func filterJSON(_ f: BoardFilter) -> JSON {
-        var j: JSON = [:]
-        for k in FilterKind.allCases where !f[k].isEmpty { j[k.name] = .string(f[k]) }
-        return j
-    }
-    private func filterRead(_ f: inout BoardFilter, _ j: JSON) {
-        for k in FilterKind.allCases { if let v = j[k.name].string { f.set(k, v) } }
-    }
     func filtersSave() {
-        Store.shared.cache.store(["pulls": filterJSON(pullFilter), "issues": filterJSON(issueFilter)], "pulls-filters:\(repo)")
+        Store.shared.cache.store(["pulls": pullFilter.saved, "issues": issueFilter.saved], "pulls-filters:\(repo)")
     }
     /// A board never filtered opens on the project's author; one with saved picks opens on them.
     private func filtersRestore() -> Bool {
         guard let saved = Store.shared.cache.value("pulls-filters:\(repo)") else { return false }
-        filterRead(&pullFilter, saved["pulls"]); filterRead(&issueFilter, saved["issues"])
+        pullFilter = BoardFilter(saved: saved["pulls"]); issueFilter = BoardFilter(saved: saved["issues"])
         return true
     }
 
@@ -297,6 +289,12 @@ final class BoardModel: ObservableObject {
         hasOpening = false
         filtersSave()
     }
+    /// Hide later stacked PRs, or show them again.
+    func toggleLaterStacked() {
+        pullFilter.hideLaterStacked.toggle()
+        hasOpening = false
+        filtersSave()
+    }
     func clearFilters() {
         filter = BoardFilter()
         hasOpening = false
@@ -468,6 +466,11 @@ struct BoardScreen: View {
             }
             buttons.append(HeaderButton(glyph: "tag", label: "\(f.label.isEmpty ? "All labels" : f.label) ▾",
                                         enabled: model.loaded) { model.pick(.label) })
+            if model.tab == .pulls {
+                buttons.append(HeaderButton(glyph: "square.stack.3d.up", label: f.hideLaterStacked ? "Show later stacked PRs" : "Hide later stacked PRs",
+                                            tip: "Hide or show stacked pull requests after position 1; keep standalone pull requests visible",
+                                            enabled: model.loaded) { model.toggleLaterStacked() })
+            }
             buttons.append(refresh)
         }
         // 🎙 Meet: the meeting assistant, on this project, on every tab; a meeting about it leads the line with its time,

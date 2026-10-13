@@ -19,24 +19,16 @@ final class BoardFilters: ObservableObject {
     init(repo: String) {
         self.repo = repo
         if let saved = Store.shared.cache.value("pulls-filters:\(repo)") {
-            read(&pulls, saved["pulls"]); read(&issues, saved["issues"])
+            pulls = BoardFilter(saved: saved["pulls"]); issues = BoardFilter(saved: saved["issues"])
         } else {
             opening = BoardFilter()
         }
     }
 
-    private func read(_ f: inout BoardFilter, _ j: JSON) {
-        for k in FilterKind.allCases { if let v = j[k.name].string { f.set(k, v) } }
-    }
-    private func json(_ f: BoardFilter) -> JSON {
-        var j: JSON = [:]
-        for k in FilterKind.allCases where !f[k].isEmpty { j[k.name] = .string(f[k]) }
-        return j
-    }
     /// A pick by the user: the board no longer opens on the author, and the picks are saved.
     func picked() {
         opening = nil
-        Store.shared.cache.store(["pulls": json(pulls), "issues": json(issues)], "pulls-filters:\(repo)")
+        Store.shared.cache.store(["pulls": pulls.saved, "issues": issues.saved], "pulls-filters:\(repo)")
     }
     /// A board shown before the server answered may be out of date about who has something open, so the server's answer
     /// opens it again, unless the pickers were touched meanwhile.
@@ -126,7 +118,8 @@ struct BoardScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if tab != .review {
-                    BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label]) { filters.picked() }
+                    BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label],
+                                    stacked: tab == .pulls) { filters.picked() }
                         .disabled(!loaded || rows.isEmpty && !filter.wrappedValue.isOn)
                 }
             }
@@ -331,6 +324,8 @@ private struct BoardFilterMenu: View {
     @Binding var filter: BoardFilter
     let rows: [BoardRow]
     let kinds: [FilterKind]
+    /// The pull requests' list, which offers Hide later stacked PRs; issues have no stack.
+    var stacked = false
     let picked: () -> Void
 
     var body: some View {
@@ -347,6 +342,11 @@ private struct BoardFilterMenu: View {
                 }
                 .pickerStyle(.menu)
                 .disabled(options.isEmpty)
+            }
+            if stacked {
+                Toggle(isOn: Binding(get: { filter.hideLaterStacked }, set: { filter.hideLaterStacked = $0; picked() })) {
+                    Label("Hide later stacked PRs", systemImage: "square.stack.3d.up")
+                }
             }
             if filter.isOn {
                 Button("Clear filters", systemImage: "xmark.circle", role: .destructive) { filter = BoardFilter(); picked() }

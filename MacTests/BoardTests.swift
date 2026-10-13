@@ -244,6 +244,34 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(FilterKind.author.name, "author"); XCTAssertEqual(FilterKind.reviewer.name, "reviewer"); XCTAssertEqual(FilterKind.label.name, "label")
         XCTAssertEqual(FilterKind.assignee.name, "assignee")
     }
+    func testHideLaterStackedKeepsTheBottomOfEachStackAndThePullRequestsOutsideOne() {
+        let pulls = PullSummary.parseList(j(#"""
+        [{"number":1,"title":"a","author":"ana","stack":{"id":7,"position":1,"total":3}},
+         {"number":2,"title":"b","author":"ana","stack":{"id":7,"position":2,"total":3}},
+         {"number":3,"title":"c","author":"bo","stack":{"id":7,"position":3,"total":3}},
+         {"number":4,"title":"d","author":"bo"}]
+        """#))
+        let rows = pulls.map(BoardRow.init)
+        XCTAssertEqual(rows.map(\.stackPosition), [1, 2, 3, nil])
+        var f = BoardFilter()
+        XCTAssertFalse(f.isOn)
+        f.hideLaterStacked = true
+        XCTAssertTrue(f.isOn)
+        XCTAssertEqual(pulls.filter { f.passes(BoardRow($0)) }.map(\.number), [1, 4])
+        // The pickers count only what the toggle leaves.
+        XCTAssertEqual(f.options(.author, rows: rows).map { "\($0.text) \($0.count)" }, ["ana 1", "bo 1"])
+        // Issues carry no stack, so it leaves them all.
+        XCTAssertTrue(f.passes(BoardRow(author: "ana")))
+    }
+
+    func testBoardFilterSavesAndRestoresItsPicks() {
+        var f = BoardFilter(); f[.author] = "Ana"; f.hideLaterStacked = true
+        XCTAssertEqual(f.saved, j(#"{"author":"ana","hideLaterStacked":true}"#))
+        XCTAssertEqual(BoardFilter(saved: f.saved), f)
+        XCTAssertEqual(BoardFilter(saved: j(#"{"label":"bug"}"#)).saved, j(#"{"label":"bug"}"#))
+        XCTAssertEqual(BoardFilter(saved: .null), BoardFilter())
+    }
+
     func testBoardFilterCopiesCompareEqual() {
         var a = BoardFilter(); a[.author] = "Ana"; a[.label] = "bug"
         var b = a
