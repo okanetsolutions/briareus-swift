@@ -1,4 +1,4 @@
-// Pages in windows of their own (the Windows client's detached.c): a conversation, Findings, Usage or WhatsApp
+// Pages in windows of their own (the Windows client's detached.c): a conversation, Findings, Usage, Status or WhatsApp
 // pops out of the main window's detail, as it is, into a window over where it was, so several can sit side by side; the
 // window's dock button puts it back. Each window has a navigator of its own, so what a page there opens stays there, and
 // picking a page that already has a window brings that window forward.
@@ -13,7 +13,7 @@ final class DetachedWindows: NSObject, NSWindowDelegate {
     /// The pages that can have a window of their own.
     static func detachable(_ screen: Screen) -> Bool {
         switch screen {
-        case .conversation, .findings, .usage, .webApp: return true
+        case .conversation, .findings, .usage, .status, .webApp: return true
         default: return false
         }
     }
@@ -114,6 +114,7 @@ final class DetachedWindows: NSObject, NSWindowDelegate {
         case .conversation(_, let session): return session.flatMap { Session($0) }?.displayTitle ?? "Conversation"
         case .findings: return "Findings"
         case .usage: return "Usage"
+        case .status: return "Status"
         case .webApp(let app): return app.name
         default: return "Briareus"
         }

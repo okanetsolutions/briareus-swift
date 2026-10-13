@@ -35,6 +35,7 @@ enum SidebarCommon {
         case .whatsapp: nav.show(.webApp(.whatsapp))
         case .mail: nav.show(MailInboxModel.offered ? .mail : .mailSettings(id: nil))
         case .findings: nav.show(.findings)
+        case .status: nav.show(.status)
         }
     }
 
@@ -140,7 +141,8 @@ private struct SidebarProjectsScreen: View {
     var body: some View {
         SidebarScreenFrame(sessions: nil) {
             Color.clear.frame(height: 10)
-            SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting + attention.approvals) {
+            SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting + attention.approvals,
+                         needsYou: model.overview.needsYouCount) {
                 SidebarCommon.perform($0, newSessionRepo: model.projects.first?.repo)
             }
             Color.clear.frame(height: 14)
@@ -183,7 +185,8 @@ private struct SidebarSessionsScreen: View {
         let selected = navigator.selectedID
         SidebarScreenFrame(sessions: model) {
             Color.clear.frame(height: 10)
-            SidebarStrip(selected: selected, waiting: projects.findingsWaiting + attention.approvals) {
+            SidebarStrip(selected: selected, waiting: projects.findingsWaiting + attention.approvals,
+                         needsYou: projects.overview.needsYouCount) {
                 SidebarCommon.perform($0, newSessionRepo: model.project.repo)
             }
             Color.clear.frame(height: 14)
