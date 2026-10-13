@@ -229,12 +229,12 @@ func pollDelay(base: TimeInterval, failures: Int, retryAfter: Double?) -> TimeIn
 }
 
 /// Polling with the Mac app's backoff, for a `.task`: runs `read` now and again after each delay until the task is
-/// cancelled. `read` answers the error of a failed read, or nil. Polling pauses while the app is out of sight, and a 401
-/// ends it (the store has signed out).
+/// cancelled. `read` answers the error of a failed read, or nil; `base` is asked again before each wait. Polling pauses
+/// while the app is out of sight, and a 401 ends it (the store has signed out).
 @MainActor
-func poll(every base: TimeInterval, immediately: Bool = true, _ read: @MainActor () async -> APIError?) async {
+func poll(every base: @autoclosure () -> TimeInterval, immediately: Bool = true, _ read: @MainActor () async -> APIError?) async {
     var failures = 0
-    var delay: TimeInterval = immediately ? 0 : base
+    var delay: TimeInterval = immediately ? 0 : base()
     while !Task.isCancelled {
         if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
         if Task.isCancelled { return }
@@ -243,7 +243,7 @@ func poll(every base: TimeInterval, immediately: Bool = true, _ read: @MainActor
         let error = await read()
         if error?.unauthorized == true { return }
         if let error, error.kind != .cancelled { failures += 1 } else { failures = 0 }
-        delay = pollDelay(base: base, failures: failures, retryAfter: error?.retryAfter)
+        delay = pollDelay(base: base(), failures: failures, retryAfter: error?.retryAfter)
     }
 }
 

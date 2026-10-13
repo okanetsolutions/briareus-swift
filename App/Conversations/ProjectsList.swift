@@ -50,9 +50,10 @@ struct ProjectsList: View {
             NewConversationSheet(repo: nil) { started in navigate(.conversation(id: started.id, session: started.raw)) }
         }
         .refreshable { _ = await reading { try await model.load() } }
-        // Shown: the counts from the saved lists, then every 30 seconds the server's.
+        // Shown: the counts from the saved lists, then every 30 seconds the server's, or every minute while the live
+        // stream brings the changes.
         .onAppear { model.recount() }
-        .task { await poll(every: 30) { await reading { try await model.load() } } }
+        .task { await poll(every: SessionFeed.shared.live ? 60 : 30) { await reading { try await model.load() } } }
     }
 }
 

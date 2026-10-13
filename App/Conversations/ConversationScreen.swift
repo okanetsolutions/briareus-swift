@@ -53,6 +53,7 @@ struct ConversationScreen: View {
             }
         }
         .task { await model.run() }
+        .task { await model.follow() }
         .onDisappear { model.hidden() }
         .onChange(of: model.deleted) { _, deleted in if deleted { dismiss() } }
         .onChange(of: store.active) { _, active in
