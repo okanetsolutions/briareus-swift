@@ -65,7 +65,7 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 
 **Usage and Settings**
 
-- Shows what the projects spent over a window, by project, activity, provider and model, with the costliest sessions; an admin token sees every project's, others this month's for their own.
+- Shows what the projects spent over a window, by project, activity, provider and model, with the costliest sessions; an admin token sees every project's, others this month's for their own. Above it, every provider account's login and quota windows, as the Mac shows them.
 - With an admin token, edits the server's settings as the Mac app does: projects (active or not, their GitHub Projects board and autonomous review loop) and their order, providers and their logins, the database pool, SSH servers with the database login each stores, Forge accounts, and Slack workspaces with the channels each project may post to. Each field's hint is behind an ⓘ beside it.
 
 **In the car**

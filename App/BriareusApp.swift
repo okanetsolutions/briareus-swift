@@ -48,7 +48,7 @@ struct RootTabs: View {
                     .tabItem { Label("Findings", systemImage: "flag") }
                     .badge(projects.findingsWaiting)
             }
-            if store.supports("usage") || store.supports("usage_all") {
+            if store.supports("usage") || store.supports("usage_all") || store.supports("providers") {
                 NavigationRoot { UsageScreen() }
                     .tabItem { Label("Usage", systemImage: "chart.bar") }
             }
