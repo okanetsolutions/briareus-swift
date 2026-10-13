@@ -184,30 +184,22 @@ final class SessionFeed: ObservableObject {
 
     private func apply(_ event: String, _ j: JSON) {
         let cache = Store.shared.cache
-        switch event {
-        case "session":
-            guard let s = Session(j), let repo = s.repo else { return }
+        switch SessionsEvent(event, j) {
+        case .session(let s)?:
+            guard let repo = s.repo else { return }
             let key = "sessions:\(repo)"
-            var list = cache.value(key).flatMap(Session.parseList) ?? []
-            if let i = list.firstIndex(where: { $0.id == s.id }) {
-                if list[i].raw == s.raw { return }
-                list[i] = s
-            } else {
-                list.insert(s, at: 0)
-            }
+            guard let list = (cache.value(key).flatMap(Session.parseList) ?? []).upserting(s) else { return }
             cache.store(Session.json(list), key)
             post(.sessionLive, ["repo": repo, "session": s.raw])
-        case "session.deleted":
-            guard let id = j["id"].string else { return }
+        case .deleted(let id)?:
             for p in ProjectsModel.shared.projects {
                 let key = "sessions:\(p.repo)"
-                guard var list = cache.value(key).flatMap(Session.parseList), list.contains(where: { $0.id == id }) else { continue }
-                list.removeAll { $0.id == id }
+                guard let list = cache.value(key).flatMap(Session.parseList)?.removing(id) else { continue }
                 cache.store(Session.json(list), key)
                 cache.remove("transcript:\(id)")
                 post(.sessionForgotten, ["id": id, "repo": p.repo])
             }
-        default: return
+        case nil: return
         }
         ProjectsModel.shared.recount()
     }

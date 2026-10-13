@@ -55,6 +55,14 @@ struct RootTabs: View {
             NavigationRoot { SettingsScreen() }
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
+        // Every session's live stream, for as long as this connection lasts.
+        .task(id: liveKey) { await SessionFeed.shared.follow() }
+    }
+
+    /// The connection and whether its server streams the sessions: a change of either opens the stream again.
+    private var liveKey: String {
+        guard let client = store.client else { return "" }
+        return "\(ObjectIdentifier(client).hashValue):\(store.supports("events"))"
     }
 }
 

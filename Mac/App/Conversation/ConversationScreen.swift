@@ -155,12 +155,12 @@ final class ConversationModel: ObservableObject {
     }
     private func applyLive(_ event: String, _ j: JSON) {
         live = true
-        if event == "session" {
-            if let next = Session(j["session"].isObject ? j["session"] : j) { snapshot = next; showPanel() }
-            return
+        switch ConversationEvent(event, j) {
+        case .record(let next)?: snapshot = next; showPanel(); return
+        case .line?: break
+        case nil: return
         }
         // A transcript line, unnamed; one already held (read by a poll meanwhile) adds nothing.
-        guard j["seq"].truncatedInt != nil else { return }
         let before = transcript.events.count
         transcript.append(.array([j]))
         guard transcript.events.count != before else { return }
