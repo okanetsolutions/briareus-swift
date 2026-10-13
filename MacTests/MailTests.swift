@@ -34,6 +34,13 @@ final class MailTests: XCTestCase {
         XCTAssertNil(MailAccount(j(#"{"id":0}"#)))
     }
 
+    func testOnlyAMailboxConnectedReadOnlyIsKeptFromTheTrash() {
+        XCTAssertFalse(accounts.find(7)!.readOnly, "a server that does not say is asked anyway")
+        let a = MailAccounts(j(#"{"accounts":[{"id":1,"provider":"gmail","email":"r@example.com","access":"read"},{"id":2,"provider":"outlook","email":"m@example.com","access":"manage"}],"providers":[]}"#))!
+        XCTAssertTrue(a.find(1)!.readOnly); XCTAssertEqual(a.find(1)!.access, "read")
+        XCTAssertFalse(a.find(2)!.readOnly)
+    }
+
     func testTheSyncWindowIsAWholeNumberOfDaysFrom1To365() {
         for bad in ["", "0", "366", "-1", "+1", "1.5", "NaN", "1e2", "2x", "999999999999999999999999"] { XCTAssertNil(mailSyncDays(bad), bad) }
         XCTAssertEqual(mailSyncDays(" 365 "), 365); XCTAssertEqual(mailSyncDays("1"), 1)
