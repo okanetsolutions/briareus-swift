@@ -297,6 +297,7 @@ struct ScreenView: View {
         case .issue(let repo, let issue): IssueScreen(repo: repo, issue: issue)
         case .findings: FindingsScreen()
         case .usage: UsageScreen()
+        case .status: StatusScreen()
         case .webApp(let app): WebAppScreen(app: app)
         case .projectSettings(let row, let defaults): ProjectSettingsScreen(row: row, defaults: defaults)
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)

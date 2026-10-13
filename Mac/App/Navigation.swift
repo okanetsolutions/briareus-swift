@@ -25,6 +25,8 @@ enum Screen: Hashable, Identifiable {
     case findings
     /// What every project spent over a window.
     case usage
+    /// The conversations waiting for you, with their questions to answer, and those working now.
+    case status
     case webApp(WebApp)
     /// The settings page's forms: `row` is the server's record (nil with `defaults` for a new one).
     case projectSettings(row: JSON?, defaults: JSON?)
@@ -58,6 +60,7 @@ enum Screen: Hashable, Identifiable {
         case .issue(let repo, let issue): return "issue:\(repo)#\(issue["number"].int ?? 0)"
         case .findings: return "findings"
         case .usage: return "usage"
+        case .status: return "status"
         case .webApp(let app): return app.rawValue
         case .projectSettings(let row, _): return "project-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
