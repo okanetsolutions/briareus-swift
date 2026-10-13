@@ -22,6 +22,12 @@ final class UsageModel: ObservableObject {
     @Published private(set) var error: String?
     @Published private(set) var loading = false
     private var generation = 0
+    /// Every provider sessions start on (`GET /providers`), each account with its login and quota windows.
+    @Published private(set) var providers: [JSON] = []
+    @Published private(set) var providersError: String?
+    @Published private(set) var providersLoading = false
+    /// Whether the last read went past the server's cache, so only Check again says it is checking.
+    @Published private(set) var providersFresh = false
 
     private var store: Store { Store.shared }
     /// Whether the token reads every project's ledger at once.
@@ -115,6 +121,19 @@ final class UsageModel: ObservableObject {
         if let failure { throw failure }
     }
 
+    /// The providers' accounts and quota; `fresh` reads them again past the server's cache, as Check again does.
+    func loadProviders(fresh: Bool) async {
+        guard store.supports("providers"), !providersLoading else { return }
+        providersLoading = true; providersFresh = fresh
+        defer { providersLoading = false }
+        do {
+            providers = ProviderQuota.providers(try await store.call("providers", fresh ? ["fresh": "1"] : [:], timeout: 60))
+            providersError = nil
+        } catch {
+            if !error.isCancellation { providersError = errorText(error) }
+        }
+    }
+
     /// A new window or pick: straight to the loader, so the page never reads as the old pick's, and ask again.
     func repick() {
         error = nil
@@ -154,8 +173,13 @@ struct UsageScreen: View {
             .scrollContentBackground(.hidden).background(Theme.canvas)
             .navigationTitle("Usage")
             .toolbar { toolbar }
-            .refreshable { _ = await model.load() }
+            .refreshable {
+                async let providers: Void = model.loadProviders(fresh: false)
+                _ = await model.load()
+                await providers
+            }
             .task { await poll(every: 60) { await model.load() } }
+            .task { await model.loadProviders(fresh: false) }
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
@@ -174,6 +198,7 @@ struct UsageScreen: View {
             }
             ToolbarItem(placement: .topBarTrailing) { filterMenu }
         }
+        ToolbarItem(placement: .topBarTrailing) { OpenInWindowButton(page: .usage) }
     }
 
     /// One submenu per filter: All, then the window's choices; the project and model pickers tick several.
@@ -207,6 +232,7 @@ struct UsageScreen: View {
     }
 
     @ViewBuilder private var content: some View {
+        if store.supports("providers") { providerSections }
         if !model.available {
             Text(adminNeeded).font(.callout).foregroundStyle(.secondary).listRowBackground(Theme.row)
         } else if let u = model.shown {
@@ -216,6 +242,78 @@ struct UsageScreen: View {
         } else {
             ProgressView("Loading the usage ledger…").frame(maxWidth: .infinity).listRowBackground(Color.clear)
         }
+    }
+
+    /// Every provider sessions start on, as the Mac's Accounts and quota: a section each, with a dot for how it stands,
+    /// and under it each account with whom it is logged in as and its plan's quota windows, so a spent account shows
+    /// before a session fails on it.
+    @ViewBuilder private var providerSections: some View {
+        if let error = model.providersError {
+            Section("Accounts and quota") { ErrorNotice(message: error) }.listRowBackground(Theme.row)
+        } else if model.providers.isEmpty {
+            Section("Accounts and quota") {
+                if model.providersLoading {
+                    HStack(spacing: 10) { ProgressView(); Text("Reading the providers' accounts…").foregroundStyle(.secondary) }
+                } else {
+                    Text("No providers on this server.").font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            .listRowBackground(Theme.row)
+        }
+        ForEach(Array(model.providers.enumerated()), id: \.offset) { i, p in
+            Section {
+                ForEach(Array(ProviderQuota.accounts(p).enumerated()), id: \.offset) { _, a in providerAccount(a, of: p) }
+            } header: {
+                VStack(alignment: .leading, spacing: 6) {
+                    if i == 0 { Text("Accounts and quota") }
+                    providerHeader(p)
+                }
+            }
+            .listRowBackground(Theme.row)
+        }
+        if !model.providers.isEmpty || model.providersError != nil {
+            Section {
+                Button {
+                    Task { await model.loadProviders(fresh: true) }
+                } label: {
+                    HStack(spacing: 8) {
+                        if model.providersLoading && model.providersFresh { ProgressView() }
+                        Text(model.providersLoading && model.providersFresh ? "Checking…" : "Check again")
+                    }
+                }
+                .disabled(model.providersLoading)
+            } footer: {
+                Text("Check again reads every account and its quota again rather than the server's last answer.")
+            }
+            .listRowBackground(Theme.row)
+        }
+    }
+
+    private func providerHeader(_ p: JSON) -> some View {
+        let health = ProviderQuota.health(p)
+        return HStack(spacing: 8) {
+            Circle().fill(health == .missing ? Theme.danger : health == .loggedOut ? Theme.warn : Theme.ok)
+                .frame(width: 8, height: 8).accessibilityHidden(true)
+            Text(ProviderQuota.title(p))
+            if health == .missing { Text("CLI not installed").foregroundStyle(Theme.danger) }
+            Spacer()
+            if let m = p["defaultModel"].nonEmpty { Text(m).lineLimit(1) }
+        }
+        .textCase(nil)
+    }
+
+    /// One login: whom it is logged in as, then its quota windows, or why it has none.
+    @ViewBuilder private func providerAccount(_ a: JSON, of p: JSON) -> some View {
+        let login = ProviderQuota.login(a)
+        let name = ProviderQuota.accountName(a, of: p)
+        if name != nil || !login.text.isEmpty {
+            HStack(spacing: 6) {
+                if let name { Text(name).font(.subheadline.weight(.medium)) }
+                Text(login.text).font(.subheadline).foregroundStyle(login.loggedOut ? Theme.danger : .secondary).lineLimit(1)
+            }
+        }
+        ForEach(Array(ProviderQuota.windows(a).enumerated()), id: \.offset) { _, w in ProviderQuotaBar(window: w) }
+        if let note = ProviderQuota.windowsNote(a) { Text(note).font(.footnote).foregroundStyle(.secondary) }
     }
 
     private var adminNeeded: String {

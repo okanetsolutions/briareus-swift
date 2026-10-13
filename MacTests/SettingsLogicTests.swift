@@ -131,6 +131,41 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertEqual(r.models, "a\nb")
     }
 
+    func testProviderQuota() {
+        let payload: JSON = ["providers": [
+            ["id": "claude", "label": "Claude", "available": true, "auth": ["loggedIn": true],
+             "accounts": [
+                ["id": "a", "label": "Work", "auth": ["loggedIn": true, "detail": "a@b (max)"],
+                 "usage": ["windows": [["label": "5h", "usedPct": 75, "resetsAt": "2026-01-02T10:00:00Z"]]]],
+                ["id": "b", "auth": ["loggedIn": false], "usage": ["error": "Not logged in"]],
+             ]],
+            ["id": "codex", "available": false, "auth": ["loggedIn": true], "usage": ["windows": []]],
+            ["id": "grok", "label": "Grok", "available": true, "auth": ["loggedIn": false]],
+        ]]
+        let ps = ProviderQuota.providers(payload)
+        XCTAssertEqual(ps.map(ProviderQuota.title), ["Claude", "codex", "Grok"])
+        XCTAssertEqual(ps.map(ProviderQuota.health), [.ready, .missing, .loggedOut])
+        let accounts = ProviderQuota.accounts(ps[0])
+        XCTAssertEqual(accounts.count, 2)
+        XCTAssertEqual(ProviderQuota.accountName(accounts[0], of: ps[0]), "Work")
+        XCTAssertEqual(ProviderQuota.accountName(accounts[1], of: ps[0]), "b")
+        XCTAssertEqual(ProviderQuota.login(accounts[0]).text, "a@b (max)")
+        XCTAssertTrue(ProviderQuota.login(accounts[1]).loggedOut)
+        let now = Date(timeIntervalSince1970: 1_767_225_600)   // 2026-01-01 00:00 UTC
+        let w = ProviderQuota.windows(accounts[0], now: now)
+        XCTAssertEqual(w.map(\.label), ["5h"])
+        XCTAssertEqual(w.first?.pct, 75)
+        XCTAssertTrue(w.first?.right.hasPrefix("75% used · resets ") ?? false)
+        XCTAssertNil(ProviderQuota.windowsNote(accounts[0]))
+        XCTAssertEqual(ProviderQuota.windowsNote(accounts[1]), "Not logged in")
+        // A provider with no accounts list stands for its own one login.
+        let single = ProviderQuota.accounts(ps[1])
+        XCTAssertEqual(single.count, 1)
+        XCTAssertNil(ProviderQuota.accountName(single[0], of: ps[1]))
+        XCTAssertEqual(ProviderQuota.login(single[0]).text, "logged in")
+        XCTAssertEqual([10, 70, 89.9, 90].map(ProviderQuota.level), [.ok, .close, .close, .spent])
+    }
+
     func testDBServerPortAndTest() throws {
         var s = DBServerFormState(row: ["id": 1, "host": "h", "port": 3306, "enabled": true, "password": " p "])
         XCTAssertEqual(s.text(.port), "3306")

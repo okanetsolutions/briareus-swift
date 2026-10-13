@@ -37,7 +37,7 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 - With an Admin token, opens a session's ⚡ Webhook from the conversation's menu (● while armed): arm it, set its hourly and turns-in-a-row caps, SSH unattended and the instructions webhook, copy its URLs and keys (hidden until shown), see held deliveries and pauses, and rotate its keys. Going back with changes not saved asks first.
 - Triages a review round from its conversation or from the Findings tab: a verdict and a comment per finding, a note for the fix session, replies and deletions on a round that is not yours.
 - Records voice notes and has the server transcribe them into the message box, in whichever language was spoken. On a server that cannot transcribe, the microphone says what the server is missing.
-- On an iPad, keeps the projects and conversations in a column on the left and the chosen conversation on the right. A window too narrow for both falls back to the phone's single column.
+- On an iPad, keeps the projects and conversations in a column on the left and the chosen conversation on the right. A window too narrow for both falls back to the phone's single column. Open in New Window, in a conversation's menu or its row's, opens it in a window of its own beside the app's, as the Mac pops one out; Findings, Usage and a conversation's shared browser open in one the same way.
 - On a Mac, runs as a Mac app of its own (`Mac/`), the twin of [Briareus for Windows](https://github.com/okanetsolutions/briareus-windows): the same screens, layout and features, on the client API (`/api/v1`). See [The Mac app](#the-mac-app).
 
 **Voice**
@@ -65,7 +65,7 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 
 **Usage and Settings**
 
-- Shows what the projects spent over a window, by project, activity, provider and model, with the costliest sessions; an admin token sees every project's, others this month's for their own.
+- Shows what the projects spent over a window, by project, activity, provider and model, with the costliest sessions; an admin token sees every project's, others this month's for their own. Above it, every provider account's login and quota windows, as the Mac shows them.
 - With an admin token, edits the server's settings as the Mac app does: projects (active or not, their GitHub Projects board and autonomous review loop) and their order, providers and their logins, the database pool, SSH servers with the database login each stores, Forge accounts, and Slack workspaces with the channels each project may post to. Each field's hint is behind an ⓘ beside it.
 
 **In the car**

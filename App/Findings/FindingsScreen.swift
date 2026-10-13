@@ -110,6 +110,7 @@ struct FindingsScreen: View {
         .scrollContentBackground(.hidden).background(Theme.canvas)
         .navigationTitle(repo.flatMap { projects.project($0)?.title }.map { "Findings · \($0)" } ?? "Findings")
         .navigationBarTitleDisplayMode(repo == nil ? .large : .inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { OpenInWindowButton(page: .findings(repo: repo)) } }
         .refreshable { try? await model.load(fresh: true) }
         .task { await poll(every: ProjectFeed.sessionsEvery) { await reading { try await model.load() } } }
         .sheet(item: Binding(get: { opened.map(OpenedRound.init) }, set: { opened = $0?.id })) { o in
