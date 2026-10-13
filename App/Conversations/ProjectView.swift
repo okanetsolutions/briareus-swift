@@ -10,6 +10,7 @@ struct ProjectView: View {
     @ObservedObject private var feed: ProjectFeed
     @ObservedObject private var projects = ProjectsModel.shared
     @Environment(\.navigate) private var navigate
+    @WindowOpener private var openInWindow
     @State private var search = ""
     @State private var showClosed = false
     @State private var composing = false
@@ -221,6 +222,11 @@ struct ProjectView: View {
     }
 
     @ViewBuilder private func menu(_ s: Session) -> some View {
+        if let openInWindow {
+            Button("Open in New Window", systemImage: "plus.rectangle.on.rectangle") {
+                openInWindow(.conversation(id: s.id, session: s.raw))
+            }
+        }
         if store.supports("rename") { Button("Rename", systemImage: "pencil") { startRename(s) } }
         if s.status == "closed" {
             if store.supports("reopen") { Button("Reopen", systemImage: "arrow.uturn.backward") { asked = RowAction(session: s, action: "reopen") } }

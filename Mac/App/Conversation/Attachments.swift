@@ -233,7 +233,7 @@ final class SavedPrompts {
     }
     func forget() { byRepo = [:] }
 
-    /// 📚's menu: the prompts to put in the composer, then Save the text as a prompt and Delete a prompt.
+    /// 📚's menu: the prompts to put in the composer, then Save the text as a prompt, Edit a prompt and Delete a prompt.
     func pick(repo: String?, text: String, insert: @escaping (String) -> Void) {
         Task {
             let prompts = await list(repo)
@@ -242,13 +242,16 @@ final class SavedPrompts {
             rows.append(.divider)
             let canSave = Store.shared.supports("create_prompt") && !text.cTrimmed.isEmpty
             rows.append(MenuRow(title: "Save the message as a prompt…", enabled: canSave))
+            let canEdit = Store.shared.supports("update_prompt") && !prompts.isEmpty
+            rows.append(MenuRow(title: "Edit a prompt…", enabled: canEdit))
             let canDelete = Store.shared.supports("delete_prompt") && !prompts.isEmpty
             rows.append(MenuRow(title: "Delete a prompt…", enabled: canDelete))
             guard let i = popUpMenu(rows) else { return }
             if i < prompts.count { insert(prompts[i]["body"].string ?? ""); return }
-            let actions = rows.count - 2
+            let actions = rows.count - 3
             if i == actions { save(repo: repo, text: text) }
-            else if i == actions + 1 { delete(from: prompts) }
+            else if i == actions + 1 { edit(from: prompts) }
+            else if i == actions + 2 { delete(from: prompts) }
         }
     }
 
@@ -263,6 +266,21 @@ final class SavedPrompts {
         if let repo, !everywhere { body["repo"] = .string(repo) }
         Task {
             let r = await boardCall("create_prompt", body)
+            if let e = r.error { Dialogs.alert("The prompt was not saved", e.description) }
+            forget()
+        }
+    }
+    /// Its title, then its text; where it is offered stays as it was.
+    private func edit(from prompts: [JSON]) {
+        guard let i = popUpMenu(prompts.map { MenuRow(title: $0["title"].string ?? "") }), let id = prompts[i]["id"].truncatedInt else { return }
+        let p = prompts[i]
+        guard let title = Dialogs.text("Edit the prompt", label: "Its title, as the 📚 menu lists it.", okLabel: "Next",
+                                       current: p["title"].string ?? "")?.cTrimmed, !title.isEmpty,
+              let body = Dialogs.text("Edit the prompt", label: "What it puts in the message box.", okLabel: "Save",
+                                      current: p["body"].string ?? "", multiline: true),
+              !body.cTrimmed.isEmpty else { return }
+        Task {
+            let r = await boardCall("update_prompt", ["id": JSON(id), "title": .string(title), "body": .string(body)])
             if let e = r.error { Dialogs.alert("The prompt was not saved", e.description) }
             forget()
         }

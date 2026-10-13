@@ -489,6 +489,46 @@ enum ProviderStatusText {
     }
 }
 
+/// The providers' accounts and quota at a glance, as `GET /providers` lists them: every provider sessions start on, each
+/// account with whom it is logged in as and the quota windows its plan meters. The Usage screens draw it on both apps.
+enum ProviderQuota {
+    /// How a provider stands: its CLI not installed, an account logged out, or ready.
+    enum Health: Equatable, Sendable { case missing, loggedOut, ready }
+    /// How full a quota window is: close past 70%, spent past 90%.
+    enum Level: Equatable, Sendable { case ok, close, spent }
+
+    static func providers(_ payload: JSON) -> [JSON] { payload["providers"].items }
+    static func title(_ provider: JSON) -> String { provider["label"].nonEmpty ?? provider["id"].string ?? "Provider" }
+    static func health(_ provider: JSON) -> Health {
+        if !provider["available"].is(true) { return .missing }
+        return provider["auth"]["loggedIn"].is(false) ? .loggedOut : .ready
+    }
+    /// The provider's logins; a server that lists no accounts gives the provider's own login and quota as the one.
+    static func accounts(_ provider: JSON) -> [JSON] {
+        let list = provider["accounts"].items
+        return list.isEmpty && (provider["auth"].isObject || provider["usage"].isObject) ? [provider] : list
+    }
+    /// An account's name, said only when the provider has several logins.
+    static func accountName(_ account: JSON, of provider: JSON) -> String? {
+        accounts(provider).count > 1 ? account["label"].nonEmpty ?? account["id"].nonEmpty : nil
+    }
+    /// What is said of an account's login, and whether it is logged out.
+    static func login(_ account: JSON) -> (text: String, loggedOut: Bool) {
+        let auth = account["auth"]
+        if auth["loggedIn"].is(false) { return ("not logged in", true) }
+        return (auth["detail"].nonEmpty ?? (auth["loggedIn"].is(true) ? "logged in" : ""), false)
+    }
+    /// The account's quota windows, each with its label and what is said on its right.
+    static func windows(_ account: JSON, now: Date = Date()) -> [(label: String, right: String, pct: Double)] {
+        account["usage"]["windows"].items.map { ProviderStatusText.window($0, now: now) }
+    }
+    /// Why an account shows no windows, when the server says.
+    static func windowsNote(_ account: JSON) -> String? {
+        account["usage"]["windows"].items.isEmpty ? account["usage"]["error"].nonEmpty : nil
+    }
+    static func level(_ pct: Double) -> Level { pct >= 90 ? .spent : pct >= 70 ? .close : .ok }
+}
+
 // MARK: - Database servers
 
 enum DBServerTab: Int, CaseIterable, Sendable {
