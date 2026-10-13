@@ -82,7 +82,8 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 - Pairs with a per-device token stored in Keychain, and revokes it remotely or forgets the local connection.
 - Hides write controls on a Read-only token. The route catalog the server publishes (`/api/v1/openapi.json`) keeps what it does not offer unavailable, so the app adapts to older and newer servers.
 - Saves projects, conversations, transcripts and pull requests on the device. A screen opens on what it last showed and then asks the server only for what changed; a saved transcript resumes from its last event, and pulling down reads it again in full.
-- Pauses polling in the background and covers the app switcher snapshot.
+- Updates the conversation lists and an open transcript live while the app is in front, over the server's event streams (`GET /events`, `GET /sessions/{id}/events`), as the Mac does: a dropped stream comes back with a backoff from its last event, and a server without them, or a stream that keeps failing, leaves the app polling as before. Polling slows to a safety read every minute (every 30 seconds for a transcript) while a stream flows.
+- Closes the streams and pauses polling in the background, catching up on return, and covers the app switcher snapshot.
 
 ## The Mac app
 

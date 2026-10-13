@@ -109,8 +109,37 @@ final class ConversationScreenModel: ObservableObject {
         if next != blocks { blocks = next }
     }
 
-    /// Polls while the screen is up: often while the agent works, less once it waits, rarely once closed, with the
-    /// the Mac app's backoff; never while a write or a dialog is under way.
+    /// Whether the session's event stream is flowing, so polling only checks in now and then.
+    @Published private(set) var live = false
+
+    /// Follows the session's event stream while the screen is up and the app in front, as the Mac does: each transcript
+    /// line lands as it is written, and the record on each change. It opens after the lines already read, so a stream
+    /// that dropped, or closed while the app was in the background, picks up where it stopped.
+    func follow() async {
+        guard Store.shared.supports("session_events") else { return }
+        await followLive("session_events", { ["sessionId": .string(id), "since": JSON(transcript.cursor)] },
+                         ready: { loaded && !deleted },
+                         live: { [weak self] in self?.live = $0 }) { [weak self] event, data in self?.applyLive(event, data) }
+        live = false
+    }
+    private func applyLive(_ event: String, _ data: JSON) {
+        switch ConversationEvent(event, data) {
+        case .record(let next)?:
+            if next != snapshot { snapshot = next }
+        case .line(let line)?:
+            // A line already held (read by a poll meanwhile) adds nothing.
+            let before = transcript.events.count
+            transcript.append(.array([line]))
+            guard transcript.events.count != before else { return }
+            if !unsaved { unsaved = !Store.shared.cache.append([line], cacheKey) }
+            rebuild()
+        case nil: return
+        }
+    }
+
+    /// Polls while the screen is up: often while the agent works, less once it waits, rarely once closed, with
+    /// the Mac app's backoff; every 30 seconds while the event stream brings the lines; never while a write or a dialog
+    /// is under way.
     func run() async {
         var failures = 0
         while !Task.isCancelled {
@@ -120,7 +149,7 @@ final class ConversationScreenModel: ObservableObject {
             if !busy && !paused && !loading && !deleted { failed = await refresh(full: false) }
             if Task.isCancelled || failed?.unauthorized == true { return }
             if let failed, failed.kind != .cancelled { failures += 1 } else { failures = 0 }
-            let delay = pollDelay(base: conversationPollInterval(session), failures: failures, retryAfter: failed?.retryAfter)
+            let delay = pollDelay(base: live ? 30 : conversationPollInterval(session), failures: failures, retryAfter: failed?.retryAfter)
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         }
     }

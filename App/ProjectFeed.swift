@@ -41,9 +41,11 @@ final class ProjectFeed: ObservableObject {
         if let saved = Store.shared.cache.value("pulls:\(repo)") { board = saved; boardLoaded = true; parseBoard() }
     }
 
-    /// `fresh` asks the server whatever was read a moment ago, as after a write or a pull to refresh.
+    /// `fresh` asks the server whatever was read a moment ago, as after a write or a pull to refresh. While the live
+    /// stream brings the changes (LiveFeed.swift), a poll asks only once a minute, in case one was missed.
     func loadSessions(fresh: Bool = false) async throws {
-        try await read(\.readingSessions, every: Self.sessionsEvery, fresh: fresh) { [self] in
+        let every = SessionFeed.shared.live ? 60 : Self.sessionsEvery
+        try await read(\.readingSessions, every: every, fresh: fresh) { [self] in
             let answer = try await Store.shared.call("sessions", ["repo": .string(repo)])
             guard let list = Session.parseList(listOf(answer, "sessions")) else { throw APIError(.nonJSON) }
             adopt(list)
@@ -61,6 +63,21 @@ final class ProjectFeed: ObservableObject {
     /// A deleted conversation leaves the list at once, before the server is asked again.
     func drop(_ id: String) {
         adopt(sessions.filter { $0.id != id })
+    }
+    /// A record from the live stream, in its row's place or first when new; the ⚑ count follows a review round held or
+    /// let go.
+    func upsert(_ s: Session) {
+        guard let list = sessions.upserting(s) else { return }
+        let held = sessions.first { $0.id == s.id }?.heldRound != nil
+        sessions = list
+        sessionsLoaded = true
+        Store.shared.cache.store(Session.json(list), "sessions:\(repo)")
+        if held != (s.heldRound != nil) { ProjectsModel.shared.recount() }
+    }
+    /// A conversation the live stream says was deleted, if it is in this list.
+    func remove(_ id: String) {
+        guard let list = sessions.removing(id) else { return }
+        adopt(list)
     }
 
     /// When each repository's pull request list may be read again, shared by every project's feed.
