@@ -50,13 +50,18 @@ enum SidebarCommon {
     }
 }
 
-/// A sidebar screen: the strip and the rows scrolling between the sidebar's 10px margins, over the foot.
+/// A sidebar screen: the strip held at the top, then the rows scrolling under it between the sidebar's 10px margins, over
+/// the foot.
 private struct SidebarScreenFrame<Content: View>: View {
     var sessions: SidebarSessions?
+    var strip: SidebarStrip
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(spacing: 0) {
+            strip
+                .padding(.horizontal, Theme.sidebarMargin)
+                .padding(.top, 10).padding(.bottom, 14)
             SidebarScroll { content() }
             SidebarFooter(sessions: sessions, settings: SidebarCommon.openSettings, signOut: SidebarCommon.signOut)
         }
@@ -139,13 +144,11 @@ private struct SidebarProjectsScreen: View {
     @ObservedObject private var attention = AttentionModel.shared
 
     var body: some View {
-        SidebarScreenFrame(sessions: nil) {
-            Color.clear.frame(height: 10)
-            SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting + attention.approvals,
-                         needsYou: model.overview.needsYouCount) {
-                SidebarCommon.perform($0, newSessionRepo: model.projects.first?.repo)
-            }
-            Color.clear.frame(height: 14)
+        let strip = SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting + attention.approvals,
+                                 needsYou: model.overview.needsYouCount) {
+            SidebarCommon.perform($0, newSessionRepo: model.projects.first?.repo)
+        }
+        SidebarScreenFrame(sessions: nil, strip: strip) {
             if !store.canManage {
                 SidebarNote(text: "🔒 Read-only access", font: Theme.caption, wraps: false)
                 Color.clear.frame(height: 8)
@@ -183,13 +186,11 @@ private struct SidebarSessionsScreen: View {
 
     var body: some View {
         let selected = navigator.selectedID
-        SidebarScreenFrame(sessions: model) {
-            Color.clear.frame(height: 10)
-            SidebarStrip(selected: selected, waiting: projects.findingsWaiting + attention.approvals,
-                         needsYou: projects.overview.needsYouCount) {
-                SidebarCommon.perform($0, newSessionRepo: model.project.repo)
-            }
-            Color.clear.frame(height: 14)
+        let strip = SidebarStrip(selected: selected, waiting: projects.findingsWaiting + attention.approvals,
+                                 needsYou: projects.overview.needsYouCount) {
+            SidebarCommon.perform($0, newSessionRepo: model.project.repo)
+        }
+        SidebarScreenFrame(sessions: model, strip: strip) {
             // `‹ All projects`, the project itself (its pull requests), then its conversations.
             BackRow { projects.openProject = nil }
             Color.clear.frame(height: 2)
