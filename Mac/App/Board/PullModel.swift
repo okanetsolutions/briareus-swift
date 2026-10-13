@@ -5,15 +5,6 @@ import SwiftUI
 
 enum PullTab: Int { case body, conversation, sessions, files, commits, checks, findings, run }
 
-/// One of the Conversation tab's lists, read page by page: `incoming` fills up and replaces `items` once the last page is in.
-struct ConvList {
-    var items: JSON = []
-    var incoming: JSON?
-    var read = false
-    var error: String?
-    var loading = false
-}
-
 @MainActor
 final class PullModel: ObservableObject {
     let repo: String
@@ -268,38 +259,24 @@ final class PullModel: ObservableObject {
     // MARK: Conversation
 
     /// Whether every list the server offers has been read once.
-    var convRead: Bool { ConvFeed.allCases.allSatisfy { !Store.shared.supports($0.operation) || conv[$0.rawValue].read } }
+    var convRead: Bool { convAllRead(conv, supports: Store.shared.supports) }
     /// Reads the comments, reviews and line comments afresh; what was read stays shown until the new lists are in.
     func convLoad() {
         for f in ConvFeed.allCases where !conv[f.rawValue].loading && Store.shared.supports(f.operation) {
-            conv[f.rawValue].incoming = []
-            conv[f.rawValue].loading = true
+            conv[f.rawValue].begin()
             convTasks[f.rawValue] = Task { await convPages(f) }
         }
     }
     private func convPages(_ f: ConvFeed) async {
         var page = 1
         while true {
-            let r = await boardCall(f.operation, ["repo": .string(repo), "pr": JSON(number), "page": JSON(page)])
-            switch r {
+            switch await boardCall(f.operation, ["repo": .string(repo), "pr": JSON(number), "page": JSON(page)]) {
             case .failure(let e):
-                conv[f.rawValue].loading = false
-                if e.kind == .cancelled { conv[f.rawValue].incoming = nil; return }
-                conv[f.rawValue].error = e.description
-                conv[f.rawValue].incoming = nil
-                conv[f.rawValue].read = true
+                conv[f.rawValue].fail(e.kind == .cancelled ? nil : e.description)
                 return
             case .success(let v):
-                var incoming = conv[f.rawValue].incoming ?? []
-                for row in v[f.field].items { incoming.append(row) }
-                conv[f.rawValue].incoming = incoming
-                if let next = v["nextPage"].number, next > Double(page) { page = Int(next); continue }
-                conv[f.rawValue].items = incoming
-                conv[f.rawValue].incoming = nil
-                conv[f.rawValue].read = true
-                conv[f.rawValue].error = nil
-                conv[f.rawValue].loading = false
-                return
+                guard let next = conv[f.rawValue].take(v, feed: f, page: page) else { return }
+                page = next
             }
         }
     }
