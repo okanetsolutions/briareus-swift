@@ -1,6 +1,6 @@
-// The review rounds waiting for a decision, across every project (the Findings tab) or one project's, as the Mac's
-// Findings screen queues them: oldest held first, grouped by the pull request they were left on. A round opens its
-// triage card in a sheet; its conversation and its pull request open on the tab's stack.
+// The review rounds waiting for a decision, across every project (the Findings tab, under ◉ Status) or one project's, as
+// the Mac's Findings screen queues them: oldest held first, grouped by the pull request they were left on. A round opens
+// its triage card in a sheet; its conversation and its pull request open on the tab's stack.
 import Combine
 import SwiftUI
 
@@ -87,8 +87,13 @@ struct FindingsScreen: View {
                 Section { ForEach(drafts.outcomes) { outcomeRow($0) } }
             }
             if let error = model.error { ErrorNotice(message: error).listRowBackground(Theme.row) }
+            if repo == nil { StatusSections() }
             if !model.queue.isEmpty {
-                Section {} footer: { Text(findingsSubtitle(rounds: model.queue.count, pullRequests: groups.count).asciiCapitalized) }
+                Section {} header: {
+                    if repo == nil { Text("Findings to decide") }
+                } footer: {
+                    Text(findingsSubtitle(rounds: model.queue.count, pullRequests: groups.count).asciiCapitalized)
+                }
             }
             ForEach(groups, id: \.rounds.first!.id) { g in
                 Section {
