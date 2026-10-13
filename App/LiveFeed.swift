@@ -65,10 +65,19 @@ func followLive(_ name: String, _ arguments: () -> JSON = { [:] }, ready: () -> 
 final class SessionFeed: ObservableObject {
     static let shared = SessionFeed()
     @Published private(set) var live = false
+    /// Whether a window follows the stream. An iPad can show the app's tabs in several windows; only one of them opens
+    /// the stream, and another takes over when that one closes.
+    private var following = false
 
     /// Follows the stream while the calling task runs, on a server that has it.
     func follow() async {
         guard Store.shared.supports("events") else { return }
+        while following {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            if Task.isCancelled { return }
+        }
+        following = true
+        defer { following = false }
         await followLive("events", live: { SessionFeed.shared.set(live: $0) }) { event, data in
             SessionFeed.shared.apply(event, data)
         }
