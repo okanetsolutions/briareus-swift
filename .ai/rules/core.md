@@ -18,4 +18,4 @@ Add to the domain file that owns the concept (`Board.swift` and `BoardLogic.swif
 A function or type added or moved here gets a test in `MacTests/` in the same change.
 
 ## Tokens are generated
-`BriareusTokens.swift` comes from briareus-contracts. Change tokens there and sync with `node scripts/sync.mjs`; never edit the file here.
+`BriareusTokens.swift` comes from briareus-contracts. Change tokens there and copy its `dist/swift/BriareusTokens.swift` over this one; never edit the file here.

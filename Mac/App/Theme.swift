@@ -1,6 +1,6 @@
 // The look every Briareus client shares, dark or light as macOS's appearance says: the palette (canvas, sidebar, raise, field,
 // sunken, line, ink, muted, accent), the status colours, the type sizes, the columns and the working indicator all come from
-// briareus-contracts (Mac/Core/BriareusTokens.swift, generated there and copied in by its `node scripts/sync.mjs`).
+// briareus-contracts (Mac/Core/BriareusTokens.swift, generated there and copied in from its dist/swift/).
 import AppKit
 import SwiftUI
 
