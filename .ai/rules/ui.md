@@ -12,7 +12,7 @@ These rules govern every screen of the Mac app and the iPhone and iPad app. Appl
 
 - Build from the app's primitives before custom drawing. Mac: `Mac/App/Components.swift` (`DashButtonStyle`, `GlyphButton`, `Badge`, `Chip`, `Notice`, `NoticeBox`, `LoadingNote`, `EmptyNote`, `SectionTitle`, `LabeledRow`, `Card`, `Segments`, `TabNav`, `FieldStyle`, `FlowLayout`). iPhone: system controls and `App/Theme.swift` (`StatusDot`, `StatusLabel`, `ErrorNotice`, `MarkdownText`, `CodeBlock`).
 - Inherit the palette, text sizes, column widths and working indicator from the tokens (`Theme`, `BriareusRadius`, `BriareusLayout`). Do not choose a new colour, radius or card treatment per screen.
-- Use the same SF Symbol for the same action and state across both apps (`actionIcon(_:)` and `errandSymbol(_:)` name the errands' symbols). Symbols communicate an action or state; no decorative ones.
+- Use the same SF Symbol for the same action and state across both apps. A state's symbol is named once in Core beside its tone (`ReviewStatus.symbol`, `ChecksState.symbol`, `PullMark.symbol`), using the Mac's set, which mirrors the Windows client; the errands' symbols are still named per app (`actionIcon(_:)`, `errandSymbol(_:)`). Symbols communicate an action or state; no decorative ones.
 - The Mac uses the tokens' pixel sizes, as Windows does. The iPhone keeps system text styles so Dynamic Type keeps working.
 
 ## Screen patterns

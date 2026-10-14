@@ -24,6 +24,14 @@ enum ChecksState: Equatable, Sendable {
         case .pending: return .warn
         }
     }
+    /// The SF Symbol both apps draw it with.
+    var symbol: String {
+        switch self {
+        case .passed: return "checkmark"
+        case .failed: return "xmark"
+        case .pending: return "clock"
+        }
+    }
 }
 
 extension ReviewStatus {
@@ -33,6 +41,16 @@ extension ReviewStatus {
         case .changesRequested: return .danger
         case .feedback: return .warn
         case .requested, .none: return .muted
+        }
+    }
+    /// The SF Symbol both apps draw it with (the Mac's, which mirror the Windows client's); nil for no review.
+    var symbol: String? {
+        switch self {
+        case .approved: return "checkmark"
+        case .changesRequested: return "xmark"
+        case .feedback: return "text.bubble"
+        case .requested: return "clock"
+        case .none: return nil
         }
     }
 }
@@ -69,6 +87,18 @@ enum PullMark: Equatable, Sendable {
         case .stack, .suggested: return .accent
         case .review(let status): return status.tone
         case .draft: return .muted
+        }
+    }
+    /// The SF Symbol both apps draw it with.
+    var symbol: String? {
+        switch self {
+        case .running: return "bolt.fill"
+        case .conflicts: return "exclamationmark.triangle"
+        case .checks(let state): return state.symbol
+        case .stack: return "square.3.layers.3d"
+        case .review(let status): return status.symbol
+        case .draft: return "pencil"
+        case .suggested: return "sparkles"
         }
     }
     /// What VoiceOver says for it, where the words alone are not enough.
