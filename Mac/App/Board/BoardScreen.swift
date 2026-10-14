@@ -76,6 +76,11 @@ final class BoardModel: ObservableObject {
     func filtersSave() {
         Store.shared.cache.store(["pulls": pullFilter.saved, "issues": issueFilter.saved], "pulls-filters:\(repo)")
     }
+    /// A pick was made: the board no longer opens on the project's author, and the picks are kept.
+    func picked() {
+        hasOpening = false
+        filtersSave()
+    }
     /// A board never filtered opens on the project's author; one with saved picks opens on them.
     private func filtersRestore() -> Bool {
         guard let saved = Store.shared.cache.value("pulls-filters:\(repo)") else { return false }
@@ -275,33 +280,6 @@ final class BoardModel: ObservableObject {
         Navigator.shared.push(screen)
     }
     func openIssue(_ raw: JSON) { Navigator.shared.push(.issue(repo: repo, issue: raw)) }
-
-    // MARK: Pickers
-
-    /// One picker's menu: `All <kind>s`, then each option with how many rows it would show.
-    func pick(_ kind: FilterKind) {
-        var f = filter
-        let options = f.options(kind, rows: rows)
-        let current = f[kind]
-        var items = [BoardPopupMenu.Item(title: "All \(kind.name)s", checked: current.isEmpty)]
-        for o in options { items.append(BoardPopupMenu.Item(title: "\(o.text) (\(o.count))", checked: current == o.value)) }
-        guard let chosen = BoardPopupMenu.show(items, rightAligned: true) else { return }
-        f.set(kind, chosen == 0 ? "" : options[chosen - 1].value)
-        filter = f
-        hasOpening = false
-        filtersSave()
-    }
-    /// Hide later stacked PRs, or show them again.
-    func toggleLaterStacked() {
-        pullFilter.hideLaterStacked.toggle()
-        hasOpening = false
-        filtersSave()
-    }
-    func clearFilters() {
-        filter = BoardFilter()
-        hasOpening = false
-        filtersSave()
-    }
 }
 
 struct BoardScreen: View {
@@ -472,6 +450,9 @@ struct BoardScreen: View {
                 buttons.append(HeaderButton(glyph: "square.stack.3d.up", label: f.hideLaterStacked ? "Show later stacked PRs" : "Hide later stacked PRs",
                                             tip: "Hide or show stacked pull requests after position 1; keep standalone pull requests visible",
                                             enabled: model.loaded) { model.toggleLaterStacked() })
+                buttons.append(HeaderButton(glyph: ChecksState.failed.symbol, label: f.hideFailingChecks ? "Show failing checks" : "Hide failing checks",
+                                            tip: "Hide or show pull requests whose checks failed; keep those passing, still running or without checks",
+                                            enabled: model.loaded) { model.toggleFailingChecks() })
             }
             buttons.append(refresh)
         }

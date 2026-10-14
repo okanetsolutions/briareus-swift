@@ -271,14 +271,17 @@ struct BoardRow: Equatable, Sendable {
     var labels: [PullLabel]
     /// A pull request's place in its stack, 1 at the bottom; nil outside a stack, and for issues.
     var stackPosition: Int?
+    /// A pull request whose checks failed (red, not still running); false for issues.
+    var checksFailed: Bool
 
-    init(author: String?, reviewers: [Reviewer] = [], assignees: [String] = [], labels: [PullLabel] = [], stackPosition: Int? = nil) {
+    init(author: String?, reviewers: [Reviewer] = [], assignees: [String] = [], labels: [PullLabel] = [], stackPosition: Int? = nil,
+         checksFailed: Bool = false) {
         self.author = author; self.reviewers = reviewers; self.assignees = assignees; self.labels = labels
-        self.stackPosition = stackPosition
+        self.stackPosition = stackPosition; self.checksFailed = checksFailed
     }
     init(_ pull: PullSummary) {
         self.init(author: pull.author, reviewers: pull.reviewers, assignees: pull.assignees, labels: pull.labels,
-                  stackPosition: pull.raw["stack"]["position"].truncatedInt)
+                  stackPosition: pull.raw["stack"]["position"].truncatedInt, checksFailed: pull.checksFailed)
     }
     /// Issues have no reviewers.
     init(_ issue: IssueSummary) { self.init(author: issue.author, assignees: issue.assignees, labels: issue.labels) }
@@ -317,6 +320,9 @@ struct BoardFilter: Equatable, Sendable {
     /// Hide later stacked PRs: a pull request above the bottom of its stack is left out, as it merges only after the ones
     /// under it; one outside a stack stays. Only the pull requests' filter sets it.
     var hideLaterStacked = false
+    /// Hide failing checks: a pull request whose checks failed is left out; one whose checks pass, are still running or
+    /// that has none stays. Only the pull requests' filter sets it.
+    var hideFailingChecks = false
 
     /// The assignee picker's pick for the rows nobody has; GitHub logins never start with a hyphen.
     static let noAssignee = "-"
@@ -329,7 +335,7 @@ struct BoardFilter: Equatable, Sendable {
         if rows.contains(where: { foldEqual($0.author, author) }) { f.author = author.asciiFolded }
         return f
     }
-    var isOn: Bool { hideLaterStacked || !(author.isEmpty && reviewer.isEmpty && assignee.isEmpty && label.isEmpty) }
+    var isOn: Bool { hideLaterStacked || hideFailingChecks || !(author.isEmpty && reviewer.isEmpty && assignee.isEmpty && label.isEmpty) }
     /// Setting folds the value; nil clears the pick.
     subscript(kind: FilterKind) -> String {
         get {
@@ -344,6 +350,7 @@ struct BoardFilter: Equatable, Sendable {
     /// `skipping` leaves one picker out, which is how each counts what it would show without counting itself.
     func passes(_ row: BoardRow, skipping: FilterKind? = nil) -> Bool {
         if hideLaterStacked, let position = row.stackPosition, position > 1 { return false }
+        if hideFailingChecks && row.checksFailed { return false }
         for kind in FilterKind.allCases where kind != skipping {
             let pick = self[kind]
             if pick.isEmpty { continue }
@@ -353,17 +360,19 @@ struct BoardFilter: Equatable, Sendable {
         return true
     }
     /// The picks as saved per repository (`pulls-filters:<repo>`), the Windows client's keys: the pickers by kind name, and
-    /// `hideLaterStacked` while it is on.
+    /// `hideLaterStacked` and `hideFailingChecks` while they are on.
     var saved: JSON {
         var j: JSON = [:]
         for k in FilterKind.allCases where !self[k].isEmpty { j[k.name] = .string(self[k]) }
         if hideLaterStacked { j["hideLaterStacked"] = true }
+        if hideFailingChecks { j["hideFailingChecks"] = true }
         return j
     }
     /// What `saved` kept.
     init(saved j: JSON) {
         for k in FilterKind.allCases { if let v = j[k.name].string { set(k, v) } }
         hideLaterStacked = j["hideLaterStacked"].is(true)
+        hideFailingChecks = j["hideFailingChecks"].is(true)
     }
 
     /// What one picker offers, each counted against the others. A pick they have emptied still lists itself.
