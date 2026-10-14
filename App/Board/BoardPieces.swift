@@ -260,19 +260,13 @@ struct BoardFlowLayout: Layout {
     }
 }
 
-/// GitHub's own colour, or secondary when it sent none that reads.
-func boardLabelColor(_ label: PullLabel) -> Color {
-    guard let rgb = label.rgb else { return .secondary }
-    return Color(.sRGB, red: Double(rgb.red) / 255, green: Double(rgb.green) / 255, blue: Double(rgb.blue) / 255)
-}
-
 /// GitHub labels as chips: the label's colour tints the chip, the name stays in the text colour so a pale one still reads.
 struct BoardLabelChips: View {
     let labels: [PullLabel]
     var body: some View {
         BoardFlowLayout(spacing: 5) {
             ForEach(Array(labels.enumerated()), id: \.offset) { _, label in
-                let color = boardLabelColor(label)
+                let color = Theme.color(label)
                 HStack(spacing: 4) {
                     Circle().fill(color).frame(width: 6, height: 6)
                     Text(label.name).font(.caption2.weight(.medium)).lineLimit(1)

@@ -4,11 +4,6 @@ import SwiftUI
 
 // MARK: - Glyphs and colours
 
-/// A GitHub label's colour for the chips, or the secondary colour.
-func labelColor(_ label: PullLabel) -> Color {
-    guard let rgb = label.rgb else { return Theme.muted }
-    return Color(.sRGB, red: Double(rgb.red) / 255, green: Double(rgb.green) / 255, blue: Double(rgb.blue) / 255)
-}
 /// A finding's severity pill colour (CRIT and HIGH red, MED amber, LOW grey).
 func severityColor(_ severity: String?) -> Color {
     switch severity?.lowercased() {
@@ -79,7 +74,7 @@ struct LabelChips: View {
     var background: Color = Theme.raise
     var body: some View {
         if !labels.isEmpty {
-            Badges(specs: labels.map { BadgeSpec(text: $0.name, color: labelColor($0), chip: true) }, background: background)
+            Badges(specs: labels.map { BadgeSpec(text: $0.name, color: Theme.color($0), chip: true) }, background: background)
         }
     }
 }

@@ -48,6 +48,12 @@ enum Theme {
         }
     }
 
+    /// A GitHub label's own colour, or muted when it sent none that reads (`PullLabel.rgb`).
+    static func color(_ label: PullLabel) -> Color {
+        guard let rgb = label.rgb else { return color(.muted) }
+        return Color(.sRGB, red: Double(rgb.red) / 255, green: Double(rgb.green) / 255, blue: Double(rgb.blue) / 255)
+    }
+
     /// A row mark's tone (Core's `RowTone`) as a colour.
     static func color(_ tone: RowTone) -> Color {
         switch tone {
