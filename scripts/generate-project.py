@@ -65,7 +65,7 @@ macconfigs = config_list('mac', {'PRODUCT_BUNDLE_IDENTIFIER':'com.okanetsolution
 testconfigs = config_list('tests', {'PRODUCT_BUNDLE_IDENTIFIER':'com.okanetsolutions.briareus.uitests', 'PRODUCT_NAME':'BriareusUITests', 'GENERATE_INFOPLIST_FILE':'YES', 'TEST_TARGET_NAME':'Briareus', 'TARGETED_DEVICE_FAMILY':'1,2', 'SUPPORTED_PLATFORMS':'iphoneos iphonesimulator', 'CODE_SIGN_STYLE':'Automatic', 'DEVELOPMENT_TEAM':'WG98W262CP', 'LD_RUNPATH_SEARCH_PATHS':'$(inherited) @executable_path/Frameworks @loader_path/Frameworks'})
 # The app's one dependency: Google's WebRTC, built as a binary Swift package, which carries the voice mode's audio to
 # GPT-Realtime and back with its own echo cancellation, jitter buffer and audio session handling.
-webrtcpackage = put('webrtcPackage', '{isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/stasel/WebRTC"; requirement = {kind = exactVersion; version = "154.0.0";};}')
+webrtcpackage = put('webrtcPackage', '{isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/stasel/WebRTC"; requirement = {kind = exactVersion; version = "155.0.0";};}')
 webrtc = put('webrtcProduct', f'{{isa = XCSwiftPackageProductDependency; package = {webrtcpackage}; productName = WebRTC;}}')
 webrtcbuild = put('webrtcBuild', f'{{isa = PBXBuildFile; productRef = {webrtc};}}')
 phases = [phase('appSources','PBXSourcesBuildPhase',appfiles+corefiles),phase('appFrameworks','PBXFrameworksBuildPhase',[webrtcbuild]),phase('appResources','PBXResourcesBuildPhase',resources)]
