@@ -39,6 +39,19 @@ enum Theme {
         case .inactive: return dot
         }
     }
+
+    /// A row mark's tone (Core's `RowTone`) as a colour: muted and faint follow the system's secondary and tertiary labels.
+    static func color(_ tone: RowTone) -> Color {
+        switch tone {
+        case .ok: return ok
+        case .danger: return danger
+        case .warn: return warn
+        case .muted: return .secondary
+        case .faint: return Color(uiColor: .tertiaryLabel)
+        case .accent: return accent
+        case .running: return statusColor("running")
+        }
+    }
 }
 
 extension Color {
