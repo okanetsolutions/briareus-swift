@@ -5,33 +5,43 @@ struct BriareusApp: App {
     @StateObject private var store = Store.shared
     @Environment(\.scenePhase) private var phase
     var body: some Scene {
-        WindowGroup {
-            ZStack {
-                Group {
-                    if store.client != nil { RootTabs() } else { PairingView() }
-                }
-                if phase != .active {
-                    Theme.canvas.ignoresSafeArea()
-                    Label("Briareus", systemImage: "square.stack.3d.up.fill").font(.largeTitle.bold()).foregroundStyle(Theme.accent)
-                }
+        WindowGroup { shell { RootTabs() } }
+        // A conversation, Findings, Usage or a shared browser in a window of its own (on an iPad), on the same store.
+        WindowGroup(id: DetachedPage.scene, for: DetachedPage.self) { $page in
+            shell {
+                if let page { DetachedPageView(page: page).environment(\.inOwnWindow, true) } else { RootTabs() }
             }
-            .tint(Theme.accent)
-            .noWritingTools()
-            .environmentObject(store)
-            .task { await store.restore() }
-            // Polling stops while the app is out of sight; the car's screen keeps it going on its own.
-            .onChange(of: phase, initial: true) { _, now in
-                store.active = now == .active || CarScreen.connected
-                // The screen stays on while the app is open, as an agent's work is watched rather than touched; iOS
-                // locks it again on its own schedule once the app leaves the front.
-                UIApplication.shared.isIdleTimerDisabled = now == .active
+        }
+    }
+
+    /// What every window holds around its page: pairing until connected, the cover while the app is out of sight, and
+    /// the store's restoring and polling, which follow the app as a whole (this is the app's phase) rather than a window.
+    private func shell<Page: View>(@ViewBuilder _ page: () -> Page) -> some View {
+        ZStack {
+            Group {
+                if store.client != nil { page() } else { PairingView() }
             }
+            if phase != .active {
+                Theme.canvas.ignoresSafeArea()
+                Label("Briareus", systemImage: "square.stack.3d.up.fill").font(.largeTitle.bold()).foregroundStyle(Theme.accent)
+            }
+        }
+        .tint(Theme.accent)
+        .noWritingTools()
+        .environmentObject(store)
+        .task { await store.restore() }
+        // Polling stops while the app is out of sight; the car's screen keeps it going on its own.
+        .onChange(of: phase, initial: true) { _, now in
+            store.active = now == .active || CarScreen.connected
+            // The screen stays on while the app is open, as an agent's work is watched rather than touched; iOS
+            // locks it again on its own schedule once the app leaves the front.
+            UIApplication.shared.isIdleTimerDisabled = now == .active
         }
     }
 }
 
-/// The Mac app's sidebar strip, as a phone's tab bar: the projects and their conversations, the review rounds waiting
-/// across them, what they spent, and Settings.
+/// The Mac app's sidebar strip, as a phone's tab bar: the projects and their conversations, what waits for you across
+/// them (◉ Status and the review rounds, badged with the count needing you), what they spent, and Settings.
 struct RootTabs: View {
     @EnvironmentObject private var store: Store
     @ObservedObject private var projects = ProjectsModel.shared
@@ -46,15 +56,23 @@ struct RootTabs: View {
             if store.supports("sessions") {
                 NavigationRoot { FindingsScreen(repo: nil) }
                     .tabItem { Label("Findings", systemImage: "flag") }
-                    .badge(projects.findingsWaiting)
+                    .badge(projects.overview.needsYouCount)
             }
-            if store.supports("usage") || store.supports("usage_all") {
+            if store.supports("usage") || store.supports("usage_all") || store.supports("providers") {
                 NavigationRoot { UsageScreen() }
                     .tabItem { Label("Usage", systemImage: "chart.bar") }
             }
             NavigationRoot { SettingsScreen() }
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
+        // Every session's live stream, for as long as this connection lasts.
+        .task(id: liveKey) { await SessionFeed.shared.follow() }
+    }
+
+    /// The connection and whether its server streams the sessions: a change of either opens the stream again.
+    private var liveKey: String {
+        guard let client = store.client else { return "" }
+        return "\(ObjectIdentifier(client).hashValue):\(store.supports("events"))"
     }
 }
 

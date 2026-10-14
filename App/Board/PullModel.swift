@@ -34,15 +34,6 @@ enum PullSection: String, CaseIterable, Identifiable {
     }
 }
 
-/// One of the comment lists, read page by page: `incoming` fills up and replaces `items` once the last page is in.
-struct PullCommentList {
-    var items: JSON = []
-    var incoming: JSON?
-    var read = false
-    var error: String?
-    var loading = false
-}
-
 /// What stands in the way of a merge, asked about before it goes ahead.
 struct MergeQuestion: Identifiable {
     var base: String
@@ -86,7 +77,7 @@ final class PullScreenModel: ObservableObject {
     @Published private(set) var readingPull = false
     @Published private(set) var deletingRun: String?
     @Published var runError: String?
-    @Published private(set) var comments = Array(repeating: PullCommentList(), count: ConvFeed.allCases.count)
+    @Published private(set) var comments = Array(repeating: ConvList(), count: ConvFeed.allCases.count)
     private var pullGen = 0
     private var commentTasks: [Task<Void, Never>?] = Array(repeating: nil, count: ConvFeed.allCases.count)
     private var sinks: [AnyCancellable] = []
@@ -94,16 +85,15 @@ final class PullScreenModel: ObservableObject {
     lazy var issueProjects = IssueProjectsReader(repo: repo, linked: { [weak self] in self?.linkedIssues() ?? [] },
                                                  changed: { [weak self] in self?.objectWillChange.send() })
 
-    // The Run tab: opening it serves the pull request (▶ Run) and shows it in an embedded browser. `runSession` is the
-    // session serving it, `runProfile` the profile it serves, `runWant` the one picked, `runAsked` the one the request in
-    // flight asked for.
-    @Published private(set) var runURL: String?
-    @Published private(set) var runSession: String?
-    @Published private(set) var runProfile: String?
-    @Published private(set) var runWant: String?
-    @Published private(set) var runAsked: String?
-    @Published private(set) var serveError: String?
-    @Published private(set) var runBusy = false
+    // The Run tab: opening it serves the pull request (▶ Run) and shows it in an embedded browser. Core's `RunServe` holds
+    // which session serves it, at what address and with which profile; the model makes the calls and runs the browser.
+    @Published private(set) var serve = RunServe()
+    var runURL: String? { serve.url }
+    var runSession: String? { serve.session }
+    var runProfile: String? { serve.profile }
+    var runAsked: String? { serve.asked }
+    var serveError: String? { serve.error }
+    var runBusy: Bool { serve.busy }
     /// Waits for the conversations, in case a Run already serves this pull request.
     private var runPending = false
     /// The project's run profiles, the default first.
@@ -152,42 +142,40 @@ final class PullScreenModel: ObservableObject {
         let listed = pullsFind(rows, number)
         return rowRead ? listed : (listed ?? savedRow ?? summary)
     }
-    /// Until the pull request itself answers, being on the board says it is open.
-    var isOpen: Bool { pr.isNull ? boardRow != nil : pr["state"].string == "open" }
-    var draft: Bool { pr["draft"].is(true) || (pr.isNull && (boardRow?.draft ?? false)) }
-    var author: String? { pr["author"].string ?? boardRow?.author ?? descriptionAuthor }
-    var commitCount: Int { pr["commits"].int32 ?? pr["commitList"].count }
-    var title: String { pr["title"].string ?? boardRow?.title ?? "Pull request #\(number)" }
-    var url: String? { pr["url"].string ?? boardRow?.url }
-    var head: String? { pr["headRef"].string ?? boardRow.flatMap { $0.branch.isEmpty ? nil : $0.branch } }
-    var base: String? { pr["baseRef"].string ?? boardRow.flatMap { $0.baseBranch.isEmpty ? nil : $0.baseBranch } }
-    /// The issues it closes: the board's links, or what the pull request names.
-    var closes: [BoardLink] { boardRow.map(\.issues).flatMap { $0.isEmpty ? nil : $0 } ?? BoardLink.parseList(pr["issues"]) }
+    /// What the pull request is and what may be done with it, as Core decides it.
+    var record: PullRecord { PullRecord(number: number, pr: pr, row: boardRow, descriptionAuthor: descriptionAuthor) }
+    var isOpen: Bool { record.isOpen }
+    var draft: Bool { record.draft }
+    var author: String? { record.author }
+    var commitCount: Int { record.commitCount }
+    var title: String { record.title }
+    var url: String? { record.url }
+    var head: String? { record.head }
+    var base: String? { record.base }
+    var closes: [BoardLink] { record.closes }
 
     /// The errands on offer: those the server lists for an open pull request with a branch. ▶ Run is the Run tab here.
     func actions(_ catalog: JSON) -> [BoardAction] {
-        guard isOpen, pr["headRef"].string != nil else { return [] }
-        return boardErrands(catalog: catalog, pull: boardRow, failedChecks: pr["checks"]["failed"].int32 ?? 0).filter { $0.id != "run" }
+        let record = record
+        guard record.takesErrands else { return [] }
+        return record.errands(boardErrands(catalog: catalog, pull: boardRow, failedChecks: record.failedChecks))
     }
 
     // MARK: Saving
 
-    private var key: String { "pull:\(repo)#\(number)" }
+    private var key: String { PullSnapshot.key(repo: repo, number: number) }
     private func save() {
-        guard !pr.isNull else { return }
-        var saved: JSON = ["pr": pr, "findings": findings, "row": boardRow?.raw ?? .null, "stack": stack?.json ?? .null]
-        if let descriptionBody { saved["body"] = .string(descriptionBody) }
-        if let descriptionAuthor { saved["bodyAuthor"] = .string(descriptionAuthor) }
-        Store.shared.cache.store(saved, key)
+        let snapshot = PullSnapshot(pr: pr, findings: findings, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
+        if let saved = snapshot.json { Store.shared.cache.store(saved, key) }
     }
     private func restore() {
-        guard let saved = Store.shared.cache.value(key) else { return }
-        pr = saved["pr"]
-        findings = saved["findings"]
-        descriptionBody = saved["body"].string
-        descriptionAuthor = saved["bodyAuthor"].string
-        savedRow = PullSummary(saved["row"])
-        if stack == nil { stack = StackPosition(restoring: saved["stack"]) }
+        guard let saved = PullSnapshot(Store.shared.cache.value(key)) else { return }
+        pr = saved.pr
+        findings = saved.findings
+        descriptionBody = saved.body
+        descriptionAuthor = saved.bodyAuthor
+        savedRow = saved.row
+        if stack == nil { stack = saved.stack }
     }
 
     // MARK: Reading
@@ -276,7 +264,7 @@ final class PullScreenModel: ObservableObject {
     // MARK: Comments and reviews
 
     /// Whether every list the server offers has been read once.
-    var commentsRead: Bool { ConvFeed.allCases.allSatisfy { !Store.shared.supports($0.operation) || comments[$0.rawValue].read } }
+    var commentsRead: Bool { convAllRead(comments, supports: Store.shared.supports) }
     var commentItems: JSON { comments[ConvFeed.comments.rawValue].items }
     var reviewItems: JSON { comments[ConvFeed.reviews.rawValue].items }
     var lineItems: JSON { comments[ConvFeed.reviewComments.rawValue].items }
@@ -289,8 +277,7 @@ final class PullScreenModel: ObservableObject {
     /// Reads the comments, reviews and line comments afresh; what was read stays shown until the new lists are in.
     func commentsLoad() {
         for f in ConvFeed.allCases where !comments[f.rawValue].loading && Store.shared.supports(f.operation) {
-            comments[f.rawValue].incoming = []
-            comments[f.rawValue].loading = true
+            comments[f.rawValue].begin()
             commentTasks[f.rawValue] = Task { await commentPages(f) }
         }
     }
@@ -299,25 +286,17 @@ final class PullScreenModel: ObservableObject {
         while true {
             do {
                 let v = try await Store.shared.call(f.operation, ["repo": .string(repo), "pr": JSON(number), "page": JSON(page)])
-                var incoming = comments[f.rawValue].incoming ?? []
-                for row in v[f.field].items { incoming.append(row) }
-                comments[f.rawValue].incoming = incoming
-                if let next = v["nextPage"].number, next > Double(page) { page = Int(next); continue }
-                comments[f.rawValue] = PullCommentList(items: incoming, read: true)
-                return
+                guard let next = comments[f.rawValue].take(v, feed: f, page: page) else { return }
+                page = next
             } catch {
-                comments[f.rawValue].loading = false
-                comments[f.rawValue].incoming = nil
-                guard let said = failure(error) else { return }
-                comments[f.rawValue].error = said
-                comments[f.rawValue].read = true
+                comments[f.rawValue].fail(failure(error))
                 return
             }
         }
     }
     private func commentsCancel() {
         for i in commentTasks.indices { commentTasks[i]?.cancel(); commentTasks[i] = nil }
-        for i in comments.indices where comments[i].loading { comments[i].loading = false; comments[i].incoming = nil }
+        for i in comments.indices where comments[i].loading { comments[i].fail(nil) }
     }
 
     // MARK: Findings
@@ -350,41 +329,29 @@ final class PullScreenModel: ObservableObject {
 
     // MARK: Merge
 
-    var canMerge: Bool {
-        Store.shared.supports("merge_pull") && pr["state"].string == "open" && !pr["draft"].is(true)
-            && pr["headSha"].string != nil && pr["baseRef"].string != nil
-    }
+    var canMerge: Bool { Store.shared.supports("merge_pull") && record.mergeable }
     /// Reads what GitHub says of the merge before asking, so the question can say what stands in the way of it.
     func askMerge() async {
         guard canMerge, !merging else { return }
         merging = true; mergeError = nil
         defer { merging = false }
-        var notes: [String] = []
+        var files: JSON = .null
+        var moved = false
         if Store.shared.supports("pull_files"), let page = try? await Store.shared.call("pull_files", args) {
-            let p = page["pr"]
-            if p.isObject { notes += mergeWarnings(mergeable: p["mergeable"], state: p["mergeableState"].string) }
-            if let methods = p["mergeMethods"].array, !methods.isEmpty, !methods.contains("squash") {
-                notes.append("This repository does not allow squash merges; GitHub will refuse this one.")
-            }
-            if let head = p["headSha"].string, head != pr["headSha"].string {
+            files = page
+            if record.headMoved(files: page) {
                 do { try await load() } catch { mergeError = failure(error); return }
-                notes.append("New commits were pushed since this screen was read; it has been read again.")
+                moved = true
             }
         }
-        let failed = pr["checks"]["failed"].int32 ?? 0, pending = pr["checks"]["pending"].int32 ?? 0
-        if failed > 0 { notes.append("\(failed) check\(failed == 1 ? " is" : "s are") failing.") }
-        if pending > 0 { notes.append("\(pending) check\(pending == 1 ? " is" : "s are") still running.") }
-        if case .changesRequested = ReviewStatus(decision: boardRow?.reviewDecision, reviews: pr["reviews"]) {
-            notes.append("A reviewer has requested changes.")
-        }
+        var notes = record.mergeNotes(files: files)
+        if moved { notes.insert("New commits were pushed since this screen was read; it has been read again.", at: 0) }
         mergeQuestion = MergeQuestion(base: pr["baseRef"].string ?? "its base", notes: notes)
     }
     /// Squash-merges the head this screen was shown with (`headSha` guards against a push meanwhile).
     func merge() async {
-        guard !merging, let head = pr["headSha"].string, let base = pr["baseRef"].string else { return }
+        guard !merging, let a = record.mergeArguments(repo: repo) else { return }
         merging = true; mergeError = nil
-        var a = args
-        a["headSha"] = .string(head); a["baseRef"] = .string(base); a["method"] = "squash"
         do {
             try await Store.shared.call("merge_pull", a)
         } catch {
@@ -401,12 +368,10 @@ final class PullScreenModel: ObservableObject {
     // MARK: Edits
 
     /// Edits on an open pull request, when the server takes `update_pull`.
-    var canEdit: Bool { Store.shared.supports("update_pull") && isOpen }
+    var canEdit: Bool { Store.shared.supports("update_pull") && record.isOpen }
     /// The description as last read, nil until it is: an edit starts from it.
-    var pullBody: String? { pr["body"].string ?? descriptionBody }
-    var canUpdateBranch: Bool {
-        Store.shared.supports("update_pull_branch") && pr["state"].string == "open" && pr["headSha"].string != nil && pr["baseRef"].string != nil
-    }
+    var pullBody: String? { record.body(described: descriptionBody) }
+    var canUpdateBranch: Bool { Store.shared.supports("update_pull_branch") && record.branchUpdatable }
 
     /// Sends `fields` as an edit of this pull request. The title and description show as saved at once; the labels and
     /// assignees come back with the board's row, read again with the pull request.
@@ -417,11 +382,11 @@ final class PullScreenModel: ObservableObject {
         a["repo"] = .string(repo); a["pr"] = JSON(number)
         do {
             let v = try await Store.shared.call("update_pull", a)
-            if let title = v["pr"]["title"].string, pr.isObject { pr["title"] = .string(title) }
-            if let body = v["pr"]["body"].string, a["body"].string != nil {
-                descriptionBody = body
-                if pr["body"].string != nil { pr["body"] = .string(body) }
-            }
+            let echo = PullRecord.editEcho(v, sent: a)
+            var shown = record
+            shown.apply(title: echo.title, body: echo.body)
+            pr = shown.pr
+            if let body = echo.body { descriptionBody = body }
             save()
         } catch {
             // An edit sets what it names, so trying again is safe.
@@ -433,10 +398,8 @@ final class PullScreenModel: ObservableObject {
 
     /// Merges the base into the branch on GitHub, at the head and base last read, once confirmed.
     func updateBranch() async {
-        guard !updatingBranch, !merging, let head = pr["headSha"].string, let base = pr["baseRef"].string else { return }
+        guard !updatingBranch, !merging, let a = record.updateBranchArguments(repo: repo), let base = a["baseRef"].string else { return }
         updatingBranch = true; mergeError = nil; branchNote = nil
-        var a = args
-        a["headSha"] = .string(head); a["baseRef"] = .string(base)
         do {
             try await Store.shared.call("update_pull_branch", a)
             branchNote = "GitHub is merging \(base) into this branch; its new commit and checks show once it has."
@@ -469,7 +432,7 @@ final class PullScreenModel: ObservableObject {
     // MARK: Run
 
     /// The profile the tab shows as chosen: the one picked, else the one served, else the project's default.
-    var shownProfile: String? { runWant ?? runProfile ?? profiles.first }
+    var shownProfile: String? { serve.shownProfile(profiles) }
     /// The session the Run tab shows: the one serving it, else the one being prepared for it.
     var runTarget: String? { runSession ?? logSession }
     var pageURL: String? { browser?.url ?? runURL }
@@ -477,8 +440,8 @@ final class PullScreenModel: ObservableObject {
 
     /// The Run tab's session was deleted, and the workspace serving it with it: the tab gives way to the description.
     private func runForget() {
-        runBusy = false; runPending = false
-        runSession = nil; runURL = nil; runProfile = nil; runAsked = nil; serveError = nil
+        runPending = false
+        serve.forget()
         logSession = nil; log.clear()
         setBrowser(nil)
         if section == .run { section = .description }
@@ -515,80 +478,43 @@ final class PullScreenModel: ObservableObject {
         ensureBrowser()
     }
     private func runResume() {
-        if runURL == nil && !runBusy && serveError == nil && !runAdopt() { runStart() }
+        if serve.needsServing && !runAdopt() { runStart() }
     }
     /// A Run already serving this pull request (one of its sessions with serve links) is shown as it is.
     private func runAdopt() -> Bool {
         guard let (id, url) = runSessionServing(Session.json(runs), number: number) else { return false }
-        runSession = id
-        showRun(url)
-        return true
-    }
-    private func showRun(_ url: String) {
-        if runURL != url { setBrowser(nil); runURL = url }
+        if serve.url != url { setBrowser(nil) }
+        serve.adopt(session: id, url: url)
         ensureBrowser()
+        return true
     }
     /// Serves the pull request: the run's session again, with the picked profile, when there is one; else a new session,
     /// which the server serves with the project's default profile.
     func runStart() {
-        guard !runBusy else { return }
-        runBusy = true; serveError = nil
-        var a: JSON = [:]
-        var op = "serve_pull"
-        let switched: Bool
-        if let session = runSession, Store.shared.supports("serve") {
-            op = "serve"
-            a["sessionId"] = .string(session)
-            if let want = runWant { a["profile"] = .string(want) }
-            runAsked = runWant
-            switched = true
-        } else {
-            a["repo"] = .string(repo); a["prNumber"] = JSON(number)
-            switched = false
-        }
-        if let asked = runAsked { log.add("▶ Switching to profile \(asked)", error: false) }
+        guard let request = serve.start(repo: repo, number: number, canSwitch: Store.shared.supports("serve")) else { return }
+        if let profile = request.switchingTo { log.add("▶ Switching to profile \(profile)", error: false) }
         Task {
-            do { runDone(.success(try await Store.shared.call(op, a, timeout: 170)), switched: switched) }
-            catch { runDone(.failure(error), switched: switched) }
+            do { runDone(.success(try await Store.shared.call(request.operation, request.arguments, timeout: RunRequest.timeout)), switched: request.switched) }
+            catch { runDone(.failure(error), switched: request.switched) }
         }
     }
     private func runDone(_ r: Result<JSON, Error>, switched: Bool) {
-        runBusy = false
-        let asked = runAsked
-        runAsked = nil
         switch r {
         case .failure(let error):
-            guard let said = failure(error) else { return }
-            serveError = said
+            guard let said = failure(error) else { serve.cancelled(); return }
             let e = error as? APIError
-            if switched && (e?.status == 404 || (e?.message ?? "").contains("no live workspace")) {
-                // The session closed or expired, and its page with it: the next try prepares a new one.
-                runSession = nil; runURL = nil
-                setBrowser(nil)
-            } else if switched {
-                // A refused switch leaves the app serving what it served.
-                runWant = runProfile
-            }
+            if serve.failed(said, status: e?.status, message: e?.message, switched: switched) { setBrowser(nil) }
         case .success(let v):
-            if let id = v["session"]["id"].string { runSession = id }
-            runProfile = v["profile"].string
-            if let url = v["url"].string, safeWebURL(url) {
-                let same = url == runURL
-                showRun(url)
-                // The same address after a restart is a new app behind it.
-                if same { browser?.reload() }
-            } else { serveError = "The server did not say where it serves the pull request." }
-            // A profile picked while this request was out, or a new session served with the default.
-            if let want = runWant, runSession != nil, want != asked, want != runProfile { runStart(); return }
+            let served = serve.served(v)
+            if served.show != nil && !served.reload { setBrowser(nil) }
+            if served.reload { browser?.reload() }
+            if served.startAgain { runStart(); return }
             if Store.shared.supports("sessions") { Task { try? await feed.loadSessions(fresh: true) } }
         }
         ensureBrowser()
     }
     func pickProfile(_ profile: String) {
-        guard profile != shownProfile else { return }
-        runWant = profile
-        // While a request is out, its answer switches to the new pick.
-        if !runBusy { runStart() }
+        if serve.pick(profile, profiles: profiles) { runStart() }
     }
 
     /// The browser starts once the tab is on show with an address, and once the service token that lets it past

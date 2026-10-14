@@ -4,11 +4,6 @@ import SwiftUI
 
 // MARK: - Glyphs and colours
 
-/// A GitHub label's colour for the chips, or the secondary colour.
-func labelColor(_ label: PullLabel) -> Color {
-    guard let rgb = label.rgb else { return Theme.muted }
-    return Color(.sRGB, red: Double(rgb.red) / 255, green: Double(rgb.green) / 255, blue: Double(rgb.blue) / 255)
-}
 /// A finding's severity pill colour (CRIT and HIGH red, MED amber, LOW grey).
 func severityColor(_ severity: String?) -> Color {
     switch severity?.lowercased() {
@@ -17,15 +12,7 @@ func severityColor(_ severity: String?) -> Color {
     default: return Theme.warn
     }
 }
-func reviewGlyph(_ status: ReviewStatus) -> (symbol: String?, color: Color) {
-    switch status {
-    case .approved: return (Glyph.symbol(0xE73E), Theme.ok)
-    case .changesRequested: return (Glyph.symbol(0xE711), Theme.danger)
-    case .feedback: return (Glyph.symbol(0xE8BD), Theme.warn)
-    case .requested: return (Glyph.symbol(0xE823), Theme.muted)
-    case .none: return (nil, Theme.muted)
-    }
-}
+func reviewGlyph(_ status: ReviewStatus) -> (symbol: String?, color: Color) { (status.symbol, Theme.color(status.tone)) }
 /// The glyph for a check conclusion.
 func checkGlyph(_ result: String?) -> (symbol: String, color: Color) {
     switch result?.lowercased() {
@@ -58,21 +45,6 @@ struct BadgeSpec: Hashable {
     var color: Color
     var chip = false
 }
-/// A pull request's badges (conflicts, checks, stack, review, draft).
-func pullBadges(_ pull: PullSummary, stack: StackPosition?) -> [BadgeSpec] {
-    var out: [BadgeSpec] = []
-    if pull.conflicting { out.append(BadgeSpec(glyph: Glyph.symbol(0xE7BA), text: "Conflicts", color: Theme.danger)) }
-    if let checks = pull.checks {
-        if checks == "success" { out.append(BadgeSpec(glyph: Glyph.symbol(0xE73E), text: "Checks", color: Theme.ok)) }
-        else if checks == "failure" || checks == "error" { out.append(BadgeSpec(glyph: Glyph.symbol(0xE711), text: "Checks", color: Theme.danger)) }
-        else { out.append(BadgeSpec(glyph: Glyph.symbol(0xE823), text: "Checks", color: Theme.warn)) }
-    }
-    if let stack { out.append(BadgeSpec(glyph: Glyph.symbol(0xE81E), text: "Stack \(stack.label())", color: Theme.accent)) }
-    let review = ReviewStatus(decision: pull.reviewDecision, reviewers: pull.reviewers)
-    if review != .none { let g = reviewGlyph(review); out.append(BadgeSpec(glyph: g.symbol, text: review.text, color: g.color)) }
-    if pull.draft { out.append(BadgeSpec(glyph: Glyph.symbol(0xE70F), text: "Draft", color: Theme.muted)) }
-    return out
-}
 
 /// A line of wrapped badges and chips.
 struct Badges: View {
@@ -93,7 +65,7 @@ struct LabelChips: View {
     var background: Color = Theme.raise
     var body: some View {
         if !labels.isEmpty {
-            Badges(specs: labels.map { BadgeSpec(text: $0.name, color: labelColor($0), chip: true) }, background: background)
+            Badges(specs: labels.map { BadgeSpec(text: $0.name, color: Theme.color($0), chip: true) }, background: background)
         }
     }
 }
@@ -146,8 +118,8 @@ struct LinkedRow: View {
             Text("↳").font(Theme.caption).foregroundStyle(Theme.tertiary).frame(width: 12, alignment: .leading)
             Text(link.reference(repo)).font(Theme.monoCaption2).foregroundStyle(Theme.muted)
             Text(link.title).font(Theme.caption).foregroundStyle(action != nil ? Theme.ink : Theme.muted).lineLimit(1).truncationMode(.tail)
-            if showState, let state = linkedStateText(link) {
-                Text(state).font(Theme.caption2).foregroundStyle(state == "open" ? Theme.ok : state == "closed" ? Theme.muted : Theme.warn)
+            if showState, let state = LinkedState(link) {
+                Text(state.text).font(Theme.caption2).foregroundStyle(Theme.color(state.tone))
             }
             if let status, !status.isEmpty { Chip(name: status, color: Theme.muted).fixedSize() }
             Spacer(minLength: 0)
@@ -216,25 +188,27 @@ struct PullRow<Buttons: View>: View {
     var action: (() -> Void)?
     @ViewBuilder var buttons: Buttons
 
+    /// "#12", its marks in Core's order, then who holds, wrote and reviews it.
     private var facts: [MetaPart] {
-        var d: [MetaPart] = [MetaPart(text: "#\(pull.number)")]
-        if pull.draft { d.append(MetaPart(text: "draft")) }
-        if pull.hasConflicts { d.append(MetaPart(text: "⚠ conflicts", color: Theme.danger)) }
-        if let checks = pull.checks {
-            if checks == "success" { d.append(MetaPart(text: "✓ checks", color: Theme.ok)) }
-            else if checks == "failure" || checks == "error" { d.append(MetaPart(text: "✗ checks", color: Theme.danger)) }
-            else { d.append(MetaPart(text: "… checks", color: Theme.warn)) }
+        let content = PullRowContent(pull: pull, stack: stack)
+        let marks = content.marks.map { MetaPart(text: factText($0), color: Theme.color($0.tone)) }
+        let who = content.who.enumerated().map { i, text in
+            MetaPart(text: text, color: Theme.color(i == 0 && content.unassigned ? .faint : .muted))
         }
-        let review = ReviewStatus(decision: pull.reviewDecision, reviewers: pull.reviewers)
-        if review != .none { d.append(MetaPart(text: review.text, color: reviewGlyph(review).color)) }
-        if let stack { d.append(MetaPart(text: "stack \(stack.label())", color: Theme.accent)) }
-        // The two logins say which is which; the branch is the pull request's page's to show.
-        if !pull.assignees.isEmpty { d.append(MetaPart(text: "assignee \(people(pull.assignees, limit: 2))")) }
-        else { d.append(MetaPart(text: "unassigned", color: Theme.tertiary)) }
-        if let author = pull.author { d.append(MetaPart(text: "author @\(author)")) }
-        let reviewers = pull.reviewers.map(\.user).filter { !$0.isEmpty }
-        if !reviewers.isEmpty { d.append(MetaPart(text: "reviewers " + reviewers.map { "@\($0)" }.joined(separator: ", "))) }
-        return d
+        return [MetaPart(text: "#\(pull.number)")] + marks + who
+    }
+
+    /// A mark as the Mac's line of facts words it: lower case, a sign before the checks and conflicts.
+    private func factText(_ mark: PullMark) -> String {
+        switch mark {
+        case .conflicts: return "⚠ conflicts"
+        case .checks(.passed): return "✓ checks"
+        case .checks(.failed): return "✗ checks"
+        case .checks(.pending): return "… checks"
+        case .stack(let label): return "stack \(label)"
+        case .draft: return "draft"
+        default: return mark.text
+        }
     }
 
     var body: some View {
@@ -257,18 +231,19 @@ extension PullRow where Buttons == EmptyView {
 
 /// An epic's bar of closed sub-issues against all of them, with "N/M done" after it.
 struct EpicProgress: View {
-    var done: Int
-    var total: Int
+    var progress: SubIssueProgress
     var body: some View {
         HStack(spacing: 8) {
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.accent.opacity(0.15))
-                Capsule().fill(Theme.accent).frame(width: 70 * CGFloat(min(done, max(total, 1))) / CGFloat(max(total, 1)))
+                Capsule().fill(Theme.accent).frame(width: 70 * progress.fraction)
             }
             .frame(width: 70, height: 6)
-            Text(verbatim: "\(done)/\(total) done").font(Theme.caption2).foregroundStyle(Theme.muted)
+            Text(verbatim: progress.text).font(Theme.caption2).foregroundStyle(Theme.muted)
         }
         .frame(height: 17)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(progress.spoken)
     }
 }
 
@@ -277,27 +252,31 @@ struct IssueRowView: View {
     var issue: IssueSummary
     var repo: String?
     var nested = false
+    /// Whether the sub-issues under it are hidden; nil for a row with none to hide.
+    var folded: Bool?
+    var fold: (() -> Void)?
     var action: (() -> Void)?
 
-    private var facts: [MetaPart] {
-        var d: [MetaPart] = [MetaPart(text: "#\(issue.number)")]
-        if let author = issue.author { d.append(MetaPart(text: "@\(author)")) }
-        if !issue.assignees.isEmpty { d.append(MetaPart(text: people(issue.assignees, limit: 2))) }
-        else { d.append(MetaPart(text: "unassigned", color: Theme.tertiary)) }
-        if issue.comments > 0 { d.append(MetaPart(text: "\(issue.comments) comment\(issue.comments == 1 ? "" : "s")")) }
-        if let m = issue.milestone { d.append(MetaPart(text: m)) }
-        if !issue.pulls.isEmpty { d.append(MetaPart(text: issue.pulls.count == 1 ? "1 pull request" : "pull requests", color: Theme.ok)) }
-        return d
-    }
-
     var body: some View {
+        let content = IssueRowContent(issue: issue, repo: repo, nested: nested)
         RowBox(action: action) {
-            Text((issue.isEpic ? "◎ " : "") + issue.title).font(Theme.bodySemibold).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
-            MetaLine(parts: facts, right: issue.updatedAt.map { formatRelative($0) }).padding(.top, 4)
-            if issue.isEpic { EpicProgress(done: issue.subIssuesDone, total: issue.subIssues).padding(.top, 4) }
+            HStack(spacing: 6) {
+                if let folded, let fold {
+                    Button(action: fold) {
+                        Image(systemName: folded ? "chevron.right" : "chevron.down").font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.muted).frame(width: 16, height: 16).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(folded ? "Show its sub-issues" : "Hide its sub-issues")
+                }
+                Text((issue.isEpic ? "◎ " : "") + issue.title).font(Theme.bodySemibold).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
+            }
+            MetaLine(parts: content.facts.map { MetaPart(text: $0.text, color: Theme.color($0.tone)) },
+                     right: issue.updatedAt.map { formatRelative($0) }).padding(.top, 4)
+            if let progress = content.progress { EpicProgress(progress: progress).padding(.top, 4) }
             if !issue.labels.isEmpty { LabelChips(labels: issue.labels).padding(.top, 6) }
-            if !nested, let parent = issue.parent {
-                Text(verbatim: "Part of \(parent.reference(repo)) \(parent.title)").font(Theme.caption).foregroundStyle(Theme.muted)
+            if let parentLine = content.parentLine {
+                Text(verbatim: parentLine).font(Theme.caption).foregroundStyle(Theme.muted)
                     .lineLimit(1).truncationMode(.tail).padding(.top, 4)
             }
             ForEach(Array(issue.pulls.enumerated()), id: \.offset) { _, link in LinkedRow(link: link, repo: repo).padding(.top, 4) }

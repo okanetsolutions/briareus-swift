@@ -38,7 +38,7 @@ final class ForgeAccountFormModel: ObservableObject {
     }
     func canLeave() -> Bool {
         guard state.dirty else { return true }
-        let message = state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this Forge account") have not been saved." : "The new Forge account has not been saved."
+        let message = state.discardMessage
         let leave = confirmDiscard(message)
         if leave { state.dirty = false }
         return leave
@@ -47,24 +47,20 @@ final class ForgeAccountFormModel: ObservableObject {
 
     func save() {
         let id = state.id
-        guard !busy, Store.shared.supports(id != 0 ? "update_forge_account" : "create_forge_account") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         case .failure(let p): showError(p.message); return
         case .success(let b): body = b
         }
-        if id != 0 { body["id"] = .number(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_forge_account" : "create_forge_account", body)
-                let row = r["account"]
-                guard row.isObject else { showError(unexpectedResponse); return }
+                let r = try await Store.shared.call(state.saveOperation, body)
+                guard let row = state.saved(r) else { showError(unexpectedResponse); return }
                 // The server's word on what was saved: an empty label is now the organization, and a new account has an id.
                 error = nil
-                state.row = row
-                state.fill()
                 post(.forgeAccountsChanged)
                 if id == 0 { Navigator.shared.show(.forgeAccountSettings(row: row, defaults: SettingsModel.shared.forge.defaults)) }
             } catch {
@@ -149,7 +145,7 @@ struct ForgeAccountSettingsScreen: View {
         var buttons: [HeaderButton] = []
         if store.supports("settings_forge_accounts") {
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE74E), label: model.saving ? "Saving…" : "Save", tip: "Save this Forge account (⌘S)",
-                                        enabled: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_forge_account" : "create_forge_account"),
+                                        enabled: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
                                         prominent: true) { model.save() })
             if id != 0 {
                 buttons.append(HeaderButton(glyph: Glyph.symbol(0xE74D), tip: "Delete this Forge account",

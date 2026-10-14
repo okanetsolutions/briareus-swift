@@ -22,6 +22,16 @@ jobs:
           git diff --exit-code -- Briareus.xcodeproj
       - name: Test networking and transcript core
         run: swift test
+  structure:
+    name: Structure guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check escape hatches against the base
+        run: python3 scripts/check_escape_hatches.py "origin/${{ github.base_ref || 'main' }}"
   simulator:
     name: Simulator build
     runs-on: macos-15
@@ -81,7 +91,7 @@ jobs:
   ios:
     name: ios
     if: always()
-    needs: [core, simulator, device, mac, pairing]
+    needs: [core, structure, simulator, device, mac, pairing]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

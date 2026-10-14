@@ -42,8 +42,8 @@ final class ErrandCatalog: ObservableObject {
 /// The errands this device can start on a pull request: what the server offers for it, less what the token or server lacks.
 @MainActor
 func boardErrands(catalog: JSON, pull: PullSummary?, failedChecks: Int) -> [BoardAction] {
-    guard Store.shared.canManage else { return [] }
-    return BoardAction.offered(catalog: catalog, pull: pull, failedChecks: failedChecks).filter { Store.shared.supports($0.operation) }
+    BoardAction.startable(catalog: catalog, pull: pull, failedChecks: failedChecks, canManage: Store.shared.canManage,
+                          supports: { Store.shared.supports($0) })
 }
 
 /// The symbol before an errand's label.
@@ -130,7 +130,7 @@ private struct ErrandPrompts: ViewModifier {
         content
             .alert(runner.confirming.map { "Start \($0.action.label) on #\($0.number)?" } ?? "",
                    isPresented: Binding(get: { runner.confirming != nil }, set: { if !$0 { runner.confirming = nil } }), presenting: runner.confirming) { p in
-                Button("Start paid session", role: p.action.id == "delete-self-comments" ? .destructive : nil) { start(p) }
+                Button("Start paid session", role: p.action.isDestructive ? .destructive : nil) { start(p) }
                 Button("Cancel", role: .cancel) {}
             } message: { p in
                 Text(paidNote(p))
@@ -260,19 +260,13 @@ struct BoardFlowLayout: Layout {
     }
 }
 
-/// GitHub's own colour, or secondary when it sent none that reads.
-func boardLabelColor(_ label: PullLabel) -> Color {
-    guard let rgb = label.rgb else { return .secondary }
-    return Color(.sRGB, red: Double(rgb.red) / 255, green: Double(rgb.green) / 255, blue: Double(rgb.blue) / 255)
-}
-
 /// GitHub labels as chips: the label's colour tints the chip, the name stays in the text colour so a pale one still reads.
 struct BoardLabelChips: View {
     let labels: [PullLabel]
     var body: some View {
         BoardFlowLayout(spacing: 5) {
             ForEach(Array(labels.enumerated()), id: \.offset) { _, label in
-                let color = boardLabelColor(label)
+                let color = Theme.color(label)
                 HStack(spacing: 4) {
                     Circle().fill(color).frame(width: 6, height: 6)
                     Text(label.name).font(.caption2.weight(.medium)).lineLimit(1)
@@ -288,24 +282,7 @@ struct BoardLabelChips: View {
 
 /// A review verdict's symbol and colour.
 func reviewStyle(_ status: ReviewStatus) -> (symbol: String, color: Color) {
-    switch status {
-    case .approved: return ("checkmark.seal.fill", Theme.ok)
-    case .changesRequested: return ("xmark.octagon.fill", Theme.danger)
-    case .feedback: return ("text.bubble.fill", Theme.warn)
-    case .requested, .none: return ("clock", .secondary)
-    }
-}
-
-/// A board row's checks rollup as a badge.
-struct ChecksBadge: View {
-    let state: String
-    var body: some View {
-        switch state {
-        case "success": BoardBadge(text: "Checks", systemImage: "checkmark", color: Theme.ok).accessibilityLabel("Checks passed")
-        case "failure", "error": BoardBadge(text: "Checks", systemImage: "xmark", color: Theme.danger).accessibilityLabel("Checks failed")
-        default: BoardBadge(text: "Checks", systemImage: "clock", color: Theme.warn).accessibilityLabel("Checks running")
-        }
-    }
+    (status.symbol ?? "clock", Theme.color(status.tone))
 }
 
 /// When a row last changed, short.
@@ -331,8 +308,8 @@ struct BoardLinkedRow: View {
             Image(systemName: "link").font(.caption2).foregroundStyle(.tertiary)
             Text(link.reference(repo)).font(.caption.monospaced()).foregroundStyle(.secondary)
             Text(link.title).font(.caption).lineLimit(1)
-            if showState, let state = linkedStateText(link) {
-                Text(state).font(.caption2).foregroundStyle(state == "open" ? Theme.ok : state == "closed" ? Color.secondary : Theme.warn)
+            if showState, let state = LinkedState(link) {
+                Text(state.text).font(.caption2).foregroundStyle(Theme.color(state.tone))
             }
             if let status, !status.isEmpty {
                 Text(status).font(.caption2.weight(.medium)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
@@ -360,7 +337,7 @@ struct BoardPullRow: View {
     var issueStatus: [String?] = []
     var showsIssues = true
 
-    private var review: ReviewStatus { ReviewStatus(decision: pull.reviewDecision, reviewers: pull.reviewers) }
+    private var content: PullRowContent { PullRowContent(pull: pull, stack: stack, activeRuns: activeRuns, suggested: suggested) }
     private var tint: Color { pull.hasConflicts ? Theme.danger : pull.draft ? .secondary : Theme.ok }
 
     var body: some View {
@@ -374,28 +351,17 @@ struct BoardPullRow: View {
                     Spacer(minLength: 4)
                     BoardUpdated(date: pull.updatedAt)
                 }
-                if activeRuns > 0 || pull.hasConflicts || pull.checks != nil || stack != nil || review != .none || pull.draft || suggested != nil {
+                let content = content
+                if !content.marks.isEmpty {
                     BoardFlowLayout(spacing: 5) {
-                        if activeRuns > 0 {
-                            BoardBadge(text: "\(activeRuns) running", systemImage: "bolt.fill", color: Theme.statusColor("running"))
-                                .accessibilityLabel("\(activeRuns) conversation\(activeRuns == 1 ? "" : "s") at work")
-                        }
-                        if pull.hasConflicts { BoardBadge(text: "Conflicts", systemImage: "exclamationmark.triangle.fill", color: Theme.danger) }
-                        if let checks = pull.checks { ChecksBadge(state: checks) }
-                        if let stack {
-                            BoardBadge(text: "Stack \(stack.label(pull.number))", systemImage: "square.stack.3d.up.fill", color: Theme.accent)
-                                .accessibilityLabel("Stacked pull request \(stack.label(pull.number))")
-                        }
-                        if review != .none { BoardBadge(text: review.text, systemImage: reviewStyle(review).symbol, color: reviewStyle(review).color) }
-                        if pull.draft { BoardBadge(text: "Draft", systemImage: "pencil", color: .secondary) }
-                        if let suggested {
-                            BoardBadge(text: "Suggested: \(suggested)", systemImage: "sparkles", color: Theme.accent)
-                                .accessibilityLabel("Suggested errand: \(suggested)")
+                        ForEach(Array(content.marks.enumerated()), id: \.offset) { _, mark in
+                            BoardBadge(text: mark.text, systemImage: mark.symbol, color: Theme.color(mark.tone))
+                                .accessibilityLabel(mark.spoken)
                         }
                     }
                 }
                 if !pull.labels.isEmpty { BoardLabelChips(labels: pull.labels) }
-                Text(whoLine).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Text(content.who.joined(separator: " | ")).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 if showsIssues {
                     ForEach(Array(pull.issues.enumerated()), id: \.offset) { i, link in
                         BoardLinkedRow(link: link, repo: repo, status: i < issueStatus.count ? issueStatus[i] : nil, showState: false)
@@ -405,28 +371,18 @@ struct BoardPullRow: View {
         }
         .padding(.vertical, 3)
     }
-
-    /// "assignee @a | author @b | reviewers @c, @d": the words say which login is which.
-    private var whoLine: String {
-        var parts = [pull.assignees.isEmpty ? "unassigned" : "assignee \(people(pull.assignees, limit: 2))"]
-        if let author = pull.author { parts.append("author @\(author)") }
-        let reviewers = pull.reviewers.map(\.user).filter { !$0.isEmpty }
-        if !reviewers.isEmpty { parts.append("reviewers " + reviewers.map { "@\($0)" }.joined(separator: ", ")) }
-        return parts.joined(separator: " | ")
-    }
 }
 
 /// How much of an epic is done, over every sub-issue GitHub knows, which may be more than the rows under it.
 struct BoardEpicProgress: View {
-    let done: Int
-    let total: Int
+    let progress: SubIssueProgress
     var body: some View {
         HStack(spacing: 8) {
-            ProgressView(value: Double(min(done, max(total, 1))), total: Double(max(total, 1))).tint(Theme.accent).frame(width: 70)
-            Text("\(done)/\(total) done").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+            ProgressView(value: progress.fraction).tint(Theme.accent).frame(width: 70)
+            Text(progress.text).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(done) of \(total) sub-issues closed")
+        .accessibilityLabel(progress.spoken)
     }
 }
 
@@ -436,21 +392,36 @@ struct BoardIssueRow: View {
     let repo: String
     /// Set on a row drawn under its epic, where the indent already says whose it is.
     var nested = false
+    /// Whether the sub-issues under it are hidden; nil for a row with none to hide.
+    var folded: Bool?
+    var fold: (() -> Void)?
     var body: some View {
+        let content = IssueRowContent(issue: issue, repo: repo, nested: nested)
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: issue.isEpic ? "square.stack.3d.up" : "smallcircle.filled.circle").font(.subheadline)
-                .foregroundStyle(issue.pulls.isEmpty ? Theme.ok : Theme.accent).accessibilityHidden(true)
+                .foregroundStyle(content.answered ? Theme.accent : Theme.ok).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
-                Text(issue.title).font(.body.weight(.medium)).lineLimit(2)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(metaLine).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(issue.title).font(.body.weight(.medium)).lineLimit(2)
+                    if let folded, let fold {
+                        Spacer(minLength: 4)
+                        Button(action: fold) {
+                            Image(systemName: folded ? "chevron.right.circle" : "chevron.down.circle").font(.body)
+                                .foregroundStyle(.secondary).frame(minWidth: 28, minHeight: 28).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(folded ? "Show sub-issues" : "Hide sub-issues")
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    factLine(content.facts).font(.caption).lineLimit(1)
                     Spacer(minLength: 4)
                     BoardUpdated(date: issue.updatedAt)
                 }
-                if issue.isEpic { BoardEpicProgress(done: issue.subIssuesDone, total: issue.subIssues) }
+                if let progress = content.progress { BoardEpicProgress(progress: progress) }
                 if !issue.labels.isEmpty { BoardLabelChips(labels: issue.labels) }
-                if !nested, let parent = issue.parent {
-                    Label("Part of \(parent.reference(repo)) \(parent.title)", systemImage: "arrow.turn.down.right")
+                if let parentLine = content.parentLine {
+                    Label(parentLine, systemImage: "arrow.turn.down.right")
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 ForEach(Array(issue.pulls.enumerated()), id: \.offset) { _, link in BoardLinkedRow(link: link, repo: repo) }
@@ -458,13 +429,13 @@ struct BoardIssueRow: View {
         }
         .padding(.vertical, 3)
     }
-    private var metaLine: String {
-        var parts = ["#\(issue.number)"]
-        if let author = issue.author { parts.append("@\(author)") }
-        parts.append(issue.assignees.isEmpty ? "unassigned" : "assigned \(people(issue.assignees, limit: 2))")
-        if issue.comments > 0 { parts.append("\(issue.comments) comment\(issue.comments == 1 ? "" : "s")") }
-        if let milestone = issue.milestone { parts.append(milestone) }
-        return parts.joined(separator: " · ")
+}
+
+/// A row's facts as one line, " · " between them, each in its tone.
+func factLine(_ facts: [RowFact]) -> Text {
+    facts.enumerated().reduce(Text(verbatim: "")) { line, item in
+        let fact = Text(verbatim: item.element.text).foregroundColor(Theme.color(item.element.tone))
+        return item.offset == 0 ? fact : line + Text(verbatim: " · ").foregroundColor(.secondary) + fact
     }
 }
 
@@ -475,7 +446,7 @@ struct BoardSessionRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             StatusDot(status: session.status).alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
             VStack(alignment: .leading, spacing: 3) {
-                Text(session.displayTitle).lineLimit(2).foregroundStyle(session.status == "closed" ? .secondary : .primary)
+                Text(session.displayTitle).lineLimit(2).foregroundStyle(session.isClosed ? .secondary : .primary)
                 Text(sessionSubtitle(session)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
         }

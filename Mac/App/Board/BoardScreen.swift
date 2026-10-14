@@ -14,6 +14,8 @@ final class BoardModel: ObservableObject {
     /// The issue rows with what the server sent for each, which is what the issue screen opens with.
     @Published var issues: [(summary: IssueSummary, raw: JSON)] = []
     @Published var tab = BoardTab.pulls
+    /// The epics whose sub-issues the Issues tab hides, by number.
+    @Published var foldedEpics: Set<Int> = []
     @Published var runs: [Session] = []
     @Published var syncedAt: Date?
     /// Bumped when a read is held by the cooldown, so the board reads once it is over.
@@ -71,21 +73,18 @@ final class BoardModel: ObservableObject {
 
     // MARK: Filters, kept on disk per repository
 
-    private func filterJSON(_ f: BoardFilter) -> JSON {
-        var j: JSON = [:]
-        for k in FilterKind.allCases where !f[k].isEmpty { j[k.name] = .string(f[k]) }
-        return j
-    }
-    private func filterRead(_ f: inout BoardFilter, _ j: JSON) {
-        for k in FilterKind.allCases { if let v = j[k.name].string { f.set(k, v) } }
-    }
     func filtersSave() {
-        Store.shared.cache.store(["pulls": filterJSON(pullFilter), "issues": filterJSON(issueFilter)], "pulls-filters:\(repo)")
+        Store.shared.cache.store(["pulls": pullFilter.saved, "issues": issueFilter.saved], "pulls-filters:\(repo)")
+    }
+    /// A pick was made: the board no longer opens on the project's author, and the picks are kept.
+    func picked() {
+        hasOpening = false
+        filtersSave()
     }
     /// A board never filtered opens on the project's author; one with saved picks opens on them.
     private func filtersRestore() -> Bool {
         guard let saved = Store.shared.cache.value("pulls-filters:\(repo)") else { return false }
-        filterRead(&pullFilter, saved["pulls"]); filterRead(&issueFilter, saved["issues"])
+        pullFilter = BoardFilter(saved: saved["pulls"]); issueFilter = BoardFilter(saved: saved["issues"])
         return true
     }
 
@@ -281,27 +280,6 @@ final class BoardModel: ObservableObject {
         Navigator.shared.push(screen)
     }
     func openIssue(_ raw: JSON) { Navigator.shared.push(.issue(repo: repo, issue: raw)) }
-
-    // MARK: Pickers
-
-    /// One picker's menu: `All <kind>s`, then each option with how many rows it would show.
-    func pick(_ kind: FilterKind) {
-        var f = filter
-        let options = f.options(kind, rows: rows)
-        let current = f[kind]
-        var items = [BoardPopupMenu.Item(title: "All \(kind.name)s", checked: current.isEmpty)]
-        for o in options { items.append(BoardPopupMenu.Item(title: "\(o.text) (\(o.count))", checked: current == o.value)) }
-        guard let chosen = BoardPopupMenu.show(items, rightAligned: true) else { return }
-        f.set(kind, chosen == 0 ? "" : options[chosen - 1].value)
-        filter = f
-        hasOpening = false
-        filtersSave()
-    }
-    func clearFilters() {
-        filter = BoardFilter()
-        hasOpening = false
-        filtersSave()
-    }
 }
 
 struct BoardScreen: View {
@@ -468,6 +446,14 @@ struct BoardScreen: View {
             }
             buttons.append(HeaderButton(glyph: "tag", label: "\(f.label.isEmpty ? "All labels" : f.label) ▾",
                                         enabled: model.loaded) { model.pick(.label) })
+            if model.tab == .pulls {
+                buttons.append(HeaderButton(glyph: "square.stack.3d.up", label: f.hideLaterStacked ? "Show later stacked PRs" : "Hide later stacked PRs",
+                                            tip: "Hide or show stacked pull requests after position 1; keep standalone pull requests visible",
+                                            enabled: model.loaded) { model.toggleLaterStacked() })
+                buttons.append(HeaderButton(glyph: ChecksState.failed.symbol, label: f.hideFailingChecks ? "Show failing checks" : "Hide failing checks",
+                                            tip: "Hide or show pull requests whose checks failed; keep those passing, still running or without checks",
+                                            enabled: model.loaded) { model.toggleFailingChecks() })
+            }
             buttons.append(refresh)
         }
         // 🎙 Meet: the meeting assistant, on this project, on every tab; a meeting about it leads the line with its time,
@@ -623,7 +609,7 @@ struct BoardScreen: View {
                     Button { model.act(pull, a) } label: {
                         if starting { Text(verbatim: "Starting…") } else { ErrandLabel(id: a.id, label: a.label) }
                     }
-                        .dashButton(pull.recommended == a.id ? .prominent : .bordered)
+                        .dashButton(a.isSuggested(for: pull) ? .prominent : .bordered)
                         .disabled(model.busy || model.uncertain)
                         .help(a.hint)
                 }
@@ -650,11 +636,17 @@ struct BoardScreen: View {
             }
         } else {
             let visible = model.issues.indices.filter { filter.passes(BoardRow(model.issues[$0].summary)) }
-            let nested = issuesNested(visible.map { model.issues[$0].summary }, repo: repo)
+            let summaries = visible.map { model.issues[$0].summary }
+            let nested = issuesFolded(issuesNested(summaries, repo: repo), summaries, folded: model.foldedEpics)
             ForEach(Array(nested.enumerated()), id: \.offset) { _, row in
                 let i = visible[row.index]
                 let depth = min(row.depth, 4)
-                IssueRowView(issue: model.issues[i].summary, repo: repo, nested: depth > 0) { model.openIssue(model.issues[i].raw) }
+                let number = model.issues[i].summary.number
+                IssueRowView(issue: model.issues[i].summary, repo: repo, nested: depth > 0,
+                             folded: row.children > 0 ? model.foldedEpics.contains(number) : nil,
+                             fold: { if model.foldedEpics.remove(number) == nil { model.foldedEpics.insert(number) } }) {
+                    model.openIssue(model.issues[i].raw)
+                }
                     .padding(.leading, CGFloat(depth) * 18)
                     .padding(.bottom, 8)
             }

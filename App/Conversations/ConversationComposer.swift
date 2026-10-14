@@ -66,11 +66,11 @@ struct ConversationComposer: View {
     private var closedBox: some View {
         HStack(spacing: 10) {
             Image(systemName: store.canManage ? "archivebox" : "eye").foregroundStyle(.secondary)
-            Text(store.canManage ? (model.session.status == "closed" ? "This conversation is closed" : "Messages cannot be sent here")
+            Text(store.canManage ? (model.session.isClosed ? "This conversation is closed" : "Messages cannot be sent here")
                                  : "Read-only access")
                 .font(.subheadline).foregroundStyle(.secondary)
             Spacer()
-            if store.supports("reopen") && model.session.status == "closed" {
+            if store.supports("reopen") && model.session.isClosed {
                 Button("Reopen", action: reopen).buttonStyle(.borderedProminent).controlSize(.small).disabled(!model.can)
             }
         }

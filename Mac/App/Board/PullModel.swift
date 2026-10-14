@@ -5,15 +5,6 @@ import SwiftUI
 
 enum PullTab: Int { case body, conversation, sessions, files, commits, checks, findings, run }
 
-/// One of the Conversation tab's lists, read page by page: `incoming` fills up and replaces `items` once the last page is in.
-struct ConvList {
-    var items: JSON = []
-    var incoming: JSON?
-    var read = false
-    var error: String?
-    var loading = false
-}
-
 @MainActor
 final class PullModel: ObservableObject {
     let repo: String
@@ -65,20 +56,19 @@ final class PullModel: ObservableObject {
                                                  changed: { [weak self] in self?.objectWillChange.send() })
     private var convTasks: [Task<Void, Never>?] = Array(repeating: nil, count: ConvFeed.allCases.count)
 
-    // The Run tab: opening it serves the pull request (▶ Run) and shows it in an embedded browser. `runSession` is the
-    // session serving it, `runProfile` the run profile it serves, `runWant` the one picked in the tab, `runAsked` the one
-    // the request in flight asked for.
-    @Published var runURL: String?
-    @Published var runSession: String?
-    @Published var runProfile: String?
-    /// Kept per pull request, so the tab opened again shows (and serves) the profile last picked.
-    @Published var runWant: String? {
-        didSet { UserDefaults.standard.set(runWant, forKey: runWantKey) }
+    // The Run tab: opening it serves the pull request (▶ Run) and shows it in an embedded browser. Core's `RunServe` holds
+    // which session serves it, at what address and with which profile; the model makes the calls and runs the browser.
+    /// The profile picked is kept per pull request, so the tab opened again shows (and serves) the one last picked.
+    @Published private(set) var serve = RunServe() {
+        didSet { if serve.want != oldValue.want { UserDefaults.standard.set(serve.want, forKey: runWantKey) } }
     }
     private var runWantKey: String { "runProfile.\(repo)#\(number)" }
-    @Published var runAsked: String?
-    @Published var serveError: String?
-    @Published var runBusy = false
+    var runURL: String? { serve.url }
+    var runSession: String? { serve.session }
+    var runProfile: String? { serve.profile }
+    var runAsked: String? { serve.asked }
+    var serveError: String? { serve.error }
+    var runBusy: Bool { serve.busy }
     /// Waits for the Sessions list, in case a Run already serves this pull request.
     private var runPending = false
     /// The project's run profiles, the default first.
@@ -101,33 +91,32 @@ final class PullModel: ObservableObject {
         files = PullFilesModel(repo: repo, number: number)
         // The profiles the sidebar already read stand in until this screen reads them.
         profiles = runProfilesParse(ProjectsModel.shared.raw, repo: repo)
-        runWant = UserDefaults.standard.string(forKey: runWantKey)
+        serve.want = UserDefaults.standard.string(forKey: runWantKey)
     }
 
     var id: String { "pull:\(repo)#\(number)" }
     var boardRow: PullSummary? { rowRead ? row : (row ?? summary) }
-    var isOpen: Bool { pr.isNull ? boardRow != nil : pr["state"].string == "open" }
-    var author: String? { pr["author"].string ?? boardRow?.author ?? descriptionAuthor }
-    var commitCount: Int { pr["commits"].int32 ?? pr["commitList"].count }
+    /// What the pull request is and what may be done with it, as Core decides it.
+    var record: PullRecord { PullRecord(number: number, pr: pr, row: boardRow, descriptionAuthor: descriptionAuthor) }
+    var isOpen: Bool { record.isOpen }
+    var author: String? { record.author }
+    var commitCount: Int { record.commitCount }
 
     // MARK: Saving
 
-    private var key: String { "pull:\(repo)#\(number)" }
+    private var key: String { PullSnapshot.key(repo: repo, number: number) }
     private func save() {
-        guard !pr.isNull else { return }
-        var saved: JSON = ["pr": pr, "findings": findings, "row": boardRow?.raw ?? .null, "stack": stack?.json ?? .null]
-        if let descriptionBody { saved["body"] = .string(descriptionBody) }
-        if let descriptionAuthor { saved["bodyAuthor"] = .string(descriptionAuthor) }
-        Store.shared.cache.store(saved, key)
+        let snapshot = PullSnapshot(pr: pr, findings: findings, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
+        if let saved = snapshot.json { Store.shared.cache.store(saved, key) }
     }
     private func restore() {
-        if let saved = Store.shared.cache.value(key) {
-            pr = saved["pr"]
-            findings = saved["findings"]
-            if descriptionBody == nil { descriptionBody = saved["body"].string }
-            if descriptionAuthor == nil { descriptionAuthor = saved["bodyAuthor"].string }
-            if row == nil { row = PullSummary(saved["row"]) }
-            if stack == nil { stack = StackPosition(restoring: saved["stack"]) }
+        if let saved = PullSnapshot(Store.shared.cache.value(key)) {
+            pr = saved.pr
+            findings = saved.findings
+            if descriptionBody == nil { descriptionBody = saved.body }
+            if descriptionAuthor == nil { descriptionAuthor = saved.bodyAuthor }
+            if row == nil { row = saved.row }
+            if stack == nil { stack = saved.stack }
         }
         if catalog.count == 0, let acts = Store.shared.cache.value("actions") { catalog = acts["actions"] }
         rebuildActions()
@@ -135,8 +124,9 @@ final class PullModel: ObservableObject {
 
     /// The errands on offer: those the server lists for an open pull request with a branch. ▶ Run is the Run tab here.
     func rebuildActions() {
-        guard isOpen, pr["headRef"].string != nil else { actions = []; return }
-        actions = rowActions(catalog: catalog, pull: boardRow, failedChecks: pr["checks"]["failed"].int32 ?? 0).filter { $0.id != "run" }
+        let record = record
+        guard record.takesErrands else { actions = []; return }
+        actions = record.errands(rowActions(catalog: catalog, pull: boardRow, failedChecks: record.failedChecks))
     }
 
     // MARK: Reading
@@ -268,38 +258,24 @@ final class PullModel: ObservableObject {
     // MARK: Conversation
 
     /// Whether every list the server offers has been read once.
-    var convRead: Bool { ConvFeed.allCases.allSatisfy { !Store.shared.supports($0.operation) || conv[$0.rawValue].read } }
+    var convRead: Bool { convAllRead(conv, supports: Store.shared.supports) }
     /// Reads the comments, reviews and line comments afresh; what was read stays shown until the new lists are in.
     func convLoad() {
         for f in ConvFeed.allCases where !conv[f.rawValue].loading && Store.shared.supports(f.operation) {
-            conv[f.rawValue].incoming = []
-            conv[f.rawValue].loading = true
+            conv[f.rawValue].begin()
             convTasks[f.rawValue] = Task { await convPages(f) }
         }
     }
     private func convPages(_ f: ConvFeed) async {
         var page = 1
         while true {
-            let r = await boardCall(f.operation, ["repo": .string(repo), "pr": JSON(number), "page": JSON(page)])
-            switch r {
+            switch await boardCall(f.operation, ["repo": .string(repo), "pr": JSON(number), "page": JSON(page)]) {
             case .failure(let e):
-                conv[f.rawValue].loading = false
-                if e.kind == .cancelled { conv[f.rawValue].incoming = nil; return }
-                conv[f.rawValue].error = e.description
-                conv[f.rawValue].incoming = nil
-                conv[f.rawValue].read = true
+                conv[f.rawValue].fail(e.kind == .cancelled ? nil : e.description)
                 return
             case .success(let v):
-                var incoming = conv[f.rawValue].incoming ?? []
-                for row in v[f.field].items { incoming.append(row) }
-                conv[f.rawValue].incoming = incoming
-                if let next = v["nextPage"].number, next > Double(page) { page = Int(next); continue }
-                conv[f.rawValue].items = incoming
-                conv[f.rawValue].incoming = nil
-                conv[f.rawValue].read = true
-                conv[f.rawValue].error = nil
-                conv[f.rawValue].loading = false
-                return
+                guard let next = conv[f.rawValue].take(v, feed: f, page: page) else { return }
+                page = next
             }
         }
     }
@@ -369,16 +345,12 @@ final class PullModel: ObservableObject {
 
     // MARK: Merge
 
-    var canMerge: Bool {
-        Store.shared.supports("merge_pull") && pr["state"].string == "open" && !pr["draft"].is(true)
-            && pr["headSha"].string != nil && pr["baseRef"].string != nil
-    }
+    var canMerge: Bool { Store.shared.supports("merge_pull") && record.mergeable }
     /// Squash-merges straight away, as the Windows client's Merge button does: no confirmation, the head it was shown
     /// with (`headSha`) guarding against a push meanwhile, and GitHub's refusal shown under the title.
     func merge() {
-        guard !merging, let head = pr["headSha"].string, let base = pr["baseRef"].string else { return }
+        guard !merging, let args = record.mergeArguments(repo: repo) else { return }
         merging = true; mergeError = nil
-        let args: JSON = ["repo": .string(repo), "pr": JSON(number), "headSha": .string(head), "baseRef": .string(base), "method": "squash"]
         Task {
             let r = await boardCall("merge_pull", args)
             merging = false
@@ -393,12 +365,10 @@ final class PullModel: ObservableObject {
     // MARK: Edits
 
     /// Edit, Edit labels… and Edit assignees ▾, on an open pull request, when the server takes `update_pull`.
-    var canEdit: Bool { Store.shared.supports("update_pull") && isOpen }
+    var canEdit: Bool { Store.shared.supports("update_pull") && record.isOpen }
     /// The description as last read, nil until it is: an edit starts from it.
-    var pullBody: String? { pr["body"].string ?? descriptionBody }
-    var canUpdateBranch: Bool {
-        Store.shared.supports("update_pull_branch") && pr["state"].string == "open" && pr["headSha"].string != nil && pr["baseRef"].string != nil
-    }
+    var pullBody: String? { record.body(described: descriptionBody) }
+    var canUpdateBranch: Bool { Store.shared.supports("update_pull_branch") && record.branchUpdatable }
 
     /// Sends `fields` as an edit of this pull request. The title and description show as saved at once; the labels and
     /// assignees come back with the board's row, read again with the pull request.
@@ -412,11 +382,11 @@ final class PullModel: ObservableObject {
             switch r {
             case .success(let v):
                 editError = nil
-                if let title = v["pr"]["title"].string, pr.object != nil { pr["title"] = .string(title) }
-                if let body = v["pr"]["body"].string, args["body"].string != nil {
-                    descriptionBody = body
-                    if pr["body"].string != nil { pr["body"] = .string(body) }
-                }
+                let echo = PullRecord.editEcho(v, sent: args)
+                var shown = record
+                shown.apply(title: echo.title, body: echo.body)
+                pr = shown.pr
+                if let body = echo.body { descriptionBody = body }
                 save()
             case .failure(let e):
                 // An edit sets what it names, so trying again is safe.
@@ -453,7 +423,7 @@ final class PullModel: ObservableObject {
 
     /// Merges the base into the branch on GitHub, at the head and base last read, once asked.
     func updateBranch() {
-        guard !updatingBranch, !merging, let base = pr["baseRef"].string, pr["headSha"].string != nil else { return }
+        guard !updatingBranch, !merging, let base = record.updateBranchArguments(repo: repo)?["baseRef"].string else { return }
         let headRef = pr["headRef"].string ?? "its branch"
         dialogOpen = true
         let ok = Dialogs.confirm("Update the branch of #\(number)?",
@@ -461,9 +431,8 @@ final class PullModel: ObservableObject {
                                  continueLabel: "Update branch")
         dialogOpen = false
         // The pull request may have been read again while the dialog was open.
-        guard ok, !updatingBranch, let head = pr["headSha"].string, let baseRef = pr["baseRef"].string else { return }
+        guard ok, !updatingBranch, let args = record.updateBranchArguments(repo: repo), let baseRef = args["baseRef"].string else { return }
         updatingBranch = true; mergeError = nil; branchNote = nil
-        let args: JSON = ["repo": .string(repo), "pr": JSON(number), "headSha": .string(head), "baseRef": .string(baseRef)]
         Task {
             let r = await boardCall("update_pull_branch", args)
             updatingBranch = false
@@ -543,13 +512,13 @@ final class PullModel: ObservableObject {
     // MARK: Run
 
     /// The profile the tab shows as chosen: the one picked, else the one served, else the project's default.
-    var shownProfile: String? { runWant ?? runProfile ?? profiles.first }
+    var shownProfile: String? { serve.shownProfile(profiles) }
 
     /// The Run tab's session was deleted, and the workspace serving it with it: the tab forgets it and gives way to the PR
     /// body; opening it again prepares a new one.
     private func runForget() {
-        runBusy = false; runPending = false
-        runSession = nil; runURL = nil; runProfile = nil; runAsked = nil; serveError = nil
+        runPending = false
+        serve.forget()
         logSession = nil; log.clear()
         setBrowser(nil)
         if tab == .run { tab = .body }
@@ -577,69 +546,35 @@ final class PullModel: ObservableObject {
         if Store.shared.supports("sessions") && !runsRead { runPending = true } else { runResume() }
     }
     private func runResume() {
-        if runURL == nil && !runBusy && serveError == nil && !runAdopt() { runStart() }
+        if serve.needsServing && !runAdopt() { runStart() }
     }
-    /// A Run already serving this pull request (one of its sessions with serve links) is shown as it is.
+    /// A Run already serving this pull request (one of its sessions with serve links) is shown as it is, starting the
+    /// browser again when the address changed.
     private func runAdopt() -> Bool {
         guard let (id, url) = runSessionServing(Session.json(runs), number: number) else { return false }
-        runSession = id
-        showRun(url)
+        if serve.url != url { setBrowser(nil) }
+        serve.adopt(session: id, url: url)
         return true
-    }
-    /// Shows the served address, starting the browser again when the address changed.
-    private func showRun(_ url: String) {
-        if runURL != url { setBrowser(nil); runURL = url }
     }
     /// Serves the pull request: the run's session again, with the picked profile, when there is one; else a new session,
     /// which the server serves with the project's default profile (switched afterwards when another was picked).
     func runStart() {
-        guard !runBusy else { return }
-        runBusy = true; serveError = nil
-        var args: JSON = [:]
-        var op = "serve_pull"
-        let switched: Bool
-        if let session = runSession, Store.shared.supports("serve") {
-            op = "serve"
-            args["sessionId"] = .string(session)
-            if let want = runWant { args["profile"] = .string(want) }
-            runAsked = runWant
-            switched = true
-        } else {
-            args["repo"] = .string(repo); args["prNumber"] = JSON(number)
-            switched = false
-        }
-        if let asked = runAsked { log.add("▶ Switching to profile \(asked)", error: false) }
+        guard let request = serve.start(repo: repo, number: number, canSwitch: Store.shared.supports("serve")) else { return }
+        if let profile = request.switchingTo { log.add("▶ Switching to profile \(profile)", error: false) }
         Task {
-            let r = await boardCall(op, args, timeout: 170)
-            runDone(r, switched: switched)
+            let r = await boardCall(request.operation, request.arguments, timeout: RunRequest.timeout)
+            runDone(r, switched: request.switched)
         }
     }
     private func runDone(_ r: Result<JSON, APIError>, switched: Bool) {
-        runBusy = false
-        let asked = runAsked
-        runAsked = nil
         switch r {
         case .failure(let e):
-            serveError = e.description
-            if switched && (e.status == 404 || (e.message ?? "").contains("no live workspace")) {
-                // The session closed or expired, and its page with it: the next try prepares a new one.
-                runSession = nil; runURL = nil
-                setBrowser(nil)
-            } else if switched {
-                // A refused switch leaves the app serving what it served.
-                runWant = runProfile
-            }
+            if serve.failed(e.description, status: e.status, message: e.message, switched: switched) { setBrowser(nil) }
         case .success(let v):
-            if let id = v["session"]["id"].string { runSession = id }
-            runProfile = v["profile"].string
-            if let url = v["url"].string, safeWebURL(url) {
-                let same = url == runURL
-                showRun(url)
-                // The same address after a restart is a new app behind it.
-                if same { browser?.reload() }
-            } else { serveError = "The server did not say where it serves the pull request." }
-            // A profile picked while this request was out, or a new session served with the default.
-            if let want = runWant, runSession != nil, want != asked, want != runProfile { runStart(); return }
+            let served = serve.served(v)
+            if served.show != nil && !served.reload { setBrowser(nil) }
+            if served.reload { browser?.reload() }
+            if served.startAgain { runStart(); return }
             if Store.shared.supports("sessions") { Task { await loadSessions() } }
         }
     }
@@ -647,10 +582,8 @@ final class PullModel: ObservableObject {
         guard !profiles.isEmpty else { return }
         let shown = shownProfile
         let items = profiles.enumerated().map { i, p in BoardPopupMenu.Item(title: i == 0 ? "\(p) (default)" : p, checked: p == shown) }
-        guard let chosen = BoardPopupMenu.show(items), profiles[chosen] != shown else { return }
-        runWant = profiles[chosen]
-        // While a request is out, its answer switches to the new pick.
-        if !runBusy { runStart() }
+        guard let chosen = BoardPopupMenu.show(items) else { return }
+        if serve.pick(profiles[chosen], profiles: profiles) { runStart() }
     }
 
     /// The browser starts once the tab is first on show with an address, and once the service token that lets it past

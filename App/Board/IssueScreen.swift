@@ -370,7 +370,7 @@ struct IssueScreen: View {
             HStack {
                 Text("\(issue.subIssuesDone) of \(issue.subIssues) completed").font(.callout).foregroundStyle(open > 0 ? Color.secondary : Theme.ok)
                 Spacer()
-                BoardEpicProgress(done: issue.subIssuesDone, total: issue.subIssues)
+                BoardEpicProgress(progress: SubIssueProgress(issue))
             }
             ForEach(rich, id: \.self) { i in
                 DestinationLink(destination: .issue(repo: repo, issue: all[i].raw)) { BoardIssueRow(issue: all[i].summary, repo: repo, nested: true) }

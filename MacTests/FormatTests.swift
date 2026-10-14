@@ -48,6 +48,18 @@ final class FormatTests: XCTestCase {
         XCTAssertEqual(linkedStateText(BoardLink(j(#"{"number":1,"state":"closed"}"#))!), "closed")
         XCTAssertNil(linkedStateText(BoardLink(j(#"{"number":1}"#))!))
     }
+    func testLinkedStateTone() {
+        func state(_ text: String) -> LinkedState? { LinkedState(BoardLink(j(text))!) }
+        XCTAssertEqual(state(#"{"number":1,"draft":true,"state":"open"}"#), .draft)
+        XCTAssertEqual(state(#"{"number":1,"state":"open"}"#)?.tone, .ok)
+        XCTAssertEqual(state(#"{"number":1,"state":"closed"}"#)?.tone, .muted)
+        XCTAssertEqual(state(#"{"number":1,"state":"closed","stateReason":"not_planned"}"#)?.tone, .warn)
+        XCTAssertEqual(state(#"{"number":1,"draft":true}"#)?.tone, .warn)
+    }
+    func testSessionIsClosed() {
+        XCTAssertTrue(Session(j(#"{"id":"s1","status":"closed"}"#))!.isClosed)
+        XCTAssertFalse(Session(j(#"{"id":"s2","status":"idle"}"#))!.isClosed)
+    }
 
     // MARK: - Times
 

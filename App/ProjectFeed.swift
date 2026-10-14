@@ -1,5 +1,5 @@
 // What the screens of a project share: its conversations and its board, each asked for once however many screens show
-// them; and the projects themselves, with the ⚑ count of review rounds waiting across them.
+// them; and the projects themselves, with the overview of what waits for you and what is working across them.
 import Combine
 import SwiftUI
 
@@ -41,9 +41,11 @@ final class ProjectFeed: ObservableObject {
         if let saved = Store.shared.cache.value("pulls:\(repo)") { board = saved; boardLoaded = true; parseBoard() }
     }
 
-    /// `fresh` asks the server whatever was read a moment ago, as after a write or a pull to refresh.
+    /// `fresh` asks the server whatever was read a moment ago, as after a write or a pull to refresh. While the live
+    /// stream brings the changes (LiveFeed.swift), a poll asks only once a minute, in case one was missed.
     func loadSessions(fresh: Bool = false) async throws {
-        try await read(\.readingSessions, every: Self.sessionsEvery, fresh: fresh) { [self] in
+        let every = SessionFeed.shared.live ? 60 : Self.sessionsEvery
+        try await read(\.readingSessions, every: every, fresh: fresh) { [self] in
             let answer = try await Store.shared.call("sessions", ["repo": .string(repo)])
             guard let list = Session.parseList(listOf(answer, "sessions")) else { throw APIError(.nonJSON) }
             adopt(list)
@@ -61,6 +63,21 @@ final class ProjectFeed: ObservableObject {
     /// A deleted conversation leaves the list at once, before the server is asked again.
     func drop(_ id: String) {
         adopt(sessions.filter { $0.id != id })
+    }
+    /// A record from the live stream, in its row's place or first when new; the overview and its badge follow it, as a
+    /// turn starting or ending, a question asked or a review round held all change them.
+    func upsert(_ s: Session) {
+        guard let list = sessions.upserting(s) else { return }
+        let state = sessions.first { $0.id == s.id }?.state
+        sessions = list
+        sessionsLoaded = true
+        Store.shared.cache.store(Session.json(list), "sessions:\(repo)")
+        if state != s.state { ProjectsModel.shared.recount() }
+    }
+    /// A conversation the live stream says was deleted, if it is in this list.
+    func remove(_ id: String) {
+        guard let list = sessions.removing(id) else { return }
+        adopt(list)
     }
 
     /// When each repository's pull request list may be read again, shared by every project's feed.
@@ -107,8 +124,8 @@ final class ProjectFeed: ObservableObject {
     }
 }
 
-/// The projects this device can read, and the ⚑ count of review rounds waiting across them, for the tab bar's badge and
-/// every screen that picks a project.
+/// The projects this device can read, and what waits for you and what is working across them, for the Findings tab and
+/// its badge, and every screen that picks a project.
 @MainActor
 final class ProjectsModel: ObservableObject {
     static let shared = ProjectsModel()
@@ -116,8 +133,8 @@ final class ProjectsModel: ObservableObject {
     @Published private(set) var projects: [Project] = []
     /// What `projects` answered, whole: the run profiles and other per-project fields ride along.
     @Published private(set) var raw: JSON = .null
-    /// Review rounds waiting for a decision across the projects.
-    @Published private(set) var findingsWaiting = 0
+    /// What waits for you and what is working across the projects, for the Findings tab's status and its badge.
+    @Published private(set) var overview = SessionOverview([])
     /// The list has been read, from the saved copy or the server.
     @Published private(set) var loaded = false
     /// Why the last read of the projects failed.
@@ -144,19 +161,20 @@ final class ProjectsModel: ObservableObject {
     }
     private func reset() {
         generation += 1
-        projects = []; raw = .null; findingsWaiting = 0; loaded = false; error = nil
+        projects = []; raw = .null; overview = SessionOverview([]); loaded = false; error = nil
     }
 
     func project(_ repo: String?) -> Project? { projects.first { $0.repo == repo } }
 
-    /// The ⚑ count from what is saved of each project's conversations.
+    /// The overview from what is saved of each project's conversations.
     func recount() {
-        var waiting = 0
+        var all: [Session] = []
         for p in projects {
             guard let list = Store.shared.cache.value("sessions:\(p.repo)").flatMap(Session.parseList) else { continue }
-            waiting += list.filter { $0.heldRound != nil }.count
+            all += list
         }
-        if waiting != findingsWaiting { findingsWaiting = waiting }
+        let overview = SessionOverview(all)
+        if overview != self.overview { self.overview = overview }
     }
 
     /// `projects`, then every project's conversations in one call (for the counts), each project's handed to its feed.

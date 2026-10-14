@@ -727,30 +727,29 @@ private struct ProviderQuotaSection: View {
 
     private func provider(_ p: JSON) -> some View {
         VStack(alignment: .leading, spacing: 6) {
+            let health = ProviderQuota.health(p)
             HStack(spacing: 6) {
-                Circle().fill(!p["available"].is(true) ? Theme.danger : p["auth"]["loggedIn"].is(false) ? Theme.warn : Theme.ok).frame(width: 7, height: 7)
-                Text(p["label"].nonEmpty ?? p["id"].string ?? "Provider").font(Theme.footnoteSemibold).foregroundStyle(Theme.ink)
-                if !p["available"].is(true) { Text("CLI not installed").font(Theme.caption).foregroundStyle(Theme.danger) }
+                Circle().fill(health == .missing ? Theme.danger : health == .loggedOut ? Theme.warn : Theme.ok).frame(width: 7, height: 7)
+                Text(ProviderQuota.title(p)).font(Theme.footnoteSemibold).foregroundStyle(Theme.ink)
+                if health == .missing { Text("CLI not installed").font(Theme.caption).foregroundStyle(Theme.danger) }
                 Spacer()
                 if let m = p["defaultModel"].nonEmpty { Text(m).font(Theme.caption).foregroundStyle(Theme.muted) }
             }
-            ForEach(Array(p["accounts"].items.enumerated()), id: \.offset) { _, a in account(a, several: p["accounts"].count > 1) }
+            ForEach(Array(ProviderQuota.accounts(p).enumerated()), id: \.offset) { _, a in account(a, of: p) }
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.raise))
     }
 
-    private func account(_ a: JSON, several: Bool) -> some View {
+    private func account(_ a: JSON, of p: JSON) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            let auth = a["auth"]
+            let login = ProviderQuota.login(a)
             HStack(spacing: 6) {
-                if several { Text(a["label"].nonEmpty ?? a["id"].string ?? "").font(Theme.caption).foregroundStyle(Theme.ink) }
-                Text(auth["loggedIn"].is(false) ? "not logged in" : auth["detail"].nonEmpty ?? (auth["loggedIn"].is(true) ? "logged in" : ""))
-                    .font(Theme.caption).foregroundStyle(auth["loggedIn"].is(false) ? Theme.danger : Theme.muted).lineLimit(1)
+                if let name = ProviderQuota.accountName(a, of: p) { Text(name).font(Theme.caption).foregroundStyle(Theme.ink) }
+                Text(login.text).font(Theme.caption).foregroundStyle(login.loggedOut ? Theme.danger : Theme.muted).lineLimit(1)
             }
-            let windows = a["usage"]["windows"].items
-            ForEach(Array(windows.enumerated()), id: \.offset) { _, w in QuotaBar(window: ProviderStatusText.window(w)) }
-            if windows.isEmpty, let e = a["usage"]["error"].nonEmpty { Text(e).font(Theme.caption).foregroundStyle(Theme.muted) }
+            ForEach(Array(ProviderQuota.windows(a).enumerated()), id: \.offset) { _, w in QuotaBar(window: w) }
+            if let note = ProviderQuota.windowsNote(a) { Text(note).font(Theme.caption).foregroundStyle(Theme.muted) }
         }
         .padding(.leading, 13)
     }
@@ -760,7 +759,7 @@ private struct ProviderQuotaSection: View {
         let r = await boardCall("providers", fresh ? ["fresh": "1"] : [:])
         loading = false
         switch r {
-        case .success(let v): providers = v["providers"].items; error = nil
+        case .success(let v): providers = ProviderQuota.providers(v); error = nil
         case .failure(let e): if e.kind != .cancelled { error = e.description }
         }
     }

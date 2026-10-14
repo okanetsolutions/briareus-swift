@@ -12,6 +12,7 @@ struct ConversationScreen: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.navigate) private var navigate
+    @WindowOpener private var openInWindow
     @FocusState private var composerFocused: Bool
     /// An action waiting for its confirmation.
     @State private var asked: String?
@@ -52,6 +53,7 @@ struct ConversationScreen: View {
             }
         }
         .task { await model.run() }
+        .task { await model.follow() }
         .onDisappear { model.hidden() }
         .onChange(of: model.deleted) { _, deleted in if deleted { dismiss() } }
         .onChange(of: store.active) { _, active in
@@ -276,10 +278,15 @@ struct ConversationScreen: View {
     private var actions: some View {
         let s = session
         let can = model.can
-        let closed = s.status == "closed"
+        let closed = s.isClosed
         return Menu {
             Section {
                 Button("Details", systemImage: "info.circle") { showingDetails = true }
+                if let openInWindow {
+                    Button("Open in New Window", systemImage: "plus.rectangle.on.rectangle") {
+                        openInWindow(.conversation(id: sessionID, session: s.raw))
+                    }
+                }
                 if let number = s.pullNumber, let repo = s.repo {
                     if store.supports("pull") {
                         Button("Pull Request #\(String(number))", systemImage: "arrow.triangle.pull") {

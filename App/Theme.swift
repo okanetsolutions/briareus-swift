@@ -39,6 +39,25 @@ enum Theme {
         case .inactive: return dot
         }
     }
+
+    /// A GitHub label's own colour, or secondary when it sent none that reads (`PullLabel.rgb`).
+    static func color(_ label: PullLabel) -> Color {
+        guard let rgb = label.rgb else { return color(.muted) }
+        return Color(.sRGB, red: Double(rgb.red) / 255, green: Double(rgb.green) / 255, blue: Double(rgb.blue) / 255)
+    }
+
+    /// A row mark's tone (Core's `RowTone`) as a colour: muted and faint follow the system's secondary and tertiary labels.
+    static func color(_ tone: RowTone) -> Color {
+        switch tone {
+        case .ok: return ok
+        case .danger: return danger
+        case .warn: return warn
+        case .muted: return .secondary
+        case .faint: return Color(uiColor: .tertiaryLabel)
+        case .accent: return accent
+        case .running: return statusColor("running")
+        }
+    }
 }
 
 extension Color {

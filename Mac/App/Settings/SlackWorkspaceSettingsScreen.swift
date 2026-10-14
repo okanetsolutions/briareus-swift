@@ -65,7 +65,7 @@ final class SlackWorkspaceFormModel: ObservableObject {
     }
     func canLeave() -> Bool {
         guard state.dirty else { return true }
-        let message = state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this Slack workspace") have not been saved." : "The new Slack workspace has not been saved."
+        let message = state.discardMessage
         let leave = confirmDiscard(message)
         if leave { state.dirty = false }
         return leave
@@ -74,25 +74,21 @@ final class SlackWorkspaceFormModel: ObservableObject {
 
     func save() {
         let id = state.id
-        guard !busy, Store.shared.supports(id != 0 ? "update_slack_workspace" : "create_slack_workspace") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         case .failure(let p): showError(p.message); return
         case .success(let b): body = b
         }
-        if id != 0 { body["id"] = .number(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_slack_workspace" : "create_slack_workspace", body)
-                let row = r["workspace"]
-                guard row.isObject else { showError(unexpectedResponse); return }
+                let r = try await Store.shared.call(state.saveOperation, body)
+                guard let row = state.saved(r) else { showError(unexpectedResponse); return }
                 // The server's word on what was saved: who the token is, an empty label now the workspace's name, and a new
                 // workspace's id and Request URL.
                 error = nil
-                state.row = row
-                state.fill()
                 post(.slackWorkspacesChanged)
                 if id == 0 { Navigator.shared.show(.slackWorkspaceSettings(row: row, defaults: SettingsModel.shared.slack.defaults)) }
             } catch {
@@ -245,7 +241,7 @@ struct SlackWorkspaceSettingsScreen: View {
         var buttons: [HeaderButton] = []
         if store.supports("settings_slack_workspaces") {
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE74E), label: model.saving ? "Saving…" : "Save", tip: "Save this Slack workspace (⌘S)",
-                                        enabled: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_slack_workspace" : "create_slack_workspace"),
+                                        enabled: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
                                         prominent: true) { model.save() })
             if id != 0 {
                 buttons.append(HeaderButton(glyph: Glyph.symbol(0xE74D), tip: "Delete this Slack workspace",

@@ -19,24 +19,16 @@ final class BoardFilters: ObservableObject {
     init(repo: String) {
         self.repo = repo
         if let saved = Store.shared.cache.value("pulls-filters:\(repo)") {
-            read(&pulls, saved["pulls"]); read(&issues, saved["issues"])
+            pulls = BoardFilter(saved: saved["pulls"]); issues = BoardFilter(saved: saved["issues"])
         } else {
             opening = BoardFilter()
         }
     }
 
-    private func read(_ f: inout BoardFilter, _ j: JSON) {
-        for k in FilterKind.allCases { if let v = j[k.name].string { f.set(k, v) } }
-    }
-    private func json(_ f: BoardFilter) -> JSON {
-        var j: JSON = [:]
-        for k in FilterKind.allCases where !f[k].isEmpty { j[k.name] = .string(f[k]) }
-        return j
-    }
     /// A pick by the user: the board no longer opens on the author, and the picks are saved.
     func picked() {
         opening = nil
-        Store.shared.cache.store(["pulls": json(pulls), "issues": json(issues)], "pulls-filters:\(repo)")
+        Store.shared.cache.store(["pulls": pulls.saved, "issues": issues.saved], "pulls-filters:\(repo)")
     }
     /// A board shown before the server answered may be out of date about who has something open, so the server's answer
     /// opens it again, unless the pickers were touched meanwhile.
@@ -60,6 +52,8 @@ struct BoardScreen: View {
     @StateObject private var errands: ErrandRunner
     @StateObject private var issueStatus: IssueStatusReader
     @State private var tab = Tab.pulls
+    /// The epics whose sub-issues the Issues tab hides, by number.
+    @State private var foldedEpics: Set<Int> = []
     @State private var error: String?
     /// The pull request whose Merge waits for a yes, the one being merged from its row, and what the last merge left to say.
     @State private var mergeAsked: PullSummary?
@@ -126,7 +120,8 @@ struct BoardScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if tab != .review {
-                    BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label]) { filters.picked() }
+                    BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label],
+                                    stacked: tab == .pulls) { filters.picked() }
                         .disabled(!loaded || rows.isEmpty && !filter.wrappedValue.isOn)
                 }
             }
@@ -195,7 +190,7 @@ struct BoardScreen: View {
                 let actions = pull.branch.isEmpty ? [] : boardErrands(catalog: catalog.catalog, pull: pull, failedChecks: 0)
                 DestinationLink(destination: .pull(repo: repo, number: pull.number, stack: stack?.json, summary: pull.raw)) {
                     BoardPullRow(pull: pull, stack: stack, repo: repo, activeRuns: activeRuns(pull.number),
-                                 suggested: actions.first { $0.id == pull.recommended }?.label, issueStatus: issueStatus.statuses(pull))
+                                 suggested: actions.first { $0.isSuggested(for: pull) }?.label, issueStatus: issueStatus.statuses(pull))
                 }
                 .contextMenu { rowMenu(pull, actions: actions) }
                 .swipeActions(edge: .trailing) {
@@ -221,10 +216,10 @@ struct BoardScreen: View {
         if !errandList.isEmpty {
             Section("Errands") {
                 ForEach(errandList, id: \.id) { a in
-                    Button(role: a.id == "delete-self-comments" ? .destructive : nil) {
+                    Button(role: a.isDestructive ? .destructive : nil) {
                         errands.ask(a, number: pull.number, branch: pull.branch)
                     } label: {
-                        Label(pull.recommended == a.id ? "\(a.label) (suggested)" : a.label, systemImage: pull.recommended == a.id ? "sparkles" : errandSymbol(a.id))
+                        Label(a.isSuggested(for: pull) ? "\(a.label) (suggested)" : a.label, systemImage: a.isSuggested(for: pull) ? "sparkles" : errandSymbol(a.id))
                     }
                     .disabled(errands.busy || errands.uncertain)
                 }
@@ -300,12 +295,16 @@ struct BoardScreen: View {
             .listRowBackground(Theme.row)
         } else {
             let visible = issues.filter { filters.issues.passes(BoardRow($0.summary)) }
-            let nested = issuesNested(visible.map(\.summary), repo: repo)
+            let summaries = visible.map(\.summary)
+            let nested = issuesFolded(issuesNested(summaries, repo: repo), summaries, folded: foldedEpics)
             Section {
                 ForEach(nested, id: \.index) { row in
                     let item = visible[row.index]
+                    let number = item.summary.number
                     DestinationLink(destination: .issue(repo: repo, issue: item.raw)) {
-                        BoardIssueRow(issue: item.summary, repo: repo, nested: row.depth > 0)
+                        BoardIssueRow(issue: item.summary, repo: repo, nested: row.depth > 0,
+                                      folded: row.children > 0 ? foldedEpics.contains(number) : nil,
+                                      fold: { withAnimation { if foldedEpics.remove(number) == nil { foldedEpics.insert(number) } } })
                             .padding(.leading, CGFloat(min(row.depth, 4)) * 14)
                     }
                     .contextMenu {
@@ -323,37 +322,5 @@ struct BoardScreen: View {
                     .listRowBackground(Color.clear)
             }
         }
-    }
-}
-
-/// The board's pickers in one menu. Each option says how many rows picking it would leave.
-private struct BoardFilterMenu: View {
-    @Binding var filter: BoardFilter
-    let rows: [BoardRow]
-    let kinds: [FilterKind]
-    let picked: () -> Void
-
-    var body: some View {
-        Menu {
-            ForEach(kinds, id: \.self) { kind in
-                let options = filter.options(kind, rows: rows)
-                Picker(selection: Binding(get: { filter[kind] }, set: { filter.set(kind, $0); picked() })) {
-                    Text("All \(kind.name)s").tag("")
-                    ForEach(options, id: \.value) { Text("\($0.text) (\($0.count))").tag($0.value) }
-                } label: {
-                    let name = kind.name.asciiCapitalized
-                    Label(filter[kind].isEmpty ? name : "\(name): \(options.first { $0.value == filter[kind] }?.text ?? filter[kind])",
-                          systemImage: kind == .author ? "person" : kind == .reviewer ? "eye" : kind == .assignee ? "person.crop.circle" : "tag")
-                }
-                .pickerStyle(.menu)
-                .disabled(options.isEmpty)
-            }
-            if filter.isOn {
-                Button("Clear filters", systemImage: "xmark.circle", role: .destructive) { filter = BoardFilter(); picked() }
-            }
-        } label: {
-            Image(systemName: filter.isOn ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-        }
-        .accessibilityLabel(filter.isOn ? "Filters, active" : "Filters")
     }
 }

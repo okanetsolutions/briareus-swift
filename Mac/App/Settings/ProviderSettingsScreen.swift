@@ -69,7 +69,7 @@ final class ProviderFormModel: ObservableObject {
     }
     func canLeave() -> Bool {
         guard state.dirty else { return true }
-        let message = state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this provider") have not been saved." : "The new provider has not been saved."
+        let message = state.discardMessage
         let leave = confirmDiscard(message)
         if leave { state.dirty = false }
         return leave
@@ -225,9 +225,9 @@ final class ProviderFormModel: ObservableObject {
     // MARK: Saving, cloning, deleting
 
     func save() {
-        guard !busy, Store.shared.supports(state.id != 0 ? "update_provider" : "create_provider") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         case .failure(let p):
             error = p.message
             tab = ProviderTab(rawValue: p.tab) ?? .provider
@@ -236,17 +236,13 @@ final class ProviderFormModel: ObservableObject {
         case .success(let b): body = b
         }
         let id = state.id
-        if id != 0 { body["id"] = JSON(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_provider" : "create_provider", body)
-                let row = r["provider"]
-                guard row.isObject else { showError(unexpectedResponse); return }
+                let r = try await Store.shared.call(state.saveOperation, body)
+                guard let row = state.saved(r) else { showError(unexpectedResponse); return }
                 error = nil
-                state.row = row
-                state.fill()
                 post(.settingsProvidersChanged, ["openFirst": false])
                 // A new provider's connection can be read now that it exists (its own screen reads it as it opens).
                 if id == 0 { Navigator.shared.show(.providerSettings(row: row, defaults: defaults)) }
@@ -349,7 +345,7 @@ struct ProviderSettingsScreen: View {
         var buttons: [HeaderButton] = []
         if store.supports("settings_providers") {
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE74E), label: model.saving ? "Saving…" : "Save", tip: "Save this provider (⌘S)",
-                                        enabled: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_provider" : "create_provider"),
+                                        enabled: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
                                         prominent: true) { model.save() })
             if id != 0 {
                 buttons.append(HeaderButton(glyph: Glyph.symbol(0xE8C8), tip: "Clone into a new provider",
@@ -518,7 +514,8 @@ struct QuotaBar: View {
     var window: (label: String, right: String, pct: Double)
     var body: some View {
         let pct = min(max(window.pct, 0), 100)
-        let color = pct >= 90 ? Theme.danger : pct >= 70 ? Theme.warn : Theme.ok
+        let level = ProviderQuota.level(pct)
+        let color = level == .spent ? Theme.danger : level == .close ? Theme.warn : Theme.ok
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(window.label).lineLimit(1).truncationMode(.tail)

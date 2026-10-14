@@ -125,7 +125,7 @@ extension CarAssistant {
                 }
                 let open = sessions.filter { $0.status != "closed" }
                 show([self.section("Active", open.filter(\.isActive).map { self.row($0) }), self.section("Recent", open.filter { !$0.isActive }.map { self.row($0) }),
-                      self.section("Closed", sessions.filter { $0.status == "closed" }.map { self.row($0) })])
+                      self.section("Closed", sessions.filter { $0.isClosed }.map { self.row($0) })])
             }
             if feed.sessionsLoaded { rows(feed.sessions) }
             try await feed.loadSessions(fresh: true)
@@ -349,7 +349,7 @@ extension CarAssistant {
                 self?.ask(["Close this conversation?", "Close it?"], yes: "Close") { self?.change("close", done: "The conversation is closed.") }
             })
         }
-        if store.supports("reopen") && session.status == "closed" {
+        if store.supports("reopen") && session.isClosed {
             more.append(item("Reopen", symbol: "arrow.uturn.backward") { [weak self] in
                 self?.ask(["Reopen this conversation?", "Reopen it?"], yes: "Reopen") { self?.change("reopen", done: "The conversation is open again.") }
             })
@@ -421,10 +421,10 @@ extension CarAssistant {
             about.append(item("Merge", "Into \(pull["baseRef"].string ?? "its base") · cannot be undone from here", symbol: "arrow.triangle.merge") { [weak self] in self?.prepareMerge(number) })
         }
         let errands = offered.map { action in
-            item(action.label, row?.recommended == action.id ? "Suggested" : action.input != nil ? "Dictated" : nil, symbol: row?.recommended == action.id ? "sparkle" : "bolt") { [weak self] in
+            item(action.label, action.isSuggested(for: row) ? "Suggested" : action.input != nil ? "Dictated" : nil, symbol: action.isSuggested(for: row) ? "sparkle" : "bolt") { [weak self] in
                 if action.input != nil { self?.dictate(.feedback(action)); return }
                 self?.ask(["Start a paid \(action.label) session on #\(number)? \(action.hint).", "Start \(action.label)?"], yes: "Start",
-                          destructive: action.id == "delete-self-comments") { self?.run(action) }
+                          destructive: action.isDestructive) { self?.run(action) }
             }
         }
         return Self.fit([section(row?.title ?? pull["title"].string, about), section("Paid agents, may write to GitHub", errands), section(nil, [putDown("pull request")])])

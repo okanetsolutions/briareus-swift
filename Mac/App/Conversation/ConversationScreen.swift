@@ -155,12 +155,12 @@ final class ConversationModel: ObservableObject {
     }
     private func applyLive(_ event: String, _ j: JSON) {
         live = true
-        if event == "session" {
-            if let next = Session(j["session"].isObject ? j["session"] : j) { snapshot = next; showPanel() }
-            return
+        switch ConversationEvent(event, j) {
+        case .record(let next)?: snapshot = next; showPanel(); return
+        case .line?: break
+        case nil: return
         }
         // A transcript line, unnamed; one already held (read by a poll meanwhile) adds nothing.
-        guard j["seq"].truncatedInt != nil else { return }
         let before = transcript.events.count
         transcript.append(.array([j]))
         guard transcript.events.count != before else { return }
@@ -376,7 +376,7 @@ struct ConversationScreen: View {
     private var headerButtons: [HeaderButton] {
         let s = model.session
         let can = model.can
-        let closed = s.status == "closed"
+        let closed = s.isClosed
         var out: [HeaderButton] = []
         if store.supports("browser") {
             let browser = BrowserState.sessionOn(s.raw)
@@ -658,7 +658,7 @@ private struct ConversationFooter: View {
     }
 
     private var closedBox: some View {
-        let reopen = store.supports("reopen") && model.session.status == "closed"
+        let reopen = store.supports("reopen") && model.session.isClosed
         let can = model.can
         return HStack(spacing: 12) {
             Text(store.canManage ? "This session is closed." : "Read-only access")

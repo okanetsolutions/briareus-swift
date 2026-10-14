@@ -199,6 +199,21 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(nested(#"[{"number":9},{"number":1,"parent":{"number":2}},{"number":2,"parent":{"number":1}},{"number":5,"parent":{"number":2}}]"#, "o/r"),
                        "9:0,1:0,2:1,5:2")
     }
+    func testFoldedEpicsHideEverythingUnderThem() {
+        let issues = IssueSummary.parseList(j(#"[{"number":1},{"number":2,"parent":{"number":1}},{"number":3,"parent":{"number":2}},"#
+                                              + #"{"number":4,"parent":{"number":1}},{"number":5},{"number":6,"parent":{"number":5}}]"#))
+        let rows = issuesNested(issues, repo: "o/r")
+        XCTAssertEqual(rows.map(\.children), [2, 1, 0, 0, 1, 0])
+        func shown(_ folded: Set<Int>) -> String {
+            issuesFolded(rows, issues, folded: folded).map { "\(issues[$0.index].number)" }.joined(separator: ",")
+        }
+        XCTAssertEqual(shown([]), "1,2,3,4,5,6")
+        XCTAssertEqual(shown([1]), "1,5,6")
+        XCTAssertEqual(shown([2]), "1,2,4,5,6")
+        XCTAssertEqual(shown([2, 5]), "1,2,4,5")
+        // A leaf, or a number not on the list, folds nothing.
+        XCTAssertEqual(shown([3, 99]), "1,2,3,4,5,6")
+    }
     func testIssuePromptsNameTheIssueItsEpicAndHowToCloseIt() {
         var p = issuePrompt(issue(#"{"number":20,"title":"Child"}"#)!, repo: "o/r")
         XCTAssertTrue(p.hasPrefix("Issue #20: Child\n\n"))
@@ -244,6 +259,61 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(FilterKind.author.name, "author"); XCTAssertEqual(FilterKind.reviewer.name, "reviewer"); XCTAssertEqual(FilterKind.label.name, "label")
         XCTAssertEqual(FilterKind.assignee.name, "assignee")
     }
+    func testHideLaterStackedKeepsTheBottomOfEachStackAndThePullRequestsOutsideOne() {
+        let pulls = PullSummary.parseList(j(#"""
+        [{"number":1,"title":"a","author":"ana","stack":{"id":7,"position":1,"total":3}},
+         {"number":2,"title":"b","author":"ana","stack":{"id":7,"position":2,"total":3}},
+         {"number":3,"title":"c","author":"bo","stack":{"id":7,"position":3,"total":3}},
+         {"number":4,"title":"d","author":"bo"}]
+        """#))
+        let rows = pulls.map(BoardRow.init)
+        XCTAssertEqual(rows.map(\.stackPosition), [1, 2, 3, nil])
+        var f = BoardFilter()
+        XCTAssertFalse(f.isOn)
+        f.hideLaterStacked = true
+        XCTAssertTrue(f.isOn)
+        XCTAssertEqual(pulls.filter { f.passes(BoardRow($0)) }.map(\.number), [1, 4])
+        // The pickers count only what the toggle leaves.
+        XCTAssertEqual(f.options(.author, rows: rows).map { "\($0.text) \($0.count)" }, ["ana 1", "bo 1"])
+        // Issues carry no stack, so it leaves them all.
+        XCTAssertTrue(f.passes(BoardRow(author: "ana")))
+    }
+
+    func testHideFailingChecksKeepsPassingRunningAndUncheckedPullRequests() {
+        let pulls = PullSummary.parseList(j(#"""
+        [{"number":1,"title":"a","author":"ana","checks":"failure"},
+         {"number":2,"title":"b","author":"ana","checks":"error"},
+         {"number":3,"title":"c","author":"bo","checks":"success"},
+         {"number":4,"title":"d","author":"bo","checks":"pending"},
+         {"number":5,"title":"e","author":"bo"}]
+        """#))
+        let rows = pulls.map(BoardRow.init)
+        var f = BoardFilter()
+        f.hideFailingChecks = true
+        XCTAssertTrue(f.isOn)
+        XCTAssertEqual(pulls.filter { f.passes(BoardRow($0)) }.map(\.number), [3, 4, 5])
+        // The pickers count only what the toggle leaves.
+        XCTAssertEqual(f.options(.author, rows: rows).map { "\($0.text) \($0.count)" }, ["bo 3"])
+        // Issues carry no checks, so it leaves them all.
+        XCTAssertTrue(f.passes(BoardRow(author: "ana")))
+        f.hideFailingChecks = false
+        XCTAssertFalse(f.isOn)
+    }
+
+    func testHideFailingChecksIsSavedPerRepository() {
+        var f = BoardFilter(); f.hideFailingChecks = true
+        XCTAssertEqual(f.saved, j(#"{"hideFailingChecks":true}"#))
+        XCTAssertEqual(BoardFilter(saved: f.saved), f)
+    }
+
+    func testBoardFilterSavesAndRestoresItsPicks() {
+        var f = BoardFilter(); f[.author] = "Ana"; f.hideLaterStacked = true
+        XCTAssertEqual(f.saved, j(#"{"author":"ana","hideLaterStacked":true}"#))
+        XCTAssertEqual(BoardFilter(saved: f.saved), f)
+        XCTAssertEqual(BoardFilter(saved: j(#"{"label":"bug"}"#)).saved, j(#"{"label":"bug"}"#))
+        XCTAssertEqual(BoardFilter(saved: .null), BoardFilter())
+    }
+
     func testBoardFilterCopiesCompareEqual() {
         var a = BoardFilter(); a[.author] = "Ana"; a[.label] = "bug"
         var b = a

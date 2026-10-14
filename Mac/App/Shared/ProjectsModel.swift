@@ -1,4 +1,5 @@
-// The projects the sidebar lists, for the screens that pick one (projects_list), and the ⚑ count of review rounds waiting.
+// The projects the sidebar lists, for the screens that pick one (projects_list), the ⚑ count of review rounds waiting, and
+// the ◉ Status overview of what waits for you and what is working.
 // The sidebar owns the reading; other screens only read what it holds. It is screen_projects.c's ProjectsScreen state
 // (projects_load, projects_count, projects_recount_findings) and sessions_forget, kept here because the sidebar's views
 // come and go (Settings takes the sidebar's place) while the Windows client's screens stay on their pane's stack.
@@ -17,6 +18,8 @@ final class ProjectsModel: ObservableObject {
     /// Per project (by repo): how many conversations, and whether one is working.
     @Published private(set) var counts: [String: Int] = [:]
     @Published private(set) var busy: [String: Bool] = [:]
+    /// What waits for you and what is working across the projects, for ◉ Status and its badge.
+    @Published private(set) var overview = SessionOverview([])
     /// The list has been read, from the saved copy or the server.
     @Published private(set) var loaded = false
     /// Why the last read of the projects failed.
@@ -65,7 +68,7 @@ final class ProjectsModel: ObservableObject {
 
     private func reset() {
         generation += 1
-        projects = []; raw = .null; findingsWaiting = 0; counts = [:]; busy = [:]
+        projects = []; raw = .null; findingsWaiting = 0; counts = [:]; busy = [:]; overview = SessionOverview([])
         loaded = false; error = nil; openProject = nil
     }
 
@@ -73,15 +76,19 @@ final class ProjectsModel: ObservableObject {
     func recount() {
         var counts: [String: Int] = [:], busy: [String: Bool] = [:]
         var waiting = 0
+        var all: [Session] = []
         for p in projects {
             guard let list = Store.shared.cache.value("sessions:\(p.repo)"), let sessions = Session.parseList(list) else { continue }
             counts[p.repo] = sessions.count
             busy[p.repo] = sessions.contains { $0.isActive }
             waiting += sessions.filter { $0.heldRound != nil }.count
+            all += sessions
         }
         if counts != self.counts { self.counts = counts }
         if busy != self.busy { self.busy = busy }
         if waiting != findingsWaiting { findingsWaiting = waiting }
+        let overview = SessionOverview(all)
+        if overview != self.overview { self.overview = overview }
     }
 
     /// projects_load: the saved list at once the first time, then `projects` and every project's conversations (for the
@@ -184,30 +191,22 @@ final class SessionFeed: ObservableObject {
 
     private func apply(_ event: String, _ j: JSON) {
         let cache = Store.shared.cache
-        switch event {
-        case "session":
-            guard let s = Session(j), let repo = s.repo else { return }
+        switch SessionsEvent(event, j) {
+        case .session(let s)?:
+            guard let repo = s.repo else { return }
             let key = "sessions:\(repo)"
-            var list = cache.value(key).flatMap(Session.parseList) ?? []
-            if let i = list.firstIndex(where: { $0.id == s.id }) {
-                if list[i].raw == s.raw { return }
-                list[i] = s
-            } else {
-                list.insert(s, at: 0)
-            }
+            guard let list = (cache.value(key).flatMap(Session.parseList) ?? []).upserting(s) else { return }
             cache.store(Session.json(list), key)
             post(.sessionLive, ["repo": repo, "session": s.raw])
-        case "session.deleted":
-            guard let id = j["id"].string else { return }
+        case .deleted(let id)?:
             for p in ProjectsModel.shared.projects {
                 let key = "sessions:\(p.repo)"
-                guard var list = cache.value(key).flatMap(Session.parseList), list.contains(where: { $0.id == id }) else { continue }
-                list.removeAll { $0.id == id }
+                guard let list = cache.value(key).flatMap(Session.parseList)?.removing(id) else { continue }
                 cache.store(Session.json(list), key)
                 cache.remove("transcript:\(id)")
                 post(.sessionForgotten, ["id": id, "repo": p.repo])
             }
-        default: return
+        case nil: return
         }
         ProjectsModel.shared.recount()
     }
