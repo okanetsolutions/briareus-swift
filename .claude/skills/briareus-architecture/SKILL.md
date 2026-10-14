@@ -55,18 +55,16 @@ Search here before writing a component.
 
 **iPhone settings kit** (`App/Settings/SettingsFormKit.swift`): `SettingsFormChrome`, `SettingsTextRow`, `SettingsValueRow`, `SettingsLabel`, `SettingsInfoButton`, `SettingsVerdict`, `SettingsErrorSection`, `SettingsUnavailableView`.
 
-**Core view logic** (shared by both apps): `PullRowContent` with `PullMark`, `ChecksState` and `RowTone` (each app maps a tone with `Theme.color(_:)`; the reference for converging the rest), `BoardRow`, `BoardFilter`, `BoardAction`, `ReviewStatus`, `StackPosition`, `mergeWarnings`, `issuesNested`, `issuePrompt`, `SettingsField` and the settings form bodies, `CarText`.
+**Core view logic** (shared by both apps): `IssueRowContent` with `RowFact` and `SubIssueProgress`, `PullRowContent` with `PullMark`, `ChecksState` and `RowTone` (each app maps a tone with `Theme.color(_:)`; the reference for converging the rest), `BoardRow`, `BoardFilter`, `BoardAction`, `ReviewStatus`, `StackPosition`, `mergeWarnings`, `issuesNested`, `issuePrompt`, `SettingsField` and the settings form bodies, `CarText`.
 
 ## Known duplicates to converge
 
-Done: the pull request row (`BoardPullRow` and `PullRow` both draw `PullRowContent`). The session and linked rows draw only Core values (`displayTitle`, `sessionSubtitle`, `Session.isClosed`, `LinkedState`, `BoardLink.reference`); what differs between the apps there is drawing (the Mac's hover row, the iPhone's list row), which stays per app.
-
+Done: the pull request row (`BoardPullRow` and `PullRow` both draw `PullRowContent`) and the issue row (`BoardIssueRow` and `IssueRowView` draw `IssueRowContent`, both epic bars draw `SubIssueProgress`). The session and linked rows draw only Core values (`displayTitle`, `sessionSubtitle`, `Session.isClosed`, `LinkedState`, `BoardLink.reference`); what differs between the apps there is drawing (the Mac's hover row, the iPhone's list row), which stays per app.
 
 These exist because the iPhone app cannot see `Mac/App/Shared`. Do not add to the list. When you touch one, move its decisions into Core (a function returning a struct or enum, tested in `MacTests`) and leave each app only the drawing.
 
 | iPhone | Mac | Decision to move to Core |
 | --- | --- | --- |
-| `BoardIssueRow`, `BoardEpicProgress` | `IssueRowView`, `EpicProgress` | Issue row facts, epic progress counts |
 | `BoardLabelChips`, `boardLabelColor` | `LabelChips`, `labelColor` | Label colour parsing |
 | `reviewStyle` | `reviewGlyph` | Review state to a symbol name (the colour already comes from `ReviewStatus.tone`) |
 | `boardErrands`, `errandSymbol` | `rowActions`, `actionIcon` | Errand list and symbol name |
