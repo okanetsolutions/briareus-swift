@@ -288,23 +288,27 @@ struct BoardLabelChips: View {
 
 /// A review verdict's symbol and colour.
 func reviewStyle(_ status: ReviewStatus) -> (symbol: String, color: Color) {
+    let color = Theme.color(status.tone)
     switch status {
-    case .approved: return ("checkmark.seal.fill", Theme.ok)
-    case .changesRequested: return ("xmark.octagon.fill", Theme.danger)
-    case .feedback: return ("text.bubble.fill", Theme.warn)
-    case .requested, .none: return ("clock", .secondary)
+    case .approved: return ("checkmark.seal.fill", color)
+    case .changesRequested: return ("xmark.octagon.fill", color)
+    case .feedback: return ("text.bubble.fill", color)
+    case .requested, .none: return ("clock", color)
     }
 }
 
-/// A board row's checks rollup as a badge.
-struct ChecksBadge: View {
-    let state: String
-    var body: some View {
-        switch state {
-        case "success": BoardBadge(text: "Checks", systemImage: "checkmark", color: Theme.ok).accessibilityLabel("Checks passed")
-        case "failure", "error": BoardBadge(text: "Checks", systemImage: "xmark", color: Theme.danger).accessibilityLabel("Checks failed")
-        default: BoardBadge(text: "Checks", systemImage: "clock", color: Theme.warn).accessibilityLabel("Checks running")
-        }
+/// The symbol before a pull request's mark.
+func markSymbol(_ mark: PullMark) -> String {
+    switch mark {
+    case .running: return "bolt.fill"
+    case .conflicts: return "exclamationmark.triangle.fill"
+    case .checks(.passed): return "checkmark"
+    case .checks(.failed): return "xmark"
+    case .checks(.pending): return "clock"
+    case .stack: return "square.stack.3d.up.fill"
+    case .review(let status): return reviewStyle(status).symbol
+    case .draft: return "pencil"
+    case .suggested: return "sparkles"
     }
 }
 
@@ -360,7 +364,7 @@ struct BoardPullRow: View {
     var issueStatus: [String?] = []
     var showsIssues = true
 
-    private var review: ReviewStatus { ReviewStatus(decision: pull.reviewDecision, reviewers: pull.reviewers) }
+    private var content: PullRowContent { PullRowContent(pull: pull, stack: stack, activeRuns: activeRuns, suggested: suggested) }
     private var tint: Color { pull.hasConflicts ? Theme.danger : pull.draft ? .secondary : Theme.ok }
 
     var body: some View {
@@ -374,28 +378,17 @@ struct BoardPullRow: View {
                     Spacer(minLength: 4)
                     BoardUpdated(date: pull.updatedAt)
                 }
-                if activeRuns > 0 || pull.hasConflicts || pull.checks != nil || stack != nil || review != .none || pull.draft || suggested != nil {
+                let content = content
+                if !content.marks.isEmpty {
                     BoardFlowLayout(spacing: 5) {
-                        if activeRuns > 0 {
-                            BoardBadge(text: "\(activeRuns) running", systemImage: "bolt.fill", color: Theme.statusColor("running"))
-                                .accessibilityLabel("\(activeRuns) conversation\(activeRuns == 1 ? "" : "s") at work")
-                        }
-                        if pull.hasConflicts { BoardBadge(text: "Conflicts", systemImage: "exclamationmark.triangle.fill", color: Theme.danger) }
-                        if let checks = pull.checks { ChecksBadge(state: checks) }
-                        if let stack {
-                            BoardBadge(text: "Stack \(stack.label(pull.number))", systemImage: "square.stack.3d.up.fill", color: Theme.accent)
-                                .accessibilityLabel("Stacked pull request \(stack.label(pull.number))")
-                        }
-                        if review != .none { BoardBadge(text: review.text, systemImage: reviewStyle(review).symbol, color: reviewStyle(review).color) }
-                        if pull.draft { BoardBadge(text: "Draft", systemImage: "pencil", color: .secondary) }
-                        if let suggested {
-                            BoardBadge(text: "Suggested: \(suggested)", systemImage: "sparkles", color: Theme.accent)
-                                .accessibilityLabel("Suggested errand: \(suggested)")
+                        ForEach(Array(content.marks.enumerated()), id: \.offset) { _, mark in
+                            BoardBadge(text: mark.text, systemImage: markSymbol(mark), color: Theme.color(mark.tone))
+                                .accessibilityLabel(mark.spoken)
                         }
                     }
                 }
                 if !pull.labels.isEmpty { BoardLabelChips(labels: pull.labels) }
-                Text(whoLine).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Text(content.who.joined(separator: " | ")).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 if showsIssues {
                     ForEach(Array(pull.issues.enumerated()), id: \.offset) { i, link in
                         BoardLinkedRow(link: link, repo: repo, status: i < issueStatus.count ? issueStatus[i] : nil, showState: false)
@@ -404,15 +397,6 @@ struct BoardPullRow: View {
             }
         }
         .padding(.vertical, 3)
-    }
-
-    /// "assignee @a | author @b | reviewers @c, @d": the words say which login is which.
-    private var whoLine: String {
-        var parts = [pull.assignees.isEmpty ? "unassigned" : "assignee \(people(pull.assignees, limit: 2))"]
-        if let author = pull.author { parts.append("author @\(author)") }
-        let reviewers = pull.reviewers.map(\.user).filter { !$0.isEmpty }
-        if !reviewers.isEmpty { parts.append("reviewers " + reviewers.map { "@\($0)" }.joined(separator: ", ")) }
-        return parts.joined(separator: " | ")
     }
 }
 

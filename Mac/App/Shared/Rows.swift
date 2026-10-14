@@ -18,12 +18,13 @@ func severityColor(_ severity: String?) -> Color {
     }
 }
 func reviewGlyph(_ status: ReviewStatus) -> (symbol: String?, color: Color) {
+    let color = Theme.color(status.tone)
     switch status {
-    case .approved: return (Glyph.symbol(0xE73E), Theme.ok)
-    case .changesRequested: return (Glyph.symbol(0xE711), Theme.danger)
-    case .feedback: return (Glyph.symbol(0xE8BD), Theme.warn)
-    case .requested: return (Glyph.symbol(0xE823), Theme.muted)
-    case .none: return (nil, Theme.muted)
+    case .approved: return (Glyph.symbol(0xE73E), color)
+    case .changesRequested: return (Glyph.symbol(0xE711), color)
+    case .feedback: return (Glyph.symbol(0xE8BD), color)
+    case .requested: return (Glyph.symbol(0xE823), color)
+    case .none: return (nil, color)
     }
 }
 /// The glyph for a check conclusion.
@@ -57,21 +58,6 @@ struct BadgeSpec: Hashable {
     var text: String
     var color: Color
     var chip = false
-}
-/// A pull request's badges (conflicts, checks, stack, review, draft).
-func pullBadges(_ pull: PullSummary, stack: StackPosition?) -> [BadgeSpec] {
-    var out: [BadgeSpec] = []
-    if pull.conflicting { out.append(BadgeSpec(glyph: Glyph.symbol(0xE7BA), text: "Conflicts", color: Theme.danger)) }
-    if let checks = pull.checks {
-        if checks == "success" { out.append(BadgeSpec(glyph: Glyph.symbol(0xE73E), text: "Checks", color: Theme.ok)) }
-        else if checks == "failure" || checks == "error" { out.append(BadgeSpec(glyph: Glyph.symbol(0xE711), text: "Checks", color: Theme.danger)) }
-        else { out.append(BadgeSpec(glyph: Glyph.symbol(0xE823), text: "Checks", color: Theme.warn)) }
-    }
-    if let stack { out.append(BadgeSpec(glyph: Glyph.symbol(0xE81E), text: "Stack \(stack.label())", color: Theme.accent)) }
-    let review = ReviewStatus(decision: pull.reviewDecision, reviewers: pull.reviewers)
-    if review != .none { let g = reviewGlyph(review); out.append(BadgeSpec(glyph: g.symbol, text: review.text, color: g.color)) }
-    if pull.draft { out.append(BadgeSpec(glyph: Glyph.symbol(0xE70F), text: "Draft", color: Theme.muted)) }
-    return out
 }
 
 /// A line of wrapped badges and chips.
@@ -216,25 +202,27 @@ struct PullRow<Buttons: View>: View {
     var action: (() -> Void)?
     @ViewBuilder var buttons: Buttons
 
+    /// "#12", its marks in Core's order, then who holds, wrote and reviews it.
     private var facts: [MetaPart] {
-        var d: [MetaPart] = [MetaPart(text: "#\(pull.number)")]
-        if pull.draft { d.append(MetaPart(text: "draft")) }
-        if pull.hasConflicts { d.append(MetaPart(text: "⚠ conflicts", color: Theme.danger)) }
-        if let checks = pull.checks {
-            if checks == "success" { d.append(MetaPart(text: "✓ checks", color: Theme.ok)) }
-            else if checks == "failure" || checks == "error" { d.append(MetaPart(text: "✗ checks", color: Theme.danger)) }
-            else { d.append(MetaPart(text: "… checks", color: Theme.warn)) }
+        let content = PullRowContent(pull: pull, stack: stack)
+        let marks = content.marks.map { MetaPart(text: factText($0), color: Theme.color($0.tone)) }
+        let who = content.who.enumerated().map { i, text in
+            MetaPart(text: text, color: Theme.color(i == 0 && content.unassigned ? .faint : .muted))
         }
-        let review = ReviewStatus(decision: pull.reviewDecision, reviewers: pull.reviewers)
-        if review != .none { d.append(MetaPart(text: review.text, color: reviewGlyph(review).color)) }
-        if let stack { d.append(MetaPart(text: "stack \(stack.label())", color: Theme.accent)) }
-        // The two logins say which is which; the branch is the pull request's page's to show.
-        if !pull.assignees.isEmpty { d.append(MetaPart(text: "assignee \(people(pull.assignees, limit: 2))")) }
-        else { d.append(MetaPart(text: "unassigned", color: Theme.tertiary)) }
-        if let author = pull.author { d.append(MetaPart(text: "author @\(author)")) }
-        let reviewers = pull.reviewers.map(\.user).filter { !$0.isEmpty }
-        if !reviewers.isEmpty { d.append(MetaPart(text: "reviewers " + reviewers.map { "@\($0)" }.joined(separator: ", "))) }
-        return d
+        return [MetaPart(text: "#\(pull.number)")] + marks + who
+    }
+
+    /// A mark as the Mac's line of facts words it: lower case, a sign before the checks and conflicts.
+    private func factText(_ mark: PullMark) -> String {
+        switch mark {
+        case .conflicts: return "⚠ conflicts"
+        case .checks(.passed): return "✓ checks"
+        case .checks(.failed): return "✗ checks"
+        case .checks(.pending): return "… checks"
+        case .stack(let label): return "stack \(label)"
+        case .draft: return "draft"
+        default: return mark.text
+        }
     }
 
     var body: some View {

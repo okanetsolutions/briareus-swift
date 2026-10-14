@@ -274,6 +274,8 @@ App Store Connect rejects an upload whose build number it has already seen for t
 | `MacTests/` | Core tests, run with `swift test` |
 | `UITests/` | The pairing UI test, run in the simulator |
 | `scripts/generate-project.py` | Generates `Briareus.xcodeproj` |
+| `scripts/check_escape_hatches.py` | The structure ratchet CI runs (see [Validation](#validation)) |
+| `CLAUDE.md`, `.ai/rules/`, `.claude/skills/` | How the apps are structured: layers, small views, shared components and tokens, with the architecture map and the review gate |
 | `.github/workflows/ios.yml` | Continuous integration |
 
 ## Validation
@@ -301,6 +303,7 @@ The GitHub Actions workflow runs on every pull request and on pushes to `main`, 
 | Job | What it checks |
 | --- | --- |
 | Core tests | The checked-in project matches the generator, then `swift test` |
+| Structure guardrails | `scripts/check_escape_hatches.py` against the base: no new or growing view file over 300 lines, no more hard-coded radii, font sizes or colours, no networking in views, no UI framework in `Mac/Core` |
 | Simulator build | Builds for the simulator and uploads a simulator `.app` zip |
 | iPhone build | Builds the Release configuration for a physical device, unsigned |
 | Mac build | Builds the Mac app, unsigned |
