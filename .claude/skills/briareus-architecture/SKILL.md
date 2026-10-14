@@ -55,22 +55,30 @@ Search here before writing a component.
 
 **iPhone settings kit** (`App/Settings/SettingsFormKit.swift`): `SettingsFormChrome`, `SettingsTextRow`, `SettingsValueRow`, `SettingsLabel`, `SettingsInfoButton`, `SettingsVerdict`, `SettingsErrorSection`, `SettingsUnavailableView`.
 
-**Core view logic** (shared by both apps): `IssueRowContent` with `RowFact` and `SubIssueProgress`, `PullRowContent` with `PullMark`, `ChecksState` and `RowTone` (each app maps a tone with `Theme.color(_:)`; the reference for converging the rest), `BoardRow`, `BoardFilter`, `BoardAction`, `ReviewStatus`, `StackPosition`, `mergeWarnings`, `issuesNested`, `issuePrompt`, `SettingsField` and the settings form bodies, `CarText`.
+**Core view logic** (shared by both apps): `LinkedState`, `Session.isClosed`, `BoardAction.startable`/`isSuggested(for:)`/`isDestructive`, `PullRecord`, `PullSnapshot`, `RunServe`, `SettingsRecordForm`, `IssueRowContent` with `RowFact` and `SubIssueProgress`, `PullRowContent` with `PullMark`, `ChecksState` and `RowTone` (each app maps a tone with `Theme.color(_:)`; the reference for converging the rest), `BoardRow`, `BoardFilter`, `BoardAction`, `ReviewStatus`, `StackPosition`, `mergeWarnings`, `issuesNested`, `issuePrompt`, `SettingsField` and the settings form bodies, `CarText`.
 
 ## Known duplicates to converge
 
-Done: the pull request row (`BoardPullRow` and `PullRow` both draw `PullRowContent`) and the issue row (`BoardIssueRow` and `IssueRowView` draw `IssueRowContent`, both epic bars draw `SubIssueProgress`). The session and linked rows draw only Core values (`displayTitle`, `sessionSubtitle`, `Session.isClosed`, `LinkedState`, `BoardLink.reference`); what differs between the apps there is drawing (the Mac's hover row, the iPhone's list row), which stays per app.
+These exist because the iPhone app cannot see `Mac/App/Shared`. Do not add to the list. When you touch one, move its decisions into Core (a function or type returning plain values, tested in `MacTests`) and leave each app only the drawing.
 
-These exist because the iPhone app cannot see `Mac/App/Shared`. Do not add to the list. When you touch one, move its decisions into Core (a function returning a struct or enum, tested in `MacTests`) and leave each app only the drawing.
-
-| iPhone | Mac | Decision to move to Core |
+| iPhone | Mac | Status |
 | --- | --- | --- |
-| `BoardLabelChips`, `boardLabelColor` | `LabelChips`, `labelColor` | Label colour parsing |
-| `reviewStyle` | `reviewGlyph` | Review state to a symbol name (the colour already comes from `ReviewStatus.tone`) |
-| `boardErrands`, `errandSymbol` | `rowActions`, `actionIcon` | Errand list and symbol name |
-| `BoardFlowLayout` | `FlowLayout` | n/a (a pure `Layout`: candidate for a file both targets compile) |
-| `App/Board/PullModel.swift` | `Mac/App/Board/PullModel.swift` | Merge gating, edit bodies and section availability |
-| Each `*SettingsScreen.swift` pair | same names | Validation, dirty state and save bodies (`AccountSettingsLogic` is the model) |
+| `BoardFlowLayout` | `FlowLayout` | Open. A pure `Layout` with nothing to decide; sharing it needs a source file both app targets compile, which does not exist yet. |
+
+Converged, for reference when a similar pair appears:
+
+| Pair | Core now decides |
+| --- | --- |
+| `BoardPullRow` / `PullRow` | `PullRowContent`: marks (`PullMark`), their tones and symbols, the who line |
+| `BoardIssueRow` / `IssueRowView`, both epic bars | `IssueRowContent` (`RowFact`), `SubIssueProgress` |
+| Session and linked rows | `Session.isClosed`, `LinkedState`; the rest was already Core (`displayTitle`, `sessionSubtitle`, `BoardLink.reference`) |
+| `BoardLabelChips` / `LabelChips` | `PullLabel.rgb`; each `Theme.color(_ label:)` draws it |
+| `reviewStyle` / `reviewGlyph` | `ReviewStatus.symbol` and `.tone` (the Mac's symbol set, which mirrors Windows) |
+| `boardErrands` / `rowActions`, suggested and destructive errands | `BoardAction.startable`, `isSuggested(for:)`, `isDestructive`. The errand symbols stay per app: the Mac's are emoji that mirror Windows, and iPhone menus need SF Symbols |
+| The two `PullModel`s | `PullRecord` (reads, merge and branch-update gating and bodies, edit echo), `PullSnapshot`, `RunServe` (the Run tab) |
+| The six `*SettingsScreen.swift` pairs | Their `*FormState`s, and `SettingsRecordForm` for operations, the save body's id, the answer and the discard message |
+
+Next: the pull request screens still read the `pr` JSON directly (`model.pr["..."]`, about 34 reads across both). Read those through `PullRecord` when splitting `PullScreen`.
 
 ## Oversized files
 
