@@ -39,7 +39,7 @@ private final class ForgeAccountFormModel: ObservableObject {
 
     private func changed() { if !state.dirty { state.dirty = true } }
     var discardMessage: String {
-        state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this Forge account") have not been saved." : "The new Forge account has not been saved."
+        state.discardMessage
     }
     private func showError(_ text: String?) {
         guard let text else { return }
@@ -47,25 +47,20 @@ private final class ForgeAccountFormModel: ObservableObject {
     }
 
     func save(done: @escaping () -> Void) {
-        let id = state.id
-        guard !busy, Store.shared.supports(id != 0 ? "update_forge_account" : "create_forge_account") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         case .failure(let p): showError(p.message); return
         case .success(let b): body = b
         }
-        if id != 0 { body["id"] = .number(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_forge_account" : "create_forge_account", body)
-                let row = r["account"]
-                guard row.isObject else { showError(settingsUnexpectedResponse); return }
+                let r = try await Store.shared.call(state.saveOperation, body)
+                guard state.saved(r) != nil else { showError(settingsUnexpectedResponse); return }
                 // The server's word on what was saved: an empty label is now the organization, and a new account has an id.
                 error = nil
-                state.row = row
-                state.fill()
                 Task { try? await SettingsLists.shared.loadForge() }
                 done()
             } catch {
@@ -138,7 +133,7 @@ struct ForgeAccountSettingsScreen: View {
         .modifier(SettingsFormChrome(
             title: id != 0 ? state.row["label"].nonEmpty ?? state.row["organization"].nonEmpty ?? "Forge account" : "New Forge account",
             dirty: state.dirty, discardMessage: model.discardMessage, saveTitle: "Save",
-            canSave: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_forge_account" : "create_forge_account"),
+            canSave: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
             saving: model.saving, onSave: { focus = nil; model.save { dismiss() } },
             deleteTitle: "Delete Forge account",
             onDelete: id != 0 && store.supports("delete_forge_account") ? { confirmDelete = true } : nil))

@@ -88,7 +88,7 @@ private final class ProviderFormModel: ObservableObject {
 
     private func changed() { if !state.dirty { state.dirty = true } }
     var discardMessage: String {
-        state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this provider") have not been saved." : "The new provider has not been saved."
+        state.discardMessage
     }
     func tabDot(_ t: ProviderTab) -> Bool { state.dirty && state.tabChanged(t) }
     private func showError(_ text: String?) {
@@ -225,27 +225,22 @@ private final class ProviderFormModel: ObservableObject {
     // MARK: Saving, cloning, deleting
 
     func save(done: @escaping () -> Void) {
-        guard !busy, Store.shared.supports(state.id != 0 ? "update_provider" : "create_provider") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         case .failure(let p):
             tab = ProviderTab(rawValue: p.tab) ?? .provider
             showError(p.message)
             return
         case .success(let b): body = b
         }
-        let id = state.id
-        if id != 0 { body["id"] = JSON(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_provider" : "create_provider", body)
-                let row = r["provider"]
-                guard row.isObject else { showError(settingsUnexpectedResponse); return }
+                let r = try await Store.shared.call(state.saveOperation, body)
+                guard state.saved(r) != nil else { showError(settingsUnexpectedResponse); return }
                 error = nil
-                state.row = row
-                state.fill()
                 Task { try? await SettingsLists.shared.loadProviders() }
                 done()
             } catch {
@@ -339,7 +334,7 @@ struct ProviderSettingsScreen: View {
         .modifier(SettingsFormChrome(
             title: id != 0 ? state.row["label"].nonEmpty ?? "Provider" : "New provider",
             dirty: state.dirty, discardMessage: model.discardMessage, saveTitle: "Save",
-            canSave: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_provider" : "create_provider"),
+            canSave: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
             saving: model.saving, onSave: { focus = nil; model.save { dismiss() } },
             cloneTitle: "Clone into a new provider",
             onClone: id != 0 && store.supports("create_provider") ? { if let copy = model.cloneRow() { navigate(.providerSettings(row: copy, defaults: nil)) } } : nil,
