@@ -96,28 +96,27 @@ final class PullModel: ObservableObject {
 
     var id: String { "pull:\(repo)#\(number)" }
     var boardRow: PullSummary? { rowRead ? row : (row ?? summary) }
-    var isOpen: Bool { pr.isNull ? boardRow != nil : pr["state"].string == "open" }
-    var author: String? { pr["author"].string ?? boardRow?.author ?? descriptionAuthor }
-    var commitCount: Int { pr["commits"].int32 ?? pr["commitList"].count }
+    /// What the pull request is and what may be done with it, as Core decides it.
+    var record: PullRecord { PullRecord(number: number, pr: pr, row: boardRow, descriptionAuthor: descriptionAuthor) }
+    var isOpen: Bool { record.isOpen }
+    var author: String? { record.author }
+    var commitCount: Int { record.commitCount }
 
     // MARK: Saving
 
-    private var key: String { "pull:\(repo)#\(number)" }
+    private var key: String { PullSnapshot.key(repo: repo, number: number) }
     private func save() {
-        guard !pr.isNull else { return }
-        var saved: JSON = ["pr": pr, "findings": findings, "row": boardRow?.raw ?? .null, "stack": stack?.json ?? .null]
-        if let descriptionBody { saved["body"] = .string(descriptionBody) }
-        if let descriptionAuthor { saved["bodyAuthor"] = .string(descriptionAuthor) }
-        Store.shared.cache.store(saved, key)
+        let snapshot = PullSnapshot(pr: pr, findings: findings, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
+        if let saved = snapshot.json { Store.shared.cache.store(saved, key) }
     }
     private func restore() {
-        if let saved = Store.shared.cache.value(key) {
-            pr = saved["pr"]
-            findings = saved["findings"]
-            if descriptionBody == nil { descriptionBody = saved["body"].string }
-            if descriptionAuthor == nil { descriptionAuthor = saved["bodyAuthor"].string }
-            if row == nil { row = PullSummary(saved["row"]) }
-            if stack == nil { stack = StackPosition(restoring: saved["stack"]) }
+        if let saved = PullSnapshot(Store.shared.cache.value(key)) {
+            pr = saved.pr
+            findings = saved.findings
+            if descriptionBody == nil { descriptionBody = saved.body }
+            if descriptionAuthor == nil { descriptionAuthor = saved.bodyAuthor }
+            if row == nil { row = saved.row }
+            if stack == nil { stack = saved.stack }
         }
         if catalog.count == 0, let acts = Store.shared.cache.value("actions") { catalog = acts["actions"] }
         rebuildActions()
@@ -125,8 +124,9 @@ final class PullModel: ObservableObject {
 
     /// The errands on offer: those the server lists for an open pull request with a branch. ▶ Run is the Run tab here.
     func rebuildActions() {
-        guard isOpen, pr["headRef"].string != nil else { actions = []; return }
-        actions = rowActions(catalog: catalog, pull: boardRow, failedChecks: pr["checks"]["failed"].int32 ?? 0).filter { $0.id != "run" }
+        let record = record
+        guard record.takesErrands else { actions = []; return }
+        actions = record.errands(rowActions(catalog: catalog, pull: boardRow, failedChecks: record.failedChecks))
     }
 
     // MARK: Reading
@@ -345,16 +345,12 @@ final class PullModel: ObservableObject {
 
     // MARK: Merge
 
-    var canMerge: Bool {
-        Store.shared.supports("merge_pull") && pr["state"].string == "open" && !pr["draft"].is(true)
-            && pr["headSha"].string != nil && pr["baseRef"].string != nil
-    }
+    var canMerge: Bool { Store.shared.supports("merge_pull") && record.mergeable }
     /// Squash-merges straight away, as the Windows client's Merge button does: no confirmation, the head it was shown
     /// with (`headSha`) guarding against a push meanwhile, and GitHub's refusal shown under the title.
     func merge() {
-        guard !merging, let head = pr["headSha"].string, let base = pr["baseRef"].string else { return }
+        guard !merging, let args = record.mergeArguments(repo: repo) else { return }
         merging = true; mergeError = nil
-        let args: JSON = ["repo": .string(repo), "pr": JSON(number), "headSha": .string(head), "baseRef": .string(base), "method": "squash"]
         Task {
             let r = await boardCall("merge_pull", args)
             merging = false
@@ -369,12 +365,10 @@ final class PullModel: ObservableObject {
     // MARK: Edits
 
     /// Edit, Edit labels… and Edit assignees ▾, on an open pull request, when the server takes `update_pull`.
-    var canEdit: Bool { Store.shared.supports("update_pull") && isOpen }
+    var canEdit: Bool { Store.shared.supports("update_pull") && record.isOpen }
     /// The description as last read, nil until it is: an edit starts from it.
-    var pullBody: String? { pr["body"].string ?? descriptionBody }
-    var canUpdateBranch: Bool {
-        Store.shared.supports("update_pull_branch") && pr["state"].string == "open" && pr["headSha"].string != nil && pr["baseRef"].string != nil
-    }
+    var pullBody: String? { record.body(described: descriptionBody) }
+    var canUpdateBranch: Bool { Store.shared.supports("update_pull_branch") && record.branchUpdatable }
 
     /// Sends `fields` as an edit of this pull request. The title and description show as saved at once; the labels and
     /// assignees come back with the board's row, read again with the pull request.
@@ -388,11 +382,11 @@ final class PullModel: ObservableObject {
             switch r {
             case .success(let v):
                 editError = nil
-                if let title = v["pr"]["title"].string, pr.object != nil { pr["title"] = .string(title) }
-                if let body = v["pr"]["body"].string, args["body"].string != nil {
-                    descriptionBody = body
-                    if pr["body"].string != nil { pr["body"] = .string(body) }
-                }
+                let echo = PullRecord.editEcho(v, sent: args)
+                var shown = record
+                shown.apply(title: echo.title, body: echo.body)
+                pr = shown.pr
+                if let body = echo.body { descriptionBody = body }
                 save()
             case .failure(let e):
                 // An edit sets what it names, so trying again is safe.
@@ -429,7 +423,7 @@ final class PullModel: ObservableObject {
 
     /// Merges the base into the branch on GitHub, at the head and base last read, once asked.
     func updateBranch() {
-        guard !updatingBranch, !merging, let base = pr["baseRef"].string, pr["headSha"].string != nil else { return }
+        guard !updatingBranch, !merging, let base = record.updateBranchArguments(repo: repo)?["baseRef"].string else { return }
         let headRef = pr["headRef"].string ?? "its branch"
         dialogOpen = true
         let ok = Dialogs.confirm("Update the branch of #\(number)?",
@@ -437,9 +431,8 @@ final class PullModel: ObservableObject {
                                  continueLabel: "Update branch")
         dialogOpen = false
         // The pull request may have been read again while the dialog was open.
-        guard ok, !updatingBranch, let head = pr["headSha"].string, let baseRef = pr["baseRef"].string else { return }
+        guard ok, !updatingBranch, let args = record.updateBranchArguments(repo: repo), let baseRef = args["baseRef"].string else { return }
         updatingBranch = true; mergeError = nil; branchNote = nil
-        let args: JSON = ["repo": .string(repo), "pr": JSON(number), "headSha": .string(head), "baseRef": .string(baseRef)]
         Task {
             let r = await boardCall("update_pull_branch", args)
             updatingBranch = false
