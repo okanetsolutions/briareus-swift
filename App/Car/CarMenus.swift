@@ -125,7 +125,7 @@ extension CarAssistant {
                 }
                 let open = sessions.filter { $0.status != "closed" }
                 show([self.section("Active", open.filter(\.isActive).map { self.row($0) }), self.section("Recent", open.filter { !$0.isActive }.map { self.row($0) }),
-                      self.section("Closed", sessions.filter { $0.status == "closed" }.map { self.row($0) })])
+                      self.section("Closed", sessions.filter { $0.isClosed }.map { self.row($0) })])
             }
             if feed.sessionsLoaded { rows(feed.sessions) }
             try await feed.loadSessions(fresh: true)
@@ -349,7 +349,7 @@ extension CarAssistant {
                 self?.ask(["Close this conversation?", "Close it?"], yes: "Close") { self?.change("close", done: "The conversation is closed.") }
             })
         }
-        if store.supports("reopen") && session.status == "closed" {
+        if store.supports("reopen") && session.isClosed {
             more.append(item("Reopen", symbol: "arrow.uturn.backward") { [weak self] in
                 self?.ask(["Reopen this conversation?", "Reopen it?"], yes: "Reopen") { self?.change("reopen", done: "The conversation is open again.") }
             })

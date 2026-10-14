@@ -335,8 +335,8 @@ struct BoardLinkedRow: View {
             Image(systemName: "link").font(.caption2).foregroundStyle(.tertiary)
             Text(link.reference(repo)).font(.caption.monospaced()).foregroundStyle(.secondary)
             Text(link.title).font(.caption).lineLimit(1)
-            if showState, let state = linkedStateText(link) {
-                Text(state).font(.caption2).foregroundStyle(state == "open" ? Theme.ok : state == "closed" ? Color.secondary : Theme.warn)
+            if showState, let state = LinkedState(link) {
+                Text(state.text).font(.caption2).foregroundStyle(Theme.color(state.tone))
             }
             if let status, !status.isEmpty {
                 Text(status).font(.caption2.weight(.medium)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
@@ -473,7 +473,7 @@ struct BoardSessionRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             StatusDot(status: session.status).alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
             VStack(alignment: .leading, spacing: 3) {
-                Text(session.displayTitle).lineLimit(2).foregroundStyle(session.status == "closed" ? .secondary : .primary)
+                Text(session.displayTitle).lineLimit(2).foregroundStyle(session.isClosed ? .secondary : .primary)
                 Text(sessionSubtitle(session)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
         }

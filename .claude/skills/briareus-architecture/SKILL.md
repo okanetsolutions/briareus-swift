@@ -67,7 +67,6 @@ These exist because the iPhone app cannot see `Mac/App/Shared`. Do not add to th
 | iPhone | Mac | Decision to move to Core |
 | --- | --- | --- |
 | `BoardIssueRow`, `BoardEpicProgress` | `IssueRowView`, `EpicProgress` | Issue row facts, epic progress counts |
-| `BoardSessionRow`, `BoardLinkedRow` | `SessionRow`, `LinkedRow` | Row text and status kind |
 | `BoardLabelChips`, `boardLabelColor` | `LabelChips`, `labelColor` | Label colour parsing |
 | `reviewStyle` | `reviewGlyph` | Review state to a symbol name (the colour already comes from `ReviewStatus.tone`) |
 | `boardErrands`, `errandSymbol` | `rowActions`, `actionIcon` | Errand list and symbol name |

@@ -34,15 +34,36 @@ func people(_ logins: [String], limit: Int) -> String {
     if logins.count > limit { s += " +\(logins.count - limit)" }
     return s
 }
-/// The state a linked issue or pull request row names after its title, or nil for none. (The UI colours draft and not
-/// planned as warnings, open as success and closed as secondary.)
-func linkedStateText(_ link: BoardLink) -> String? {
-    if link.draft { return "draft" }
-    if link.notPlanned { return "not planned" }
-    if link.state == "open" { return "open" }
-    if link.state == "closed" { return "closed" }
-    return nil
+/// The state a linked issue or pull request row names after its title, and its tone: draft and not planned are warnings,
+/// open is success and closed secondary.
+enum LinkedState: Equatable, Sendable {
+    case draft, notPlanned, open, closed
+
+    /// Nil for a link whose state the server did not send.
+    init?(_ link: BoardLink) {
+        if link.draft { self = .draft }
+        else if link.notPlanned { self = .notPlanned }
+        else if link.state == "open" { self = .open }
+        else if link.state == "closed" { self = .closed }
+        else { return nil }
+    }
+    var text: String {
+        switch self {
+        case .draft: return "draft"
+        case .notPlanned: return "not planned"
+        case .open: return "open"
+        case .closed: return "closed"
+        }
+    }
+    var tone: RowTone {
+        switch self {
+        case .open: return .ok
+        case .closed: return .muted
+        case .draft, .notPlanned: return .warn
+        }
+    }
 }
+func linkedStateText(_ link: BoardLink) -> String? { LinkedState(link)?.text }
 
 // MARK: - Working indicator
 
