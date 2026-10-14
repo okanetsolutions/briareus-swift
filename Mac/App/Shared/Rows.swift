@@ -12,16 +12,7 @@ func severityColor(_ severity: String?) -> Color {
     default: return Theme.warn
     }
 }
-func reviewGlyph(_ status: ReviewStatus) -> (symbol: String?, color: Color) {
-    let color = Theme.color(status.tone)
-    switch status {
-    case .approved: return (Glyph.symbol(0xE73E), color)
-    case .changesRequested: return (Glyph.symbol(0xE711), color)
-    case .feedback: return (Glyph.symbol(0xE8BD), color)
-    case .requested: return (Glyph.symbol(0xE823), color)
-    case .none: return (nil, color)
-    }
-}
+func reviewGlyph(_ status: ReviewStatus) -> (symbol: String?, color: Color) { (status.symbol, Theme.color(status.tone)) }
 /// The glyph for a check conclusion.
 func checkGlyph(_ result: String?) -> (symbol: String, color: Color) {
     switch result?.lowercased() {

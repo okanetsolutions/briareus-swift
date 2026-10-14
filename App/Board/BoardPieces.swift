@@ -282,28 +282,7 @@ struct BoardLabelChips: View {
 
 /// A review verdict's symbol and colour.
 func reviewStyle(_ status: ReviewStatus) -> (symbol: String, color: Color) {
-    let color = Theme.color(status.tone)
-    switch status {
-    case .approved: return ("checkmark.seal.fill", color)
-    case .changesRequested: return ("xmark.octagon.fill", color)
-    case .feedback: return ("text.bubble.fill", color)
-    case .requested, .none: return ("clock", color)
-    }
-}
-
-/// The symbol before a pull request's mark.
-func markSymbol(_ mark: PullMark) -> String {
-    switch mark {
-    case .running: return "bolt.fill"
-    case .conflicts: return "exclamationmark.triangle.fill"
-    case .checks(.passed): return "checkmark"
-    case .checks(.failed): return "xmark"
-    case .checks(.pending): return "clock"
-    case .stack: return "square.stack.3d.up.fill"
-    case .review(let status): return reviewStyle(status).symbol
-    case .draft: return "pencil"
-    case .suggested: return "sparkles"
-    }
+    (status.symbol ?? "clock", Theme.color(status.tone))
 }
 
 /// When a row last changed, short.
@@ -376,7 +355,7 @@ struct BoardPullRow: View {
                 if !content.marks.isEmpty {
                     BoardFlowLayout(spacing: 5) {
                         ForEach(Array(content.marks.enumerated()), id: \.offset) { _, mark in
-                            BoardBadge(text: mark.text, systemImage: markSymbol(mark), color: Theme.color(mark.tone))
+                            BoardBadge(text: mark.text, systemImage: mark.symbol, color: Theme.color(mark.tone))
                                 .accessibilityLabel(mark.spoken)
                         }
                     }
