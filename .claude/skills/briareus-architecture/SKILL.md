@@ -59,14 +59,12 @@ Search here before writing a component.
 
 ## Known duplicates to converge
 
-Done: the pull request row (`BoardPullRow` and `PullRow` both draw `PullRowContent`) and the issue row (`BoardIssueRow` and `IssueRowView` draw `IssueRowContent`, both epic bars draw `SubIssueProgress`).
-
+Done: the pull request row (`BoardPullRow` and `PullRow` both draw `PullRowContent`) and the issue row (`BoardIssueRow` and `IssueRowView` draw `IssueRowContent`, both epic bars draw `SubIssueProgress`). The session and linked rows draw only Core values (`displayTitle`, `sessionSubtitle`, `Session.isClosed`, `LinkedState`, `BoardLink.reference`); what differs between the apps there is drawing (the Mac's hover row, the iPhone's list row), which stays per app.
 
 These exist because the iPhone app cannot see `Mac/App/Shared`. Do not add to the list. When you touch one, move its decisions into Core (a function returning a struct or enum, tested in `MacTests`) and leave each app only the drawing.
 
 | iPhone | Mac | Decision to move to Core |
 | --- | --- | --- |
-| `BoardSessionRow`, `BoardLinkedRow` | `SessionRow`, `LinkedRow` | Row text and status kind |
 | `BoardLabelChips`, `boardLabelColor` | `LabelChips`, `labelColor` | Label colour parsing |
 | `reviewStyle` | `reviewGlyph` | Review state to a symbol name (the colour already comes from `ReviewStatus.tone`) |
 | `boardErrands`, `errandSymbol` | `rowActions`, `actionIcon` | Errand list and symbol name |

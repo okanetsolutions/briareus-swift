@@ -47,4 +47,12 @@ final class PullRowLogicTests: XCTestCase {
         XCTAssertTrue(row.who[1].contains("@ann"))
         XCTAssertTrue(row.who[2].contains("@cy"))
     }
+
+    func testMarksTakeTheirStatesSymbols() {
+        XCTAssertEqual(PullMark.review(.approved).symbol, ReviewStatus.approved.symbol)
+        XCTAssertEqual(PullMark.checks(.failed).symbol, ChecksState.failed.symbol)
+        XCTAssertNil(ReviewStatus.none.symbol)
+        let states: [ReviewStatus] = [.approved, .changesRequested, .feedback, .requested]
+        XCTAssertEqual(Set(states.compactMap(\.symbol)).count, states.count)
+    }
 }

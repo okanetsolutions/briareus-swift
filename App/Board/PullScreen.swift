@@ -151,15 +151,15 @@ struct PullScreen: View {
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         let actions = model.actions(catalog.catalog)
-        let suggested = model.boardRow?.recommended
+        let row = model.boardRow
         if !actions.isEmpty, let branch = model.pr["headRef"].string {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    if let s = actions.first(where: { $0.id == suggested }) {
+                    if let s = actions.first(where: { $0.isSuggested(for: row) }) {
                         Section("Suggested") { errandButton(s, branch: branch, suggested: true) }
                     }
                     Section {
-                        ForEach(actions.filter { $0.id != suggested }, id: \.id) { errandButton($0, branch: branch, suggested: false) }
+                        ForEach(actions.filter { !$0.isSuggested(for: row) }, id: \.id) { errandButton($0, branch: branch, suggested: false) }
                     } footer: {
                         Text("Errands run paid agents on this project’s configured model and may write to GitHub.")
                     }
@@ -235,7 +235,7 @@ struct PullScreen: View {
     }
 
     private func errandButton(_ a: BoardAction, branch: String, suggested: Bool) -> some View {
-        Button(role: a.id == "delete-self-comments" ? .destructive : nil) {
+        Button(role: a.isDestructive ? .destructive : nil) {
             errands.ask(a, number: number, branch: branch)
         } label: {
             Label(a.label, systemImage: suggested ? "sparkles" : errandSymbol(a.id))
@@ -316,11 +316,11 @@ struct PullScreen: View {
     /// The errand the pull request's state asks for, above the merge as the Mac's filled button is: Run opens the
     /// ▶ Run section, any other starts as the toolbar's menu would.
     @ViewBuilder private var suggestedErrand: some View {
-        let suggested = model.boardRow?.recommended
-        if suggested == "run", sections.contains(.run) {
+        let row = model.boardRow
+        if row?.recommended == "run", sections.contains(.run) {
             Button { withAnimation(.snappy) { model.select(.run) } } label: { suggestedLabel("Run") }
-        } else if let a = model.actions(catalog.catalog).first(where: { $0.id == suggested }), let branch = model.pr["headRef"].string {
-            Button(role: a.id == "delete-self-comments" ? .destructive : nil) {
+        } else if let a = model.actions(catalog.catalog).first(where: { $0.isSuggested(for: row) }), let branch = model.pr["headRef"].string {
+            Button(role: a.isDestructive ? .destructive : nil) {
                 errands.ask(a, number: number, branch: branch)
             } label: { suggestedLabel(a.label) }
             .disabled(errands.busy || errands.uncertain)

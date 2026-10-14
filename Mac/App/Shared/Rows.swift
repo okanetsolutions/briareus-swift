@@ -12,16 +12,7 @@ func severityColor(_ severity: String?) -> Color {
     default: return Theme.warn
     }
 }
-func reviewGlyph(_ status: ReviewStatus) -> (symbol: String?, color: Color) {
-    let color = Theme.color(status.tone)
-    switch status {
-    case .approved: return (Glyph.symbol(0xE73E), color)
-    case .changesRequested: return (Glyph.symbol(0xE711), color)
-    case .feedback: return (Glyph.symbol(0xE8BD), color)
-    case .requested: return (Glyph.symbol(0xE823), color)
-    case .none: return (nil, color)
-    }
-}
+func reviewGlyph(_ status: ReviewStatus) -> (symbol: String?, color: Color) { (status.symbol, Theme.color(status.tone)) }
 /// The glyph for a check conclusion.
 func checkGlyph(_ result: String?) -> (symbol: String, color: Color) {
     switch result?.lowercased() {
@@ -127,8 +118,8 @@ struct LinkedRow: View {
             Text("↳").font(Theme.caption).foregroundStyle(Theme.tertiary).frame(width: 12, alignment: .leading)
             Text(link.reference(repo)).font(Theme.monoCaption2).foregroundStyle(Theme.muted)
             Text(link.title).font(Theme.caption).foregroundStyle(action != nil ? Theme.ink : Theme.muted).lineLimit(1).truncationMode(.tail)
-            if showState, let state = linkedStateText(link) {
-                Text(state).font(Theme.caption2).foregroundStyle(state == "open" ? Theme.ok : state == "closed" ? Theme.muted : Theme.warn)
+            if showState, let state = LinkedState(link) {
+                Text(state.text).font(Theme.caption2).foregroundStyle(Theme.color(state.tone))
             }
             if let status, !status.isEmpty { Chip(name: status, color: Theme.muted).fixedSize() }
             Spacer(minLength: 0)

@@ -628,7 +628,7 @@ struct BoardScreen: View {
                     Button { model.act(pull, a) } label: {
                         if starting { Text(verbatim: "Starting…") } else { ErrandLabel(id: a.id, label: a.label) }
                     }
-                        .dashButton(pull.recommended == a.id ? .prominent : .bordered)
+                        .dashButton(a.isSuggested(for: pull) ? .prominent : .bordered)
                         .disabled(model.busy || model.uncertain)
                         .help(a.hint)
                 }

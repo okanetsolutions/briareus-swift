@@ -42,8 +42,8 @@ final class ErrandCatalog: ObservableObject {
 /// The errands this device can start on a pull request: what the server offers for it, less what the token or server lacks.
 @MainActor
 func boardErrands(catalog: JSON, pull: PullSummary?, failedChecks: Int) -> [BoardAction] {
-    guard Store.shared.canManage else { return [] }
-    return BoardAction.offered(catalog: catalog, pull: pull, failedChecks: failedChecks).filter { Store.shared.supports($0.operation) }
+    BoardAction.startable(catalog: catalog, pull: pull, failedChecks: failedChecks, canManage: Store.shared.canManage,
+                          supports: { Store.shared.supports($0) })
 }
 
 /// The symbol before an errand's label.
@@ -130,7 +130,7 @@ private struct ErrandPrompts: ViewModifier {
         content
             .alert(runner.confirming.map { "Start \($0.action.label) on #\($0.number)?" } ?? "",
                    isPresented: Binding(get: { runner.confirming != nil }, set: { if !$0 { runner.confirming = nil } }), presenting: runner.confirming) { p in
-                Button("Start paid session", role: p.action.id == "delete-self-comments" ? .destructive : nil) { start(p) }
+                Button("Start paid session", role: p.action.isDestructive ? .destructive : nil) { start(p) }
                 Button("Cancel", role: .cancel) {}
             } message: { p in
                 Text(paidNote(p))
@@ -282,28 +282,7 @@ struct BoardLabelChips: View {
 
 /// A review verdict's symbol and colour.
 func reviewStyle(_ status: ReviewStatus) -> (symbol: String, color: Color) {
-    let color = Theme.color(status.tone)
-    switch status {
-    case .approved: return ("checkmark.seal.fill", color)
-    case .changesRequested: return ("xmark.octagon.fill", color)
-    case .feedback: return ("text.bubble.fill", color)
-    case .requested, .none: return ("clock", color)
-    }
-}
-
-/// The symbol before a pull request's mark.
-func markSymbol(_ mark: PullMark) -> String {
-    switch mark {
-    case .running: return "bolt.fill"
-    case .conflicts: return "exclamationmark.triangle.fill"
-    case .checks(.passed): return "checkmark"
-    case .checks(.failed): return "xmark"
-    case .checks(.pending): return "clock"
-    case .stack: return "square.stack.3d.up.fill"
-    case .review(let status): return reviewStyle(status).symbol
-    case .draft: return "pencil"
-    case .suggested: return "sparkles"
-    }
+    (status.symbol ?? "clock", Theme.color(status.tone))
 }
 
 /// When a row last changed, short.
@@ -329,8 +308,8 @@ struct BoardLinkedRow: View {
             Image(systemName: "link").font(.caption2).foregroundStyle(.tertiary)
             Text(link.reference(repo)).font(.caption.monospaced()).foregroundStyle(.secondary)
             Text(link.title).font(.caption).lineLimit(1)
-            if showState, let state = linkedStateText(link) {
-                Text(state).font(.caption2).foregroundStyle(state == "open" ? Theme.ok : state == "closed" ? Color.secondary : Theme.warn)
+            if showState, let state = LinkedState(link) {
+                Text(state.text).font(.caption2).foregroundStyle(Theme.color(state.tone))
             }
             if let status, !status.isEmpty {
                 Text(status).font(.caption2.weight(.medium)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
@@ -376,7 +355,7 @@ struct BoardPullRow: View {
                 if !content.marks.isEmpty {
                     BoardFlowLayout(spacing: 5) {
                         ForEach(Array(content.marks.enumerated()), id: \.offset) { _, mark in
-                            BoardBadge(text: mark.text, systemImage: markSymbol(mark), color: Theme.color(mark.tone))
+                            BoardBadge(text: mark.text, systemImage: mark.symbol, color: Theme.color(mark.tone))
                                 .accessibilityLabel(mark.spoken)
                         }
                     }
@@ -467,7 +446,7 @@ struct BoardSessionRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             StatusDot(status: session.status).alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
             VStack(alignment: .leading, spacing: 3) {
-                Text(session.displayTitle).lineLimit(2).foregroundStyle(session.status == "closed" ? .secondary : .primary)
+                Text(session.displayTitle).lineLimit(2).foregroundStyle(session.isClosed ? .secondary : .primary)
                 Text(sessionSubtitle(session)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
         }
