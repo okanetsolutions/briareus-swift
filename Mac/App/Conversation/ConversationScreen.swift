@@ -376,7 +376,7 @@ struct ConversationScreen: View {
     private var headerButtons: [HeaderButton] {
         let s = model.session
         let can = model.can
-        let closed = s.status == "closed"
+        let closed = s.isClosed
         var out: [HeaderButton] = []
         if store.supports("browser") {
             let browser = BrowserState.sessionOn(s.raw)
@@ -658,7 +658,7 @@ private struct ConversationFooter: View {
     }
 
     private var closedBox: some View {
-        let reopen = store.supports("reopen") && model.session.status == "closed"
+        let reopen = store.supports("reopen") && model.session.isClosed
         let can = model.can
         return HStack(spacing: 12) {
             Text(store.canManage ? "This session is closed." : "Read-only access")

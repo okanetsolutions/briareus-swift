@@ -204,7 +204,7 @@ struct ProjectView: View {
                 if store.supports("delete") {
                     Button("Delete", systemImage: "trash", role: .destructive) { asked = RowAction(session: s, action: "delete") }
                 }
-                if s.status == "closed" {
+                if s.isClosed {
                     if store.supports("reopen") {
                         Button("Reopen", systemImage: "arrow.uturn.backward") { asked = RowAction(session: s, action: "reopen") }.tint(Theme.ok)
                     }
@@ -228,7 +228,7 @@ struct ProjectView: View {
             }
         }
         if store.supports("rename") { Button("Rename", systemImage: "pencil") { startRename(s) } }
-        if s.status == "closed" {
+        if s.isClosed {
             if store.supports("reopen") { Button("Reopen", systemImage: "arrow.uturn.backward") { asked = RowAction(session: s, action: "reopen") } }
         } else if store.supports("close") {
             Button("Close", systemImage: "archivebox") { asked = RowAction(session: s, action: "close") }
@@ -322,7 +322,7 @@ struct ConversationRowLabel: View {
             ConversationMark(session: session).frame(width: 16)
             VStack(alignment: .leading, spacing: 4) {
                 Text(session.displayTitle).font(.body.weight(.medium)).lineLimit(2)
-                    .foregroundStyle(session.status == "closed" ? .secondary : .primary)
+                    .foregroundStyle(session.isClosed ? .secondary : .primary)
                 Text(session.conversationRowDetail()).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)

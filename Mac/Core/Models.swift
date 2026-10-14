@@ -100,6 +100,8 @@ struct Session: Equatable, Sendable {
     var provider: String? { raw["provider"].nonEmpty }
     var displayTitle: String { raw["title"].nonEmpty ?? "New conversation" }
     var isActive: Bool { ["queued", "preparing", "running", "starting"].contains(status) }
+    /// Closed: it takes no messages until it is reopened, and its rows are drawn dimmed.
+    var isClosed: Bool { status == "closed" }
     var liveInput: Bool { raw["liveInput"].is(true) }
     var queued: JSON { raw["queued"] }
     var reviewLoopOn: Bool { !raw["reviewLoop"].isNull }

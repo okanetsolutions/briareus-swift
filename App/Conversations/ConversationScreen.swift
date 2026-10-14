@@ -278,7 +278,7 @@ struct ConversationScreen: View {
     private var actions: some View {
         let s = session
         let can = model.can
-        let closed = s.status == "closed"
+        let closed = s.isClosed
         return Menu {
             Section {
                 Button("Details", systemImage: "info.circle") { showingDetails = true }
