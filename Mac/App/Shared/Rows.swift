@@ -277,6 +277,9 @@ struct IssueRowView: View {
     var issue: IssueSummary
     var repo: String?
     var nested = false
+    /// Whether the sub-issues under it are hidden; nil for a row with none to hide.
+    var folded: Bool?
+    var fold: (() -> Void)?
     var action: (() -> Void)?
 
     private var facts: [MetaPart] {
@@ -292,7 +295,17 @@ struct IssueRowView: View {
 
     var body: some View {
         RowBox(action: action) {
-            Text((issue.isEpic ? "◎ " : "") + issue.title).font(Theme.bodySemibold).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
+            HStack(spacing: 6) {
+                if let folded, let fold {
+                    Button(action: fold) {
+                        Image(systemName: folded ? "chevron.right" : "chevron.down").font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.muted).frame(width: 16, height: 16).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(folded ? "Show its sub-issues" : "Hide its sub-issues")
+                }
+                Text((issue.isEpic ? "◎ " : "") + issue.title).font(Theme.bodySemibold).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
+            }
             MetaLine(parts: facts, right: issue.updatedAt.map { formatRelative($0) }).padding(.top, 4)
             if issue.isEpic { EpicProgress(done: issue.subIssuesDone, total: issue.subIssues).padding(.top, 4) }
             if !issue.labels.isEmpty { LabelChips(labels: issue.labels).padding(.top, 6) }

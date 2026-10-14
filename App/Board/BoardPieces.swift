@@ -436,12 +436,26 @@ struct BoardIssueRow: View {
     let repo: String
     /// Set on a row drawn under its epic, where the indent already says whose it is.
     var nested = false
+    /// Whether the sub-issues under it are hidden; nil for a row with none to hide.
+    var folded: Bool?
+    var fold: (() -> Void)?
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: issue.isEpic ? "square.stack.3d.up" : "smallcircle.filled.circle").font(.subheadline)
                 .foregroundStyle(issue.pulls.isEmpty ? Theme.ok : Theme.accent).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
-                Text(issue.title).font(.body.weight(.medium)).lineLimit(2)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(issue.title).font(.body.weight(.medium)).lineLimit(2)
+                    if let folded, let fold {
+                        Spacer(minLength: 4)
+                        Button(action: fold) {
+                            Image(systemName: folded ? "chevron.right.circle" : "chevron.down.circle").font(.body)
+                                .foregroundStyle(.secondary).frame(minWidth: 28, minHeight: 28).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(folded ? "Show sub-issues" : "Hide sub-issues")
+                    }
+                }
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(metaLine).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     Spacer(minLength: 4)

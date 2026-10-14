@@ -196,6 +196,8 @@ struct IssueSummary: Equatable, Sendable {
 struct IssueRow: Equatable, Sendable {
     var index: Int
     var depth: Int
+    /// How many rows are drawn directly under it, so an epic with none on the list offers nothing to fold.
+    var children = 0
 }
 
 /// Sub-issues drawn under their epic, depth first, each with how deep it sits.
@@ -210,12 +212,29 @@ func issuesNested(_ issues: [IssueSummary], repo: String?) -> [IssueRow] {
     func draw(_ index: Int, _ depth: Int) {
         if drawn[index] { return }
         drawn[index] = true
+        let at = rows.count
         rows.append(IssueRow(index: index, depth: depth))
-        for i in issues.indices where parentOf(issues[i]) == issues[index].number { draw(i, depth + 1) }
+        for i in issues.indices where parentOf(issues[i]) == issues[index].number && !drawn[i] {
+            rows[at].children += 1
+            draw(i, depth + 1)
+        }
     }
     for i in issues.indices where parentOf(issues[i]) == 0 { draw(i, 0) }
     for i in issues.indices { draw(i, 0) }
     return rows
+}
+
+/// The nested rows with everything under a folded epic left out; `folded` holds issue numbers.
+func issuesFolded(_ rows: [IssueRow], _ issues: [IssueSummary], folded: Set<Int>) -> [IssueRow] {
+    if folded.isEmpty { return rows }
+    var out: [IssueRow] = []
+    var hiding: Int?
+    for row in rows {
+        if let depth = hiding, row.depth > depth { continue }
+        hiding = row.children > 0 && folded.contains(issues[row.index].number) ? row.depth : nil
+        out.append(row)
+    }
+    return out
 }
 
 /// What a session started on this issue is sent, as the Windows client words it. Its first line names the session.
