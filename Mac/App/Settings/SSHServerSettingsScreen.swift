@@ -59,7 +59,7 @@ final class SSHServerFormModel: ObservableObject {
     }
     func canLeave() -> Bool {
         guard state.dirty else { return true }
-        let message = state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this SSH server") have not been saved." : "The new SSH server has not been saved."
+        let message = state.discardMessage
         let leave = confirmDiscard(message)
         if leave { state.dirty = false }
         return leave
@@ -109,18 +109,17 @@ final class SSHServerFormModel: ObservableObject {
 
     func save() {
         let id = state.id
-        guard !busy, Store.shared.supports(id != 0 ? "update_ssh_server" : "create_ssh_server") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         case .failure(let p): tab = SSHServerTab(rawValue: p.tab) ?? .server; showError(p.message); return
         case .success(let b): body = b
         }
-        if id != 0 { body["id"] = .number(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_ssh_server" : "create_ssh_server", body)
+                let r = try await Store.shared.call(state.saveOperation, body)
                 let row = r["server"]
                 guard row.isObject else { showError(unexpectedResponse); return }
                 // The server's word on what was saved: an empty label is now user@host:port, and a new server has an id.
@@ -269,7 +268,7 @@ struct SSHServerSettingsScreen: View {
         var buttons: [HeaderButton] = []
         if store.supports("settings_ssh_servers") {
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE74E), label: model.saving ? "Saving…" : "Save", tip: "Save this SSH server (⌘S)",
-                                        enabled: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_ssh_server" : "create_ssh_server"),
+                                        enabled: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
                                         prominent: true) { model.save() })
             if id != 0 {
                 buttons.append(HeaderButton(glyph: Glyph.symbol(0xE8C8), tip: "Clone into a new SSH server",
