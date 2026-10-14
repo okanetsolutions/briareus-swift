@@ -56,20 +56,19 @@ final class PullModel: ObservableObject {
                                                  changed: { [weak self] in self?.objectWillChange.send() })
     private var convTasks: [Task<Void, Never>?] = Array(repeating: nil, count: ConvFeed.allCases.count)
 
-    // The Run tab: opening it serves the pull request (▶ Run) and shows it in an embedded browser. `runSession` is the
-    // session serving it, `runProfile` the run profile it serves, `runWant` the one picked in the tab, `runAsked` the one
-    // the request in flight asked for.
-    @Published var runURL: String?
-    @Published var runSession: String?
-    @Published var runProfile: String?
-    /// Kept per pull request, so the tab opened again shows (and serves) the profile last picked.
-    @Published var runWant: String? {
-        didSet { UserDefaults.standard.set(runWant, forKey: runWantKey) }
+    // The Run tab: opening it serves the pull request (▶ Run) and shows it in an embedded browser. Core's `RunServe` holds
+    // which session serves it, at what address and with which profile; the model makes the calls and runs the browser.
+    /// The profile picked is kept per pull request, so the tab opened again shows (and serves) the one last picked.
+    @Published private(set) var serve = RunServe() {
+        didSet { if serve.want != oldValue.want { UserDefaults.standard.set(serve.want, forKey: runWantKey) } }
     }
     private var runWantKey: String { "runProfile.\(repo)#\(number)" }
-    @Published var runAsked: String?
-    @Published var serveError: String?
-    @Published var runBusy = false
+    var runURL: String? { serve.url }
+    var runSession: String? { serve.session }
+    var runProfile: String? { serve.profile }
+    var runAsked: String? { serve.asked }
+    var serveError: String? { serve.error }
+    var runBusy: Bool { serve.busy }
     /// Waits for the Sessions list, in case a Run already serves this pull request.
     private var runPending = false
     /// The project's run profiles, the default first.
@@ -92,7 +91,7 @@ final class PullModel: ObservableObject {
         files = PullFilesModel(repo: repo, number: number)
         // The profiles the sidebar already read stand in until this screen reads them.
         profiles = runProfilesParse(ProjectsModel.shared.raw, repo: repo)
-        runWant = UserDefaults.standard.string(forKey: runWantKey)
+        serve.want = UserDefaults.standard.string(forKey: runWantKey)
     }
 
     var id: String { "pull:\(repo)#\(number)" }
@@ -520,13 +519,13 @@ final class PullModel: ObservableObject {
     // MARK: Run
 
     /// The profile the tab shows as chosen: the one picked, else the one served, else the project's default.
-    var shownProfile: String? { runWant ?? runProfile ?? profiles.first }
+    var shownProfile: String? { serve.shownProfile(profiles) }
 
     /// The Run tab's session was deleted, and the workspace serving it with it: the tab forgets it and gives way to the PR
     /// body; opening it again prepares a new one.
     private func runForget() {
-        runBusy = false; runPending = false
-        runSession = nil; runURL = nil; runProfile = nil; runAsked = nil; serveError = nil
+        runPending = false
+        serve.forget()
         logSession = nil; log.clear()
         setBrowser(nil)
         if tab == .run { tab = .body }
@@ -554,69 +553,35 @@ final class PullModel: ObservableObject {
         if Store.shared.supports("sessions") && !runsRead { runPending = true } else { runResume() }
     }
     private func runResume() {
-        if runURL == nil && !runBusy && serveError == nil && !runAdopt() { runStart() }
+        if serve.needsServing && !runAdopt() { runStart() }
     }
-    /// A Run already serving this pull request (one of its sessions with serve links) is shown as it is.
+    /// A Run already serving this pull request (one of its sessions with serve links) is shown as it is, starting the
+    /// browser again when the address changed.
     private func runAdopt() -> Bool {
         guard let (id, url) = runSessionServing(Session.json(runs), number: number) else { return false }
-        runSession = id
-        showRun(url)
+        if serve.url != url { setBrowser(nil) }
+        serve.adopt(session: id, url: url)
         return true
-    }
-    /// Shows the served address, starting the browser again when the address changed.
-    private func showRun(_ url: String) {
-        if runURL != url { setBrowser(nil); runURL = url }
     }
     /// Serves the pull request: the run's session again, with the picked profile, when there is one; else a new session,
     /// which the server serves with the project's default profile (switched afterwards when another was picked).
     func runStart() {
-        guard !runBusy else { return }
-        runBusy = true; serveError = nil
-        var args: JSON = [:]
-        var op = "serve_pull"
-        let switched: Bool
-        if let session = runSession, Store.shared.supports("serve") {
-            op = "serve"
-            args["sessionId"] = .string(session)
-            if let want = runWant { args["profile"] = .string(want) }
-            runAsked = runWant
-            switched = true
-        } else {
-            args["repo"] = .string(repo); args["prNumber"] = JSON(number)
-            switched = false
-        }
-        if let asked = runAsked { log.add("▶ Switching to profile \(asked)", error: false) }
+        guard let request = serve.start(repo: repo, number: number, canSwitch: Store.shared.supports("serve")) else { return }
+        if let profile = request.switchingTo { log.add("▶ Switching to profile \(profile)", error: false) }
         Task {
-            let r = await boardCall(op, args, timeout: 170)
-            runDone(r, switched: switched)
+            let r = await boardCall(request.operation, request.arguments, timeout: RunRequest.timeout)
+            runDone(r, switched: request.switched)
         }
     }
     private func runDone(_ r: Result<JSON, APIError>, switched: Bool) {
-        runBusy = false
-        let asked = runAsked
-        runAsked = nil
         switch r {
         case .failure(let e):
-            serveError = e.description
-            if switched && (e.status == 404 || (e.message ?? "").contains("no live workspace")) {
-                // The session closed or expired, and its page with it: the next try prepares a new one.
-                runSession = nil; runURL = nil
-                setBrowser(nil)
-            } else if switched {
-                // A refused switch leaves the app serving what it served.
-                runWant = runProfile
-            }
+            if serve.failed(e.description, status: e.status, message: e.message, switched: switched) { setBrowser(nil) }
         case .success(let v):
-            if let id = v["session"]["id"].string { runSession = id }
-            runProfile = v["profile"].string
-            if let url = v["url"].string, safeWebURL(url) {
-                let same = url == runURL
-                showRun(url)
-                // The same address after a restart is a new app behind it.
-                if same { browser?.reload() }
-            } else { serveError = "The server did not say where it serves the pull request." }
-            // A profile picked while this request was out, or a new session served with the default.
-            if let want = runWant, runSession != nil, want != asked, want != runProfile { runStart(); return }
+            let served = serve.served(v)
+            if served.show != nil && !served.reload { setBrowser(nil) }
+            if served.reload { browser?.reload() }
+            if served.startAgain { runStart(); return }
             if Store.shared.supports("sessions") { Task { await loadSessions() } }
         }
     }
@@ -624,10 +589,8 @@ final class PullModel: ObservableObject {
         guard !profiles.isEmpty else { return }
         let shown = shownProfile
         let items = profiles.enumerated().map { i, p in BoardPopupMenu.Item(title: i == 0 ? "\(p) (default)" : p, checked: p == shown) }
-        guard let chosen = BoardPopupMenu.show(items), profiles[chosen] != shown else { return }
-        runWant = profiles[chosen]
-        // While a request is out, its answer switches to the new pick.
-        if !runBusy { runStart() }
+        guard let chosen = BoardPopupMenu.show(items) else { return }
+        if serve.pick(profiles[chosen], profiles: profiles) { runStart() }
     }
 
     /// The browser starts once the tab is first on show with an address, and once the service token that lets it past
