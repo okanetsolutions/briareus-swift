@@ -59,7 +59,7 @@ Search here before writing a component.
 
 ## Known duplicates to converge
 
-Done: the pull request row (`BoardPullRow` and `PullRow` both draw `PullRowContent`).
+Done: the pull request row (`BoardPullRow` and `PullRow` both draw `PullRowContent`). The session and linked rows draw only Core values (`displayTitle`, `sessionSubtitle`, `Session.isClosed`, `LinkedState`, `BoardLink.reference`); what differs between the apps there is drawing (the Mac's hover row, the iPhone's list row), which stays per app.
 
 
 These exist because the iPhone app cannot see `Mac/App/Shared`. Do not add to the list. When you touch one, move its decisions into Core (a function returning a struct or enum, tested in `MacTests`) and leave each app only the drawing.
