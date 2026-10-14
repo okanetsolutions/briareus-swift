@@ -42,8 +42,8 @@ final class ErrandCatalog: ObservableObject {
 /// The errands this device can start on a pull request: what the server offers for it, less what the token or server lacks.
 @MainActor
 func boardErrands(catalog: JSON, pull: PullSummary?, failedChecks: Int) -> [BoardAction] {
-    guard Store.shared.canManage else { return [] }
-    return BoardAction.offered(catalog: catalog, pull: pull, failedChecks: failedChecks).filter { Store.shared.supports($0.operation) }
+    BoardAction.startable(catalog: catalog, pull: pull, failedChecks: failedChecks, canManage: Store.shared.canManage,
+                          supports: { Store.shared.supports($0) })
 }
 
 /// The symbol before an errand's label.
@@ -130,7 +130,7 @@ private struct ErrandPrompts: ViewModifier {
         content
             .alert(runner.confirming.map { "Start \($0.action.label) on #\($0.number)?" } ?? "",
                    isPresented: Binding(get: { runner.confirming != nil }, set: { if !$0 { runner.confirming = nil } }), presenting: runner.confirming) { p in
-                Button("Start paid session", role: p.action.id == "delete-self-comments" ? .destructive : nil) { start(p) }
+                Button("Start paid session", role: p.action.isDestructive ? .destructive : nil) { start(p) }
                 Button("Cancel", role: .cancel) {}
             } message: { p in
                 Text(paidNote(p))

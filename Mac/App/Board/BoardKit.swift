@@ -108,8 +108,8 @@ struct ErrandLabel: View {
 /// The errands this app can start on a row: what the server offers for it, less what the token or server lacks.
 @MainActor
 func rowActions(catalog: JSON, pull: PullSummary?, failedChecks: Int) -> [BoardAction] {
-    guard Store.shared.canManage else { return [] }
-    return BoardAction.offered(catalog: catalog, pull: pull, failedChecks: failedChecks).filter { Store.shared.supports($0.operation) }
+    BoardAction.startable(catalog: catalog, pull: pull, failedChecks: failedChecks, canManage: Store.shared.canManage,
+                          supports: { Store.shared.supports($0) })
 }
 /// Asks for an errand's input when it takes one; the others start straight away. Nil when cancelled.
 @MainActor

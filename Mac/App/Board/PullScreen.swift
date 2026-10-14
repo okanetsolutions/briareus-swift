@@ -860,7 +860,7 @@ private struct PullSidebar: View {
         section(model.busy ? "Actions · starting…" : "Actions") {
             VStack(spacing: 6) {
                 ForEach(model.actions, id: \.id) { a in
-                    let kind: ButtonKind = row?.recommended == a.id ? .prominent : a.id == "delete-self-comments" ? .destructive : .bordered
+                    let kind: ButtonKind = a.isSuggested(for: row) ? .prominent : a.isDestructive ? .destructive : .bordered
                     Button { model.act(a) } label: { ErrandLabel(id: a.id, label: a.label) }
                         .dashButton(kind, stretch: true).disabled(model.busy || model.uncertain).help(a.hint)
                 }

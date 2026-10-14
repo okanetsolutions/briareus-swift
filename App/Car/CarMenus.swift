@@ -421,10 +421,10 @@ extension CarAssistant {
             about.append(item("Merge", "Into \(pull["baseRef"].string ?? "its base") · cannot be undone from here", symbol: "arrow.triangle.merge") { [weak self] in self?.prepareMerge(number) })
         }
         let errands = offered.map { action in
-            item(action.label, row?.recommended == action.id ? "Suggested" : action.input != nil ? "Dictated" : nil, symbol: row?.recommended == action.id ? "sparkle" : "bolt") { [weak self] in
+            item(action.label, action.isSuggested(for: row) ? "Suggested" : action.input != nil ? "Dictated" : nil, symbol: action.isSuggested(for: row) ? "sparkle" : "bolt") { [weak self] in
                 if action.input != nil { self?.dictate(.feedback(action)); return }
                 self?.ask(["Start a paid \(action.label) session on #\(number)? \(action.hint).", "Start \(action.label)?"], yes: "Start",
-                          destructive: action.id == "delete-self-comments") { self?.run(action) }
+                          destructive: action.isDestructive) { self?.run(action) }
             }
         }
         return Self.fit([section(row?.title ?? pull["title"].string, about), section("Paid agents, may write to GitHub", errands), section(nil, [putDown("pull request")])])
