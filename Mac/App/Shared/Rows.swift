@@ -245,18 +245,19 @@ extension PullRow where Buttons == EmptyView {
 
 /// An epic's bar of closed sub-issues against all of them, with "N/M done" after it.
 struct EpicProgress: View {
-    var done: Int
-    var total: Int
+    var progress: SubIssueProgress
     var body: some View {
         HStack(spacing: 8) {
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.accent.opacity(0.15))
-                Capsule().fill(Theme.accent).frame(width: 70 * CGFloat(min(done, max(total, 1))) / CGFloat(max(total, 1)))
+                Capsule().fill(Theme.accent).frame(width: 70 * progress.fraction)
             }
             .frame(width: 70, height: 6)
-            Text(verbatim: "\(done)/\(total) done").font(Theme.caption2).foregroundStyle(Theme.muted)
+            Text(verbatim: progress.text).font(Theme.caption2).foregroundStyle(Theme.muted)
         }
         .frame(height: 17)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(progress.spoken)
     }
 }
 
@@ -270,18 +271,8 @@ struct IssueRowView: View {
     var fold: (() -> Void)?
     var action: (() -> Void)?
 
-    private var facts: [MetaPart] {
-        var d: [MetaPart] = [MetaPart(text: "#\(issue.number)")]
-        if let author = issue.author { d.append(MetaPart(text: "@\(author)")) }
-        if !issue.assignees.isEmpty { d.append(MetaPart(text: people(issue.assignees, limit: 2))) }
-        else { d.append(MetaPart(text: "unassigned", color: Theme.tertiary)) }
-        if issue.comments > 0 { d.append(MetaPart(text: "\(issue.comments) comment\(issue.comments == 1 ? "" : "s")")) }
-        if let m = issue.milestone { d.append(MetaPart(text: m)) }
-        if !issue.pulls.isEmpty { d.append(MetaPart(text: issue.pulls.count == 1 ? "1 pull request" : "pull requests", color: Theme.ok)) }
-        return d
-    }
-
     var body: some View {
+        let content = IssueRowContent(issue: issue, repo: repo, nested: nested)
         RowBox(action: action) {
             HStack(spacing: 6) {
                 if let folded, let fold {
@@ -294,11 +285,12 @@ struct IssueRowView: View {
                 }
                 Text((issue.isEpic ? "◎ " : "") + issue.title).font(Theme.bodySemibold).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
             }
-            MetaLine(parts: facts, right: issue.updatedAt.map { formatRelative($0) }).padding(.top, 4)
-            if issue.isEpic { EpicProgress(done: issue.subIssuesDone, total: issue.subIssues).padding(.top, 4) }
+            MetaLine(parts: content.facts.map { MetaPart(text: $0.text, color: Theme.color($0.tone)) },
+                     right: issue.updatedAt.map { formatRelative($0) }).padding(.top, 4)
+            if let progress = content.progress { EpicProgress(progress: progress).padding(.top, 4) }
             if !issue.labels.isEmpty { LabelChips(labels: issue.labels).padding(.top, 6) }
-            if !nested, let parent = issue.parent {
-                Text(verbatim: "Part of \(parent.reference(repo)) \(parent.title)").font(Theme.caption).foregroundStyle(Theme.muted)
+            if let parentLine = content.parentLine {
+                Text(verbatim: parentLine).font(Theme.caption).foregroundStyle(Theme.muted)
                     .lineLimit(1).truncationMode(.tail).padding(.top, 4)
             }
             ForEach(Array(issue.pulls.enumerated()), id: \.offset) { _, link in LinkedRow(link: link, repo: repo).padding(.top, 4) }
