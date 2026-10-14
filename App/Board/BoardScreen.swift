@@ -52,6 +52,8 @@ struct BoardScreen: View {
     @StateObject private var errands: ErrandRunner
     @StateObject private var issueStatus: IssueStatusReader
     @State private var tab = Tab.pulls
+    /// The epics whose sub-issues the Issues tab hides, by number.
+    @State private var foldedEpics: Set<Int> = []
     @State private var error: String?
     /// The pull request whose Merge waits for a yes, the one being merged from its row, and what the last merge left to say.
     @State private var mergeAsked: PullSummary?
@@ -293,12 +295,16 @@ struct BoardScreen: View {
             .listRowBackground(Theme.row)
         } else {
             let visible = issues.filter { filters.issues.passes(BoardRow($0.summary)) }
-            let nested = issuesNested(visible.map(\.summary), repo: repo)
+            let summaries = visible.map(\.summary)
+            let nested = issuesFolded(issuesNested(summaries, repo: repo), summaries, folded: foldedEpics)
             Section {
                 ForEach(nested, id: \.index) { row in
                     let item = visible[row.index]
+                    let number = item.summary.number
                     DestinationLink(destination: .issue(repo: repo, issue: item.raw)) {
-                        BoardIssueRow(issue: item.summary, repo: repo, nested: row.depth > 0)
+                        BoardIssueRow(issue: item.summary, repo: repo, nested: row.depth > 0,
+                                      folded: row.children > 0 ? foldedEpics.contains(number) : nil,
+                                      fold: { withAnimation { if foldedEpics.remove(number) == nil { foldedEpics.insert(number) } } })
                             .padding(.leading, CGFloat(min(row.depth, 4)) * 14)
                     }
                     .contextMenu {

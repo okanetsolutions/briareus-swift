@@ -14,6 +14,8 @@ final class BoardModel: ObservableObject {
     /// The issue rows with what the server sent for each, which is what the issue screen opens with.
     @Published var issues: [(summary: IssueSummary, raw: JSON)] = []
     @Published var tab = BoardTab.pulls
+    /// The epics whose sub-issues the Issues tab hides, by number.
+    @Published var foldedEpics: Set<Int> = []
     @Published var runs: [Session] = []
     @Published var syncedAt: Date?
     /// Bumped when a read is held by the cooldown, so the board reads once it is over.
@@ -653,11 +655,17 @@ struct BoardScreen: View {
             }
         } else {
             let visible = model.issues.indices.filter { filter.passes(BoardRow(model.issues[$0].summary)) }
-            let nested = issuesNested(visible.map { model.issues[$0].summary }, repo: repo)
+            let summaries = visible.map { model.issues[$0].summary }
+            let nested = issuesFolded(issuesNested(summaries, repo: repo), summaries, folded: model.foldedEpics)
             ForEach(Array(nested.enumerated()), id: \.offset) { _, row in
                 let i = visible[row.index]
                 let depth = min(row.depth, 4)
-                IssueRowView(issue: model.issues[i].summary, repo: repo, nested: depth > 0) { model.openIssue(model.issues[i].raw) }
+                let number = model.issues[i].summary.number
+                IssueRowView(issue: model.issues[i].summary, repo: repo, nested: depth > 0,
+                             folded: row.children > 0 ? model.foldedEpics.contains(number) : nil,
+                             fold: { if model.foldedEpics.remove(number) == nil { model.foldedEpics.insert(number) } }) {
+                    model.openIssue(model.issues[i].raw)
+                }
                     .padding(.leading, CGFloat(depth) * 18)
                     .padding(.bottom, 8)
             }

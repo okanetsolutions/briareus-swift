@@ -199,6 +199,21 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(nested(#"[{"number":9},{"number":1,"parent":{"number":2}},{"number":2,"parent":{"number":1}},{"number":5,"parent":{"number":2}}]"#, "o/r"),
                        "9:0,1:0,2:1,5:2")
     }
+    func testFoldedEpicsHideEverythingUnderThem() {
+        let issues = IssueSummary.parseList(j(#"[{"number":1},{"number":2,"parent":{"number":1}},{"number":3,"parent":{"number":2}},"#
+                                              + #"{"number":4,"parent":{"number":1}},{"number":5},{"number":6,"parent":{"number":5}}]"#))
+        let rows = issuesNested(issues, repo: "o/r")
+        XCTAssertEqual(rows.map(\.children), [2, 1, 0, 0, 1, 0])
+        func shown(_ folded: Set<Int>) -> String {
+            issuesFolded(rows, issues, folded: folded).map { "\(issues[$0.index].number)" }.joined(separator: ",")
+        }
+        XCTAssertEqual(shown([]), "1,2,3,4,5,6")
+        XCTAssertEqual(shown([1]), "1,5,6")
+        XCTAssertEqual(shown([2]), "1,2,4,5,6")
+        XCTAssertEqual(shown([2, 5]), "1,2,4,5")
+        // A leaf, or a number not on the list, folds nothing.
+        XCTAssertEqual(shown([3, 99]), "1,2,3,4,5,6")
+    }
     func testIssuePromptsNameTheIssueItsEpicAndHowToCloseIt() {
         var p = issuePrompt(issue(#"{"number":20,"title":"Child"}"#)!, repo: "o/r")
         XCTAssertTrue(p.hasPrefix("Issue #20: Child\n\n"))
