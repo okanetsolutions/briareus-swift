@@ -279,6 +279,33 @@ final class BoardTests: XCTestCase {
         XCTAssertTrue(f.passes(BoardRow(author: "ana")))
     }
 
+    func testHideFailingChecksKeepsPassingRunningAndUncheckedPullRequests() {
+        let pulls = PullSummary.parseList(j(#"""
+        [{"number":1,"title":"a","author":"ana","checks":"failure"},
+         {"number":2,"title":"b","author":"ana","checks":"error"},
+         {"number":3,"title":"c","author":"bo","checks":"success"},
+         {"number":4,"title":"d","author":"bo","checks":"pending"},
+         {"number":5,"title":"e","author":"bo"}]
+        """#))
+        let rows = pulls.map(BoardRow.init)
+        var f = BoardFilter()
+        f.hideFailingChecks = true
+        XCTAssertTrue(f.isOn)
+        XCTAssertEqual(pulls.filter { f.passes(BoardRow($0)) }.map(\.number), [3, 4, 5])
+        // The pickers count only what the toggle leaves.
+        XCTAssertEqual(f.options(.author, rows: rows).map { "\($0.text) \($0.count)" }, ["bo 3"])
+        // Issues carry no checks, so it leaves them all.
+        XCTAssertTrue(f.passes(BoardRow(author: "ana")))
+        f.hideFailingChecks = false
+        XCTAssertFalse(f.isOn)
+    }
+
+    func testHideFailingChecksIsSavedPerRepository() {
+        var f = BoardFilter(); f.hideFailingChecks = true
+        XCTAssertEqual(f.saved, j(#"{"hideFailingChecks":true}"#))
+        XCTAssertEqual(BoardFilter(saved: f.saved), f)
+    }
+
     func testBoardFilterSavesAndRestoresItsPicks() {
         var f = BoardFilter(); f[.author] = "Ana"; f.hideLaterStacked = true
         XCTAssertEqual(f.saved, j(#"{"author":"ana","hideLaterStacked":true}"#))
