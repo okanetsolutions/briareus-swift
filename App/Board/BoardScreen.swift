@@ -190,7 +190,7 @@ struct BoardScreen: View {
                 let actions = pull.branch.isEmpty ? [] : boardErrands(catalog: catalog.catalog, pull: pull, failedChecks: 0)
                 DestinationLink(destination: .pull(repo: repo, number: pull.number, stack: stack?.json, summary: pull.raw)) {
                     BoardPullRow(pull: pull, stack: stack, repo: repo, activeRuns: activeRuns(pull.number),
-                                 suggested: actions.first { $0.id == pull.recommended }?.label, issueStatus: issueStatus.statuses(pull))
+                                 suggested: actions.first { $0.isSuggested(for: pull) }?.label, issueStatus: issueStatus.statuses(pull))
                 }
                 .contextMenu { rowMenu(pull, actions: actions) }
                 .swipeActions(edge: .trailing) {
@@ -216,10 +216,10 @@ struct BoardScreen: View {
         if !errandList.isEmpty {
             Section("Errands") {
                 ForEach(errandList, id: \.id) { a in
-                    Button(role: a.id == "delete-self-comments" ? .destructive : nil) {
+                    Button(role: a.isDestructive ? .destructive : nil) {
                         errands.ask(a, number: pull.number, branch: pull.branch)
                     } label: {
-                        Label(pull.recommended == a.id ? "\(a.label) (suggested)" : a.label, systemImage: pull.recommended == a.id ? "sparkles" : errandSymbol(a.id))
+                        Label(a.isSuggested(for: pull) ? "\(a.label) (suggested)" : a.label, systemImage: a.isSuggested(for: pull) ? "sparkles" : errandSymbol(a.id))
                     }
                     .disabled(errands.busy || errands.uncertain)
                 }
