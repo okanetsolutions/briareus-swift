@@ -48,6 +48,19 @@ enum Theme {
         }
     }
 
+    /// A row mark's tone (Core's `RowTone`) as a colour.
+    static func color(_ tone: RowTone) -> Color {
+        switch tone {
+        case .ok: return ok
+        case .danger: return danger
+        case .warn: return warn
+        case .muted: return muted
+        case .faint: return tertiary
+        case .accent: return accent
+        case .running: return statusColor("running")
+        }
+    }
+
     // MARK: Type
 
     // The shared text styles at their pixel sizes: body 15px, the smallest chrome 13px, the sidebar rows 14px, metadata 12px and
