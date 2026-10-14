@@ -49,7 +49,7 @@ final class ProjectFormModel: ObservableObject {
     }
     func canLeave() -> Bool {
         guard state.dirty else { return true }
-        let message = state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this project") have not been saved." : "The new project has not been saved."
+        let message = state.discardMessage
         let leave = confirmDiscard(message)
         if leave { state.dirty = false }
         return leave
@@ -134,25 +134,21 @@ final class ProjectFormModel: ObservableObject {
     // MARK: Saving, cloning, deleting
 
     func save() {
-        guard !busy, Store.shared.supports(state.id != 0 ? "update_project" : "create_project") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         case .failure(let p): show(p); return    // the tab holding the field at fault comes up with the reason above it
         case .success(let b): body = b
         }
         let id = state.id
-        if id != 0 { body["id"] = JSON(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_project" : "create_project", body)
-                let row = r["project"]
-                guard row.isObject else { showError(unexpectedResponse); return }
+                let r = try await Store.shared.call(state.saveOperation, body)
+                guard let row = state.saved(r) else { showError(unexpectedResponse); return }
                 // The server's word on what was saved: it may have tidied a value, and a new project now has an id.
                 error = nil
-                state.row = row
-                state.fill()
                 post(.settingsProjectsChanged, ["select": row["id"].int32 ?? 0])
                 post(.projectsChanged)
                 if id == 0 { Navigator.shared.show(.projectSettings(row: row, defaults: defaults)) }
@@ -258,7 +254,7 @@ struct ProjectSettingsScreen: View {
         var buttons: [HeaderButton] = []
         if store.supports("settings_projects") {
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE74E), label: model.saving ? "Saving…" : "Save", tip: "Save this project (⌘S)",
-                                        enabled: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_project" : "create_project"),
+                                        enabled: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
                                         prominent: true) { model.save() })
             if id != 0 {
                 buttons.append(HeaderButton(glyph: Glyph.symbol(0xE8C8), tip: "Clone into a new project",

@@ -50,7 +50,7 @@ private final class ProjectFormModel: ObservableObject {
     private func changed() { if !state.dirty { state.dirty = true } }
 
     var discardMessage: String {
-        state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this project") have not been saved." : "The new project has not been saved."
+        state.discardMessage
     }
     func tabDot(_ t: ProjectTab) -> Bool { state.dirty && state.tabChanged(t) }
 
@@ -118,24 +118,19 @@ private final class ProjectFormModel: ObservableObject {
     // MARK: Saving, cloning, deleting
 
     func save(done: @escaping () -> Void) {
-        guard !busy, Store.shared.supports(state.id != 0 ? "update_project" : "create_project") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         case .failure(let p): show(p); return    // the tab holding the field at fault comes up with the reason above it
         case .success(let b): body = b
         }
-        let id = state.id
-        if id != 0 { body["id"] = JSON(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_project" : "create_project", body)
-                let row = r["project"]
-                guard row.isObject else { showError(settingsUnexpectedResponse); return }
+                let r = try await Store.shared.call(state.saveOperation, body)
+                guard state.saved(r) != nil else { showError(settingsUnexpectedResponse); return }
                 error = nil
-                state.row = row
-                state.fill()
                 Self.refreshLists()
                 done()
             } catch {
@@ -228,7 +223,7 @@ struct ProjectSettingsScreen: View {
         .modifier(SettingsFormChrome(
             title: title, dirty: model.state.dirty, discardMessage: model.discardMessage,
             saveTitle: "Save",
-            canSave: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_project" : "create_project"),
+            canSave: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
             saving: model.saving, onSave: { focus = nil; model.save { dismiss() } },
             cloneTitle: "Clone into a new project",
             onClone: id != 0 && store.supports("create_project") ? { if let copy = model.cloneRow() { navigate(.projectSettings(row: copy, defaults: nil)) } } : nil,

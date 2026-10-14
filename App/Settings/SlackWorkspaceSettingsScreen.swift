@@ -61,7 +61,7 @@ private final class SlackWorkspaceFormModel: ObservableObject {
 
     private func changed() { if !state.dirty { state.dirty = true } }
     var discardMessage: String {
-        state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this Slack workspace") have not been saved." : "The new Slack workspace has not been saved."
+        state.discardMessage
     }
     private func showError(_ text: String?) {
         guard let text else { return }
@@ -70,25 +70,21 @@ private final class SlackWorkspaceFormModel: ObservableObject {
 
     func save(done: @escaping () -> Void) {
         let id = state.id
-        guard !busy, Store.shared.supports(id != 0 ? "update_slack_workspace" : "create_slack_workspace") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         case .failure(let p): showError(p.message); return
         case .success(let b): body = b
         }
-        if id != 0 { body["id"] = .number(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_slack_workspace" : "create_slack_workspace", body)
-                let row = r["workspace"]
-                guard row.isObject else { showError(settingsUnexpectedResponse); return }
+                let r = try await Store.shared.call(state.saveOperation, body)
+                guard state.saved(r) != nil else { showError(settingsUnexpectedResponse); return }
                 // The server's word on what was saved: who the token is, an empty label now the workspace's name, and a new
                 // workspace's id and Request URL.
                 error = nil
-                state.row = row
-                state.fill()
                 Task { try? await SettingsLists.shared.loadSlack() }
                 // A new workspace stays open, so its Request URL can be copied into the Slack app.
                 if id != 0 { done() }
@@ -168,7 +164,7 @@ struct SlackWorkspaceSettingsScreen: View {
         .modifier(SettingsFormChrome(
             title: id != 0 ? state.row["label"].nonEmpty ?? state.row["team"].nonEmpty ?? "Slack workspace" : "New Slack workspace",
             dirty: state.dirty, discardMessage: model.discardMessage, saveTitle: "Save",
-            canSave: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_slack_workspace" : "create_slack_workspace"),
+            canSave: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
             saving: model.saving, onSave: { focus = nil; model.save { dismiss() } },
             deleteTitle: "Delete Slack workspace",
             onDelete: id != 0 && store.supports("delete_slack_workspace") ? { confirmDelete = true } : nil))

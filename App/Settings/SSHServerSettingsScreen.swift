@@ -62,7 +62,7 @@ private final class SSHServerFormModel: ObservableObject {
 
     private func changed() { if !state.dirty { state.dirty = true } }
     var discardMessage: String {
-        state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this SSH server") have not been saved." : "The new SSH server has not been saved."
+        state.discardMessage
     }
     private func showError(_ text: String?) {
         guard let text else { return }
@@ -91,19 +91,17 @@ private final class SSHServerFormModel: ObservableObject {
     }
 
     func save(done: @escaping () -> Void) {
-        let id = state.id
-        guard !busy, Store.shared.supports(id != 0 ? "update_ssh_server" : "create_ssh_server") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         case .failure(let p): tab = SSHServerTab(rawValue: p.tab) ?? .server; showError(p.message); return
         case .success(let b): body = b
         }
-        if id != 0 { body["id"] = .number(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_ssh_server" : "create_ssh_server", body)
+                let r = try await Store.shared.call(state.saveOperation, body)
                 let row = r["server"]
                 guard row.isObject else { showError(settingsUnexpectedResponse); return }
                 // The server's word on what was saved: an empty label is now user@host:port, and a new server has an id.
@@ -201,7 +199,7 @@ struct SSHServerSettingsScreen: View {
         .modifier(SettingsFormChrome(
             title: id != 0 ? state.row["label"].nonEmpty ?? state.row["host"].nonEmpty ?? "SSH server" : "New SSH server",
             dirty: state.dirty, discardMessage: model.discardMessage, saveTitle: "Save",
-            canSave: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_ssh_server" : "create_ssh_server"),
+            canSave: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
             saving: model.saving, onSave: { focus = nil; model.save { dismiss() } },
             cloneTitle: "Clone into a new SSH server",
             onClone: id != 0 && store.supports("create_ssh_server") ? { if let copy = model.cloneRow() { navigate(.sshServerSettings(row: copy, defaults: nil)) } } : nil,

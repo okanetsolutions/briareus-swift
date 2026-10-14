@@ -51,7 +51,7 @@ private final class DBServerFormModel: ObservableObject {
 
     private func changed() { if !state.dirty { state.dirty = true } }
     var discardMessage: String {
-        state.id != 0 ? "The changes to \(state.row["label"].nonEmpty ?? "this server") have not been saved." : "The new database server has not been saved."
+        state.discardMessage
     }
     func tabDot(_ t: DBServerTab) -> Bool { state.dirty && state.tabChanged(t) }
     private func showError(_ text: String?) {
@@ -60,25 +60,20 @@ private final class DBServerFormModel: ObservableObject {
     }
 
     func save(done: @escaping () -> Void) {
-        guard !busy, Store.shared.supports(state.id != 0 ? "update_db_server" : "create_db_server") else { return }
-        var body: JSON
-        switch state.body() {
+        guard !busy, Store.shared.supports(state.saveOperation) else { return }
+        let body: JSON
+        switch state.saveRequest() {
         // Only the port can be refused here, and it is on the Server tab.
         case .failure(let p): tab = .server; showError(p.message); return
         case .success(let b): body = b
         }
-        let id = state.id
-        if id != 0 { body["id"] = JSON(id) }
         saving = true
         Task {
             defer { saving = false }
             do {
-                let r = try await Store.shared.call(id != 0 ? "update_db_server" : "create_db_server", body)
-                let row = r["server"]
-                guard row.isObject else { showError(settingsUnexpectedResponse); return }
+                let r = try await Store.shared.call(state.saveOperation, body)
+                guard state.saved(r) != nil else { showError(settingsUnexpectedResponse); return }
                 error = nil
-                state.row = row
-                state.fill()
                 Task { try? await SettingsLists.shared.loadServers() }
                 done()
             } catch {
@@ -202,7 +197,7 @@ struct DBServerSettingsScreen: View {
         .modifier(SettingsFormChrome(
             title: id != 0 ? state.row["label"].nonEmpty ?? address : "New database server",
             dirty: state.dirty, discardMessage: model.discardMessage, saveTitle: "Save",
-            canSave: !model.busy && (state.dirty || id == 0) && store.supports(id != 0 ? "update_db_server" : "create_db_server"),
+            canSave: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
             saving: model.saving, onSave: { focus = nil; model.save { dismiss() } },
             cloneTitle: "Clone into a new server",
             onClone: id != 0 && store.supports("create_db_server") ? { if let copy = model.cloneRow() { navigate(.dbServerSettings(row: copy, defaults: nil)) } } : nil,
