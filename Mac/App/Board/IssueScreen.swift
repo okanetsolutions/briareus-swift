@@ -496,7 +496,7 @@ private struct IssueMain: View {
         }
         SectionTitle(title: "Sub-issues")
         Text(verbatim: "\(issue.subIssuesDone) of \(issue.subIssues) completed").font(Theme.caption).foregroundStyle(open > 0 ? Theme.muted : Theme.ok).lineLimit(1)
-        EpicProgress(done: issue.subIssuesDone, total: issue.subIssues).padding(.top, 4).padding(.bottom, 10)
+        EpicProgress(progress: SubIssueProgress(issue)).padding(.top, 4).padding(.bottom, 10)
         ForEach(rich, id: \.self) { i in
             IssueRowView(issue: model.boardIssues[i].summary, repo: model.repo, nested: true) { Navigator.shared.push(.issue(repo: model.repo, issue: model.boardIssues[i].raw)) }
                 .padding(.bottom, 8)

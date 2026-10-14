@@ -402,15 +402,14 @@ struct BoardPullRow: View {
 
 /// How much of an epic is done, over every sub-issue GitHub knows, which may be more than the rows under it.
 struct BoardEpicProgress: View {
-    let done: Int
-    let total: Int
+    let progress: SubIssueProgress
     var body: some View {
         HStack(spacing: 8) {
-            ProgressView(value: Double(min(done, max(total, 1))), total: Double(max(total, 1))).tint(Theme.accent).frame(width: 70)
-            Text("\(done)/\(total) done").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+            ProgressView(value: progress.fraction).tint(Theme.accent).frame(width: 70)
+            Text(progress.text).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(done) of \(total) sub-issues closed")
+        .accessibilityLabel(progress.spoken)
     }
 }
 
@@ -424,9 +423,10 @@ struct BoardIssueRow: View {
     var folded: Bool?
     var fold: (() -> Void)?
     var body: some View {
+        let content = IssueRowContent(issue: issue, repo: repo, nested: nested)
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: issue.isEpic ? "square.stack.3d.up" : "smallcircle.filled.circle").font(.subheadline)
-                .foregroundStyle(issue.pulls.isEmpty ? Theme.ok : Theme.accent).accessibilityHidden(true)
+                .foregroundStyle(content.answered ? Theme.accent : Theme.ok).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(issue.title).font(.body.weight(.medium)).lineLimit(2)
@@ -441,14 +441,14 @@ struct BoardIssueRow: View {
                     }
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(metaLine).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    factLine(content.facts).font(.caption).lineLimit(1)
                     Spacer(minLength: 4)
                     BoardUpdated(date: issue.updatedAt)
                 }
-                if issue.isEpic { BoardEpicProgress(done: issue.subIssuesDone, total: issue.subIssues) }
+                if let progress = content.progress { BoardEpicProgress(progress: progress) }
                 if !issue.labels.isEmpty { BoardLabelChips(labels: issue.labels) }
-                if !nested, let parent = issue.parent {
-                    Label("Part of \(parent.reference(repo)) \(parent.title)", systemImage: "arrow.turn.down.right")
+                if let parentLine = content.parentLine {
+                    Label(parentLine, systemImage: "arrow.turn.down.right")
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 ForEach(Array(issue.pulls.enumerated()), id: \.offset) { _, link in BoardLinkedRow(link: link, repo: repo) }
@@ -456,13 +456,13 @@ struct BoardIssueRow: View {
         }
         .padding(.vertical, 3)
     }
-    private var metaLine: String {
-        var parts = ["#\(issue.number)"]
-        if let author = issue.author { parts.append("@\(author)") }
-        parts.append(issue.assignees.isEmpty ? "unassigned" : "assigned \(people(issue.assignees, limit: 2))")
-        if issue.comments > 0 { parts.append("\(issue.comments) comment\(issue.comments == 1 ? "" : "s")") }
-        if let milestone = issue.milestone { parts.append(milestone) }
-        return parts.joined(separator: " · ")
+}
+
+/// A row's facts as one line, " · " between them, each in its tone.
+func factLine(_ facts: [RowFact]) -> Text {
+    facts.enumerated().reduce(Text(verbatim: "")) { line, item in
+        let fact = Text(verbatim: item.element.text).foregroundColor(Theme.color(item.element.tone))
+        return item.offset == 0 ? fact : line + Text(verbatim: " · ").foregroundColor(.secondary) + fact
     }
 }
 
