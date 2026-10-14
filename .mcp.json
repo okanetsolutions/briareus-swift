@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "MobileBuildMCP": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mobilebuildmcp@latest",
+        "mcp"
+      ],
+      "env": {}
+    }
+  }
+}

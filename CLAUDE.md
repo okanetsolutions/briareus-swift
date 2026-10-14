@@ -83,3 +83,11 @@ A change is done only when:
 ## Mandatory gate before pushing
 
 Run `swift test`, both scheme builds and `python3 scripts/check_escape_hatches.py`, then follow the `code-review` skill before opening a PR. A skipped check is not a pass.
+
+## Building, networking and agent skills
+
+- After every change, build with the MobileBuildMCP server (formerly XcodeBuildMCP, registered in `.mcp.json`): the `Briareus` scheme for a simulator and the `Briareus Mac` scheme, and fix any errors before calling the change done. This adds to the mandatory gate above; it does not replace `swift test` or the escape-hatch check.
+- The backend is a Laravel REST API using Sanctum token auth. Tokens live in the Keychain (`App/Keychain.swift` on the iPhone), never in `UserDefaults`.
+- Networking uses async/await with `URLSession` and `Codable`, through `API` in `Mac/Core`, never from a view.
+- Never hand-edit `Briareus.xcodeproj/project.pbxproj`. Add, move or remove source files and run `python3 scripts/generate-project.py`, as stated above.
+- Use the project skills `swiftui-pro`, `swiftdata-pro` and `swift-concurrency-pro` when writing or reviewing Swift code. Where their advice conflicts with this file or `.ai/rules`, this repository wins. In particular, keep the deployment targets in `scripts/generate-project.py` (iOS 17, macOS 14) and use newer APIs only behind `#available`.
