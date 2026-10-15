@@ -67,6 +67,10 @@ enum Theme {
         }
     }
 
+    /// The categorical series colours (BriareusChart, from the tokens), the only place a hue means which one: four slots and
+    /// the tail's grey.
+    static func series(_ slot: Int) -> Color { Color(nsColor: NSColor(hex: BriareusChart.seriesColor(slot))) }
+
     // MARK: Type
 
     // The shared text styles at their pixel sizes: body 15px, the smallest chrome 13px, the sidebar rows 14px, metadata 12px and
