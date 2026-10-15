@@ -170,4 +170,39 @@ final class UsageLogicTests: XCTestCase {
         q.choose(.activity, "qa")
         XCTAssertEqual(q.subtitle(u, options: .null, locale: en), "all time \u{00B7} only \u{1F50D} QA \u{00B7} 1 turn")
     }
+    func testCustomRange() {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
+        func day(_ y: Int, _ m: Int, _ d: Int, hour: Int = 0) -> Date { cal.date(from: DateComponents(year: y, month: m, day: d, hour: hour))! }
+        // Either order, any time of day: the two days, earliest first.
+        XCTAssertEqual(UsageRange.make(day(2026, 8, 9, hour: 23), day(2026, 8, 3), calendar: cal), UsageRange(from: "2026-08-03", to: "2026-08-09"))
+        XCTAssertEqual(UsageRange.make(day(2026, 8, 3), day(2026, 8, 3, hour: 5), calendar: cal), UsageRange(from: "2026-08-03", to: "2026-08-03"))
+        // 366 days counted is the most the server reads.
+        XCTAssertNotNil(UsageRange.make(day(2026, 1, 1), day(2026, 12, 31), calendar: cal))
+        XCTAssertNotNil(UsageRange.make(day(2024, 1, 1), day(2024, 12, 31), calendar: cal))
+        XCTAssertNil(UsageRange.make(day(2026, 1, 1), day(2027, 1, 2), calendar: cal))
+        XCTAssertEqual(UsageRange.lastWeek(now: day(2026, 3, 2, hour: 12), calendar: cal), UsageRange(from: "2026-02-24", to: "2026-03-02"))
+        let r = UsageRange(from: "2026-08-03", to: "2026-08-09")
+        XCTAssertEqual(r.dates(calendar: cal)?.from, day(2026, 8, 3))
+        XCTAssertEqual(r.dates(calendar: cal)?.to, day(2026, 8, 9))
+        XCTAssertEqual(UsageRange.make(r.dates(calendar: cal)!.from, r.dates(calendar: cal)!.to, calendar: cal), r)
+    }
+    func testCustomQuery() {
+        var q = UsageQuery()
+        XCTAssertEqual(q.cacheKey, "usage:month")
+        let r = UsageRange(from: "2026-08-03", to: "2026-08-09")
+        q.setPeriod(Usage.customPeriod, range: r)
+        XCTAssertTrue(q.isCustom)
+        XCTAssertEqual(q.args, ["period": "custom", "from": "2026-08-03", "to": "2026-08-09"])
+        XCTAssertNil(q.cacheKey)
+        XCTAssertEqual(q.periodLabel, r.label())
+        // A named period keeps the range for when the custom one is chosen again, but does not send it.
+        q.setPeriod(0)
+        XCTAssertEqual(q.args, ["period": "month"])
+        q.setPeriod(Usage.customPeriod)
+        XCTAssertEqual(q.range, r)
+        // Chosen before any range: the last week.
+        var fresh = UsageQuery(); fresh.setPeriod(Usage.customPeriod)
+        XCTAssertEqual(fresh.range, .lastWeek())
+        XCTAssertNotEqual(r.label(locale: en), UsageRange(from: "2026-08-03", to: "2026-08-03").label(locale: en))
+    }
 }

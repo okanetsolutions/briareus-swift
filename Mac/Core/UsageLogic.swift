@@ -62,8 +62,10 @@ enum Usage {
 
     static let periods: [(id: String, label: String)] = [
         ("month", "This month"), ("prev", "Last month"), ("all", "All time"),
-        ("today", "Today"), ("7d", "Last 7 days"), ("30d", "Last 30 days"),
+        ("today", "Today"), ("7d", "Last 7 days"), ("30d", "Last 30 days"), ("custom", "Custom range\u{2026}"),
     ]
+    /// The period whose days are picked, a `UsageRange`.
+    static let customPeriod = periods.firstIndex { $0.id == "custom" }!
     /// What the window is called: the server's month by its own calendar, all time, or the span of its buckets.
     static func windowName(_ u: JSON, periodLabel: String, locale: Locale = .current) -> String {
         let period = u["period"].string
@@ -211,13 +213,66 @@ enum Usage {
     }
 }
 
+/// A custom window: its first and last day, both counted, as the server's `from` and `to` take them ("2026-08-03").
+struct UsageRange: Equatable, Sendable {
+    var from: String
+    var to: String
+
+    /// The most days the server reads at once.
+    static let maxDays = 366
+
+    /// The days of two picked dates in `calendar`, earliest first; nil when they span more than `maxDays`.
+    static func make(_ a: Date, _ b: Date, calendar: Calendar = .current) -> UsageRange? {
+        let first = calendar.startOfDay(for: min(a, b)), last = calendar.startOfDay(for: max(a, b))
+        guard let span = calendar.dateComponents([.day], from: first, to: last).day, span + 1 <= maxDays else { return nil }
+        return UsageRange(from: day(first, calendar), to: day(last, calendar))
+    }
+    /// The last seven days to today, which the pickers start on before a range was chosen.
+    static func lastWeek(now: Date = Date(), calendar: Calendar = .current) -> UsageRange {
+        let start = calendar.date(byAdding: .day, value: -6, to: now) ?? now
+        return make(start, now, calendar: calendar)!
+    }
+    private static func day(_ when: Date, _ calendar: Calendar) -> String {
+        let c = calendar.dateComponents([.year, .month, .day], from: when)
+        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+    }
+    private static func date(_ day: String, _ calendar: Calendar) -> Date? {
+        let parts = day.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    }
+    /// Its first and last day as dates in `calendar`, for the pickers.
+    func dates(calendar: Calendar = .current) -> (from: Date, to: Date)? {
+        guard let a = Self.date(from, calendar), let b = Self.date(to, calendar) else { return nil }
+        return (a, b)
+    }
+    /// What the window button says: "Aug 3 – Aug 9", or "Aug 3" for one day.
+    func label(locale: Locale = .current) -> String {
+        let a = Usage.bucketName(from, month: false, locale: locale), b = Usage.bucketName(to, month: false, locale: locale)
+        return a == b ? a : "\(a) \u{2013} \(b)"
+    }
+}
+
 /// The window and the picks a reading is narrowed by.
 struct UsageQuery: Equatable {
     var period = 0
     var picks: [Usage.Filter: [String]] = [:]
+    /// The days of the custom period; nil until a range was chosen.
+    var range: UsageRange?
 
     var periodID: String { Usage.periods[period].id }
-    var periodLabel: String { Usage.periods[period].label }
+    var isCustom: Bool { period == Usage.customPeriod }
+    var periodLabel: String {
+        if isCustom, let range { return range.label() }
+        return Usage.periods[period].label
+    }
+    /// Where an unfiltered reading of a named period is kept; a custom range is read fresh each time.
+    var cacheKey: String? { isCustom ? nil : "usage:\(periodID)" }
+    /// A new window: one of the named periods, or the custom period over `range`.
+    mutating func setPeriod(_ p: Int, range: UsageRange? = nil) {
+        period = p
+        if p == Usage.customPeriod { self.range = range ?? self.range ?? .lastWeek() }
+    }
     var anyPick: Bool { picks.values.contains { !$0.isEmpty } }
     func picked(_ f: Usage.Filter) -> [String] { picks[f] ?? [] }
     func isPicked(_ f: Usage.Filter, _ key: String) -> Bool { picked(f).contains(key) }
@@ -246,6 +301,7 @@ struct UsageQuery: Equatable {
     /// The arguments of `usage_all`: the window, and each pick (an array for the pickers that take several).
     var args: JSON {
         var a: JSON = ["period": .string(periodID)]
+        if isCustom, let range { a["from"] = .string(range.from); a["to"] = .string(range.to) }
         for f in Usage.Filter.allCases {
             let list = picked(f)
             guard let first = list.first else { continue }
