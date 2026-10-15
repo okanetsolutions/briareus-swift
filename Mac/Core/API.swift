@@ -328,11 +328,12 @@ struct APIRoute: Sendable {
         // Mailboxes the server keeps synced from Gmail and Outlook, an Admin token's: connected with the provider's sign-in
         // (started here, finished by the server or with the address it ended on), their settings, a sync, a disconnect.
         .init(name: "settings_mail_accounts", method: "GET", path: "settings/mail/accounts"),
-        // The synced mail, newest first, a page at a time (`cursor`), one message with its body, and one moved to the
-        // provider's trash (a mailbox connected with access: manage).
+        // The synced mail, newest first, a page at a time (`cursor`), one message with its body, one moved to the
+        // provider's trash and a plain-text reply to one, threaded on it (both need a mailbox connected with access: manage).
         .init(name: "mail_messages", method: "GET", path: "mail/messages"),
         .init(name: "mail_message", method: "GET", path: "mail/accounts/{account}/messages/{id}"),
         .init(name: "delete_mail_message", method: "DELETE", path: "mail/accounts/{account}/messages/{id}"),
+        .init(name: "reply_mail_message", method: "POST", path: "mail/accounts/{account}/messages/{id}/reply"),
         .init(name: "connect_mail_account", method: "POST", path: "settings/mail/accounts/connect"),
         .init(name: "finish_mail_account", method: "POST", path: "settings/mail/accounts/connect/finish"),
         .init(name: "update_mail_account", method: "PUT", path: "settings/mail/accounts/{id}"),
