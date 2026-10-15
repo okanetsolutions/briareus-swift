@@ -159,6 +159,8 @@ private struct MarkdownTable: View {
     var block: MdBlock
     var size: MarkdownSize
     @State private var available: CGFloat = 0
+    /// The table's height with Copy table, measured, for the ScrollView around it.
+    @State private var height: CGFloat = 0
     private static let pad: CGFloat = 8, maxText: CGFloat = 420, minText: CGFloat = 80
 
     var body: some View {
@@ -192,9 +194,13 @@ private struct MarkdownTable: View {
                 }
                 .overlay(Rectangle().strokeBorder(Theme.line, lineWidth: 1))
             }
+            // Each row at its tallest cell's height, whatever height the ScrollView offers; otherwise the grid spreads
+            // it over its rows, padding some and clipping the last.
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         }
-        // A sideways ScrollView doesn't take its content's height on its own; without this the grid spreads the height it
-        // is offered over its rows, padding some and clipping the last
+        // A sideways ScrollView doesn't take its content's height on its own, so it takes the height measured above.
+        .frame(height: height > 0 ? height : nil)
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
     }
