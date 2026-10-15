@@ -381,11 +381,12 @@ func mailReplyBody(_ text: String) -> JSON? {
 /// Whether the server's answer to a reply says the provider took it.
 func mailReplyAccepted(_ answer: JSON) -> Bool { answer["status"].string == "accepted" }
 
-/// What a refused reply means, in words.
+/// What a refused reply means, in words. No answer at all (status 0: a timeout or a dropped connection) is as uncertain as
+/// a 502: the provider may have taken it.
 func mailReplyError(status: Int) -> String {
     switch status {
     case 403: return "This mailbox was connected read-only. Connect it again in Mail accounts with access to manage mail, then try again."
-    case 502: return "The provider did not answer clearly, so the reply may have gone out. Sync the mailbox and check Sent before trying again."
+    case 0, 502: return "The provider did not answer clearly, so the reply may have gone out. Sync the mailbox and check Sent before trying again."
     case 400: return "The server refused the reply. Check that it has text and is not too long."
     case 404: return "That message is no longer in the synced copy. Refresh the list."
     case 409: return "This mailbox needs signing in again. Open Mail accounts."

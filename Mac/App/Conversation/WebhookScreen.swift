@@ -4,9 +4,8 @@
 // /sessions/{id}/webhook; pushed over the conversation from its header.
 import SwiftUI
 
-/// The three switches, by the key they are sent under.
-enum WebhookToggle: String, CaseIterable {
-    case armed, instructions, sshUnattended
+/// What each switch says on this screen.
+extension WebhookToggle {
     var label: String {
         switch self {
         case .armed: return "Take deliveries"
@@ -122,7 +121,7 @@ final class WebhookModel: ObservableObject {
     @discardableResult
     func save() -> WebhookField? {
         guard !busy, hook != nil else { return nil }
-        let switches = Dictionary(uniqueKeysWithValues: WebhookToggle.allCases.map { ($0.rawValue, on($0)) })
+        let switches = Dictionary(uniqueKeysWithValues: WebhookToggle.allCases.map { ($0, on($0)) })
         switch webhookSave(switches: switches, caps: texts) {
         case .invalid(let f):
             show(f.invalid, ok: false)

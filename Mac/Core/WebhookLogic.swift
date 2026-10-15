@@ -1,5 +1,5 @@
-// A session's ⚡ Webhook form as both apps' screens draw it: the two caps with their ranges and defaults, what the
-// server's Webhook record fills them with, and the body Save sends to PUT /sessions/{id}/webhook.
+// A session's ⚡ Webhook form as both apps' screens draw it: its three switches, the two caps with their ranges and
+// defaults, what the server's Webhook record fills them with, and the body Save sends to PUT /sessions/{id}/webhook.
 import Foundation
 
 /// The two caps, each a whole number in its range. `maxTurns` 0 lets deliveries start turns without limit.
@@ -25,16 +25,21 @@ enum WebhookField: String, CaseIterable, Hashable, Sendable {
     func text(_ hook: JSON) -> String { String(hook[key].int ?? fallback) }
 }
 
+/// The three switches, by the key they are read and sent under.
+enum WebhookToggle: String, CaseIterable, Hashable, Sendable {
+    case armed, instructions, sshUnattended
+}
+
 /// What Save sends, or the first cap that cannot be sent.
 enum WebhookSave: Equatable, Sendable {
     case body(JSON)
     case invalid(WebhookField)
 }
 
-/// The PUT body from the switches (`armed`, `instructions`, `sshUnattended`, by key) and the caps as typed.
-func webhookSave(switches: [String: Bool], caps: [WebhookField: String]) -> WebhookSave {
+/// The PUT body from the switches and the caps as typed; a switch not given is sent off.
+func webhookSave(switches: [WebhookToggle: Bool], caps: [WebhookField: String]) -> WebhookSave {
     var body: JSON = [:]
-    for (key, on) in switches { body[key] = .bool(on) }
+    for t in WebhookToggle.allCases { body[t.rawValue] = .bool(switches[t] ?? false) }
     for f in WebhookField.allCases {
         guard let n = Int((caps[f] ?? "").cTrimmed), f.range.contains(n) else { return .invalid(f) }
         body[f.key] = JSON(n)
