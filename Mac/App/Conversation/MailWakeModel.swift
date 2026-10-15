@@ -18,6 +18,8 @@ final class MailWakeModel: ObservableObject {
     @Published private(set) var caps: [MailWakeCap: String] = [:]
     /// The mailboxes, nil until read (or when they could not be).
     @Published private(set) var accounts: MailAccounts?
+    /// Why the mailboxes could not be read, which leaves rules without a mailbox to pick.
+    @Published private(set) var accountsError: String?
     /// Whether the project's mail tools are on; nil when the projects' settings did not say.
     @Published private(set) var mailTools: Bool?
     @Published private(set) var loading = false
@@ -30,6 +32,13 @@ final class MailWakeModel: ObservableObject {
     @Published private(set) var scrollToken = 0
 
     init(session: Session) { self.session = session }
+
+    /// What the header says of the saved rules: read, saving, and whether mail wakes the session.
+    var state: String {
+        guard let wake else { return error != nil ? "could not be read" : "reading…" }
+        if busy { return "saving…" }
+        return mailWakeRules(wake).contains(where: \.enabled) ? "on" : "off"
+    }
 
     var canEdit: Bool { wake != nil && !busy && Store.shared.supports("set_session_mail_wake") }
     var canAdd: Bool { canEdit && rows.count < mailWakeRuleLimit && mailTools != false && !mailboxes.isEmpty }
@@ -106,7 +115,7 @@ final class MailWakeModel: ObservableObject {
         let args: JSON = ["sessionId": .string(session.id)]
         Task {
             defer { loading = false }
-            async let mailboxes = try? Store.shared.call("settings_mail_accounts")
+            async let mailboxes = boardCall("settings_mail_accounts")
             async let projects = Store.shared.supports("settings_projects") ? try? Store.shared.call("settings_projects") : nil
             do {
                 let answer = try await Store.shared.call("session_mail_wake", args)
@@ -116,7 +125,13 @@ final class MailWakeModel: ObservableObject {
             } catch {
                 if !error.isCancellation { self.error = errorText(error) }
             }
-            if let read = await mailboxes { accounts = MailAccounts(read) }
+            switch await mailboxes {
+            case .success(let read):
+                accounts = MailAccounts(read)
+                accountsError = accounts == nil ? "The server returned an unexpected mail account list." : nil
+            case .failure(let e):
+                if e.kind != .cancelled { accountsError = "The mailboxes could not be read: \(errorText(e))" }
+            }
             if let read = await projects, let repo = session.repo { mailTools = mailToolsEnabled(read, repo: repo) }
         }
     }

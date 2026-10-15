@@ -50,11 +50,9 @@ struct MailWakeScreen: View {
     }
 
     private var header: PaneHeader {
-        let on = model.rows.contains { $0.rule.enabled }
-        let state = model.wake == nil ? (model.error != nil ? "could not be read" : "reading…") : on ? "on" : "off"
         let button = HeaderButton(glyph: Glyph.symbol(0xE74E), label: "Save", tip: "Save (⌘S)",
                                   enabled: model.canEdit && model.dirty, prominent: true) { save() }
-        return PaneHeader(title: "\u{2709} Mail wake", subtitle: "\(model.session.displayTitle) · \(state)", buttons: [button])
+        return PaneHeader(title: "\u{2709} Mail wake", subtitle: "\(model.session.displayTitle) · \(model.state)", buttons: [button])
     }
 
     @ViewBuilder private var form: some View {
@@ -62,7 +60,9 @@ struct MailWakeScreen: View {
         if model.mailTools == false {
             NoticeBox(message: MailWakeProblem.mailToolsOff.message).padding(.bottom, 14)
         }
-        if model.accounts != nil && model.mailboxes.isEmpty {
+        if let why = model.accountsError {
+            NoticeBox(message: why).padding(.bottom, 14)
+        } else if model.accounts != nil && model.mailboxes.isEmpty {
             NoticeBox(message: "No mailbox is connected and turned on. Connect one under Settings › Mail first.").padding(.bottom, 14)
         }
         SettingsPair { capField(.perHour) } right: { capField(.maxTurns) }

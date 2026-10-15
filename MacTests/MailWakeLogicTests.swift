@@ -57,6 +57,9 @@ final class MailWakeLogicTests: XCTestCase {
         XCTAssertEqual(mailWakeSave(rules: [MailWakeRule(account: 1, from: "nobody")], caps: caps), .invalid(.notAddress(rule: 0, .from)))
         XCTAssertEqual(mailWakeSave(rules: [MailWakeRule(account: 1, subject: String(repeating: "s", count: mailWakeTextLimit + 1))], caps: caps),
                        .invalid(.tooLong(rule: 0, .subject)))
+        // Counted as the server counts: an emoji is two.
+        XCTAssertEqual(mailWakeSave(rules: [MailWakeRule(account: 1, subject: String(repeating: "\u{1F4E7}", count: mailWakeTextLimit / 2 + 1))], caps: caps),
+                       .invalid(.tooLong(rule: 0, .subject)))
         XCTAssertEqual(mailWakeSave(rules: [ok], caps: [.perHour: "0", .maxTurns: "5"]), .invalid(.cap(.perHour)))
         XCTAssertEqual(mailWakeSave(rules: [ok], caps: [.perHour: "30", .maxTurns: "0"]), .invalid(.cap(.maxTurns)))
         XCTAssertEqual(mailWakeSave(rules: [ok], caps: [.perHour: "30"]), .invalid(.cap(.maxTurns)))

@@ -5,7 +5,7 @@ import Foundation
 
 /// The most rules a session keeps.
 let mailWakeRuleLimit = 20
-/// The longest address or subject a rule takes.
+/// The longest address or subject a rule takes, in UTF-16 units as the server counts.
 let mailWakeTextLimit = 320
 
 /// One rule: new inbox mail in `account` that matches every filter given wakes the session; an empty filter matches all.
@@ -156,7 +156,7 @@ func mailWakeSave(rules: [MailWakeRule], caps: [MailWakeCap: String], usable: Se
         if let id = rule.id { r["id"] = .string(id) }
         for f in MailWakeFilter.allCases {
             let text = rule[f].cTrimmed
-            if text.count > mailWakeTextLimit { return .invalid(.tooLong(rule: i, f)) }
+            if text.utf16.count > mailWakeTextLimit { return .invalid(.tooLong(rule: i, f)) }
             if f.isAddress && !text.isEmpty && !mailWakeAddress(text) { return .invalid(.notAddress(rule: i, f)) }
             r[f.key] = .string(text)
         }
