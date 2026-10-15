@@ -49,11 +49,7 @@ final class ServerStatsModel: ObservableObject {
     var available: Bool { Store.shared.supports("server_stats") }
     var listsSessions: Bool { Store.shared.supports("sessions_stats") }
 
-    private var knownSessions: [Session] {
-        ProjectsModel.shared.projects.flatMap { p in
-            Store.shared.cache.value("sessions:\(p.repo)").flatMap(Session.parseList) ?? []
-        }
-    }
+    private var known: KnownSessions { KnownSessions(repos: ProjectsModel.shared.projects.map(\.repo), cache: Store.shared.cache) }
 
     func load() async {
         guard available else { loaded = true; return }
@@ -64,8 +60,7 @@ final class ServerStatsModel: ObservableObject {
             let (s, o) = try await (serverAnswer, openAnswer)
             guard let parsed = ServerStats(s) else { throw APIError(.nonJSON) }
             server = parsed
-            let titles = Dictionary(knownSessions.map { ($0.id, $0.displayTitle) }) { a, _ in a }
-            rows = o.flatMap(OpenSessionsStats.init)?.rows(titles: titles) ?? []
+            rows = o.flatMap(OpenSessionsStats.init)?.rows(known: known) ?? []
             error = nil
         } catch {
             guard !error.isCancellation else { return }
@@ -83,6 +78,6 @@ final class ServerStatsModel: ObservableObject {
 
     /// The record a row opens its session's Resources with: the conversation's as the feeds hold it, else its id and name.
     func record(_ row: StatsRow) -> JSON {
-        knownSessions.first { $0.id == row.id }?.raw ?? ["id": .string(row.id), "title": .string(row.title)]
+        known.record(row)
     }
 }

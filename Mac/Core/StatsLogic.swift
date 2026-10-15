@@ -334,7 +334,29 @@ extension SessionStatsReading {
     }
 }
 
+/// The conversations this device has read, every project's saved list together: what names an open session's row and
+/// which record the row opens its Resources with.
+struct KnownSessions: Sendable {
+    var sessions: [Session]
+
+    init(_ sessions: [Session]) { self.sessions = sessions }
+    /// Each of `repos`' saved conversation lists (`sessions:<repo>`).
+    init(repos: [String], cache: DiskCache) {
+        sessions = repos.flatMap { cache.value("sessions:\($0)").flatMap(Session.parseList) ?? [] }
+    }
+
+    /// Each conversation's title by its id; the first of a repeated id wins.
+    var titles: [String: String] { Dictionary(sessions.map { ($0.id, $0.displayTitle) }) { a, _ in a } }
+    /// The conversation's record as it was read, else its id and the row's name.
+    func record(_ row: StatsRow) -> JSON {
+        sessions.first { $0.id == row.id }?.raw ?? ["id": .string(row.id), "title": .string(row.title)]
+    }
+}
+
 extension OpenSessionsStats {
+    /// The open sessions, the busiest first, named by the conversations read.
+    func rows(known: KnownSessions) -> [StatsRow] { rows(titles: known.titles) }
+
     /// The open sessions, the busiest first (CPU, then memory); `titles` names each by its id, else the id stands.
     func rows(titles: [String: String]) -> [StatsRow] {
         let cores = Double(max(host.cpus, 1)) * 100

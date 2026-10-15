@@ -68,6 +68,28 @@ final class StatsLogicTests: XCTestCase {
         XCTAssertNil(rows[2].cpuShare)
     }
 
+    func testKnownSessionsNameRowsAndGiveTheirRecord() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("briareus-stats-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = DiskCache(directory: directory, protection: [])
+        cache.store(j(#"[{"id":"a","status":"idle","title":"Alpha","repo":"o/one"}]"#), "sessions:o/one")
+        cache.store(j(#"[{"id":"b","status":"running","title":"Beta"},{"id":"a","status":"idle","title":"Again"}]"#), "sessions:o/two")
+        // Every listed project's saved list; a project with none adds nothing, and the first of a repeated id wins.
+        let known = KnownSessions(repos: ["o/one", "o/two", "o/none"], cache: cache)
+        XCTAssertEqual(known.sessions.map(\.id), ["a", "b", "a"])
+        XCTAssertEqual(known.titles, ["a": "Alpha", "b": "Beta"])
+
+        let open = try XCTUnwrap(OpenSessionsStats(j(#"""
+        {"host":\#(host),"sessions":[{"sessionId":"a","cpuPercent":1,"memoryBytes":1,"processes":1},
+                                     {"sessionId":"z","cpuPercent":2,"memoryBytes":1,"processes":1}]}
+        """#)))
+        let rows = open.rows(known: known)
+        XCTAssertEqual(rows.map(\.title), ["z", "Alpha"])
+        // A known session opens with its record as read; an unknown one with its id and the row's name.
+        XCTAssertEqual(known.record(rows[1])["repo"].string, "o/one")
+        XCTAssertEqual(known.record(rows[0]), ["id": "z", "title": "z"])
+    }
+
     func testServerStatsTilesDisksAndCharts() throws {
         let server = try XCTUnwrap(ServerStats(j(#"""
         {"host":{"cpus":4,"loadAverage":[3.8,2,1],"memoryBytes":1000,"freeMemoryBytes":50,"intervalMs":1000,"cpuPercent":80,"uptimeSeconds":90000},
