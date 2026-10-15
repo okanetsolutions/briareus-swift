@@ -33,11 +33,12 @@ final class MailReplyModel: ObservableObject {
         Task {
             let r = await boardCall("reply_mail_message", args)
             sending = false
+            // The reply box is only ever this message's while it sends: Reply and Cancel wait for it.
             switch r {
             case .failure(let e):
                 if e.kind != .cancelled { error = mailReplyError(status: e.status) }
             case .success(let answer):
-                guard mailReplyAccepted(answer) else { error = mailReplyError(status: 0); return }
+                guard mailReplyAccepted(answer) else { error = mailReplyError(status: 502); return }
                 target = nil; text = ""; sent = m.key
             }
         }

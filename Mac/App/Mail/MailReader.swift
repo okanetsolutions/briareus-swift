@@ -93,7 +93,7 @@ private struct MailReaderBar: View {
             }
             if let m = model.selectedSummary, model.canReply(m) {
                 Button("Reply") { reply.start(m) }
-                    .dashButton(.bordered).disabled(reply.target == m.key)
+                    .dashButton(.bordered).disabled(reply.target == m.key || reply.sending)
                     .help("Answer the sender in plain text, in this message's thread")
             }
             if let m = message, model.canTrash(m) {

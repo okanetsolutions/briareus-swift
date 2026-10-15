@@ -56,6 +56,7 @@ final class MailTests: XCTestCase {
         XCTAssertTrue(mailReplyAccepted(j(#"{"status":"accepted","action":"reply"}"#)))
         XCTAssertFalse(mailReplyAccepted(j(#"{"status":"queued"}"#))); XCTAssertFalse(mailReplyAccepted([:]))
         XCTAssertNotEqual(mailReplyError(status: 403), mailReplyError(status: 502), "read-only and an uncertain send say different things")
+        XCTAssertEqual(mailReplyError(status: 0), mailReplyError(status: 502), "no answer is as uncertain as a 502")
     }
 
     func testTheSyncWindowIsAWholeNumberOfDaysFrom1To365() {

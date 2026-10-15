@@ -4,7 +4,7 @@ import XCTest
 @testable import BriareusMacCore
 
 final class WebhookLogicTests: XCTestCase {
-    private let switches = ["armed": true, "instructions": false, "sshUnattended": true]
+    private let switches: [WebhookToggle: Bool] = [.armed: true, .instructions: false, .sshUnattended: true]
 
     func testCapsOpenOnTheRecordOrTheDefaults() {
         let hook: JSON = ["perHour": 120, "maxTurns": 0]
@@ -18,7 +18,7 @@ final class WebhookLogicTests: XCTestCase {
         let save = webhookSave(switches: switches, caps: [.perHour: " 30 ", .maxTurns: "0"])
         XCTAssertEqual(save, .body(["armed": true, "instructions": false, "sshUnattended": true, "perHour": 30, "maxTurns": 0]))
         XCTAssertEqual(webhookSave(switches: [:], caps: [.perHour: "600", .maxTurns: "1000"]),
-                       .body(["perHour": 600, "maxTurns": 1000]))
+                       .body(["armed": false, "instructions": false, "sshUnattended": false, "perHour": 600, "maxTurns": 1000]))
     }
 
     func testSaveNamesTheFirstCapOutOfRange() {
