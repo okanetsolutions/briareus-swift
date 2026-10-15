@@ -25,7 +25,7 @@ View (`App/**`, `Mac/App/**`) -> Model (`@MainActor ObservableObject`, `*Model.s
 
 | Feature | iPhone (`App/`) | Mac (`Mac/App/`) | Core |
 | --- | --- | --- | --- |
-| Projects, conversations | `Conversations/` | `Sidebar/`, `Conversation/` | `ConversationLogic.swift`, `PhoneConversations.swift`, `SessionOverview.swift`, `LiveEvents.swift`, `EventStream.swift`, `WebhookLogic.swift` |
+| Projects, conversations | `Conversations/` | `Sidebar/`, `Conversation/` | `ConversationLogic.swift`, `PhoneConversations.swift`, `SessionOverview.swift`, `LiveEvents.swift`, `EventStream.swift`, `WebhookLogic.swift`, `MailWakeLogic.swift` (Mac only: the iPhone app has no mail) |
 | Board, pull requests, issues | `Board/` | `Board/` | `Board.swift`, `BoardLogic.swift`, `BoardEdits.swift`, `ProjectBoard.swift`, `IssuePage.swift`, `PullFiles.swift`, `Diff.swift` |
 | Findings, Status, Usage | `Findings/` | `Findings/` | `FindingsLogic.swift`, `PhoneFindings.swift`, `UsageLogic.swift` |
 | Settings | `Settings/` | `Settings/` | `SettingsLogic.swift`, `AccountSettingsLogic.swift` |

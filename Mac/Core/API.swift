@@ -240,6 +240,9 @@ struct APIRoute: Sendable {
         .init(name: "session_webhook", method: "GET", path: "sessions/{sessionId}/webhook"),
         .init(name: "set_session_webhook", method: "PUT", path: "sessions/{sessionId}/webhook"),
         .init(name: "rotate_session_webhook", method: "POST", path: "sessions/{sessionId}/webhook/rotate"),
+        // A session's mail wake rules, for an admin token: which new mail in a connected mailbox wakes it, and its caps.
+        .init(name: "session_mail_wake", method: "GET", path: "sessions/{sessionId}/mail-wake"),
+        .init(name: "set_session_mail_wake", method: "PUT", path: "sessions/{sessionId}/mail-wake"),
         // The Cloudflare Access service token the Run tab's browser sends to ▶ Run preview hosts; a manage token.
         .init(name: "preview_access", method: "GET", path: "preview/access"),
         // What an interrupted session left in its workspace, and resuming it from that report (by its fingerprint).
