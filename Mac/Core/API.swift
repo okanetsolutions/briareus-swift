@@ -161,6 +161,10 @@ struct APIRoute: Sendable {
         .init(name: "transcribe_status", method: "GET", path: "transcribe"),
         .init(name: "usage", method: "GET", path: "usage"),
         .init(name: "usage_all", method: "GET", path: "usage/all"),   // every project's spend; a filter given as an array repeats
+        // What the machine is spending on Briareus: every open session's CPU, memory and processes, and the server's own
+        // figures, disks and last hour (StatsLogic.swift).
+        .init(name: "sessions_stats", method: "GET", path: "stats/sessions"),
+        .init(name: "server_stats", method: "GET", path: "stats/server"),
         .init(name: "actions", method: "GET", path: "actions"),
         .init(name: "action", method: "POST", path: "actions"),       // an errand on a pull request, named in `action`
         // Pull requests
@@ -201,6 +205,8 @@ struct APIRoute: Sendable {
         .init(name: "review", method: "POST", path: "sessions", set: "review"),
         .init(name: "qa", method: "POST", path: "sessions", set: "qa"),
         .init(name: "session", method: "GET", path: "sessions/{sessionId}"),
+        // What an open session costs the machine now, with its last hour of samples.
+        .init(name: "session_stats", method: "GET", path: "sessions/{sessionId}/stats"),
         // One session followed live (an event stream): transcript lines as they are written, and its record on change.
         .init(name: "session_events", method: "GET", path: "sessions/{sessionId}/events"),
         // Every session of the token's projects followed on one connection (an event stream).

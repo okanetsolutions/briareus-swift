@@ -46,6 +46,13 @@ enum Theme {
         return Color(.sRGB, red: Double(rgb.red) / 255, green: Double(rgb.green) / 255, blue: Double(rgb.blue) / 255)
     }
 
+    /// The categorical series colours (BriareusChart, from the tokens), the only place a hue means which one: four slots and
+    /// the tail's grey, the same in both modes.
+    static func series(_ slot: Int) -> Color {
+        let h = BriareusChart.seriesColor(slot)
+        return Color(light: h, dark: h)
+    }
+
     /// A row mark's tone (Core's `RowTone`) as a colour: muted and faint follow the system's secondary and tertiary labels.
     static func color(_ tone: RowTone) -> Color {
         switch tone {

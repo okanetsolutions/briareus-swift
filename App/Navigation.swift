@@ -35,6 +35,10 @@ enum Destination: Hashable, Identifiable {
     case voiceSettings
     /// A session's ⚡ Webhook: its settings, URLs and keys.
     case webhook(session: JSON)
+    /// A session's Resources: what it costs the machine; `session` is its record.
+    case sessionStats(session: JSON)
+    /// The Server dashboard: the machine, the Briareus process, its disks and the open sessions.
+    case serverStats
     /// A project's Laravel Forge servers and sites.
     case forge(repo: String)
     /// One Forge site: its overview, deploy script and .env. `account` is the Forge account's id.
@@ -60,6 +64,8 @@ enum Destination: Hashable, Identifiable {
         case .voice(let repo, let held): return "voice:\(repo)" + (held.map { ":\($0.id)" } ?? "")
         case .voiceSettings: return "voice-settings"
         case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
+        case .sessionStats(let session): return "session-stats:\(session["id"].string ?? "")"
+        case .serverStats: return "server-stats"
         case .forge(let repo): return "forge:\(repo)"
         case .forgeSite(let repo, let account, let server, let site):
             return "forge-site:\(repo):" + String(format: "%.0f:%.0f:%.0f", account, server["id"].number ?? 0, site["id"].number ?? 0)
@@ -88,6 +94,8 @@ enum Destination: Hashable, Identifiable {
         case .voice(let repo, let held): VoiceScreen(repo: repo, conversation: held)
         case .voiceSettings: VoiceSettingsScreen()
         case .webhook(let session): WebhookScreen(session: session)
+        case .sessionStats(let session): SessionStatsScreen(session: session)
+        case .serverStats: ServerStatsScreen()
         case .forge(let repo): ProjectForgeScreen(repo: repo)
         case .forgeSite(let repo, let account, let server, let site): ForgeSiteScreen(repo: repo, account: account, server: server, site: site)
         }

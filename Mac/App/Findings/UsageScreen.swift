@@ -92,13 +92,13 @@ struct UsageScreen: View {
                 Color.clear.frame(height: 16)
             } else {
                 let month = u["unit"].string == "month"
-                StatTiles(width: w, tiles: [
+                StatTiles(width: w, tiles: usageTiles([
                     ("Cost", Usage.costOrDash(u), Usage.costNote(u)),
                     ("Tokens", Usage.tokens(Usage.num(u, "totalTokens")),
                      "\(Usage.tokens(Usage.num(u, "inputTokens"))) in \u{00B7} \(Usage.tokens(Usage.num(u, "outputTokens"))) out"),
                     ("Sessions", "\(Usage.count(u, "sessions"))", "\(Usage.count(u, "turns")) turn\(Usage.plural(Usage.count(u, "turns")))"),
                     ("Agent time", Usage.durationOrDash(Usage.num(u, "durationMs")), "summed over every turn"),
-                ])
+                ]))
                 BucketChart(u: u, metric: "totalTokens", title: month ? "Tokens per month" : "Tokens per day", width: w)
                 Insights(u: u, width: w, open: model.openTopSession)
                 ProjectCard(model: model, u: u, width: w)
@@ -132,36 +132,9 @@ private struct UsageCard<Content: View>: View {
     }
 }
 
-/// A row of stat tiles: the label, the figure, and the line under it, four across (two on a narrow pane).
-private struct StatTiles: View {
-    var width: CGFloat
-    var tiles: [(label: String, value: String, sub: String)]
-    var body: some View {
-        let cols = width >= 640 ? 4 : 2
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(stride(from: 0, to: tiles.count, by: cols)), id: \.self) { start in
-                HStack(alignment: .top, spacing: 8) {
-                    ForEach(0..<cols, id: \.self) { k in
-                        if start + k < tiles.count {
-                            let t = tiles[start + k]
-                            VStack(alignment: .leading, spacing: 0) {
-                                Text(t.label).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.tail)
-                                Text(t.value).font(Theme.stat).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail).padding(.top, 4)
-                                Text(t.sub).font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 2)
-                            }
-                            .padding(.horizontal, 14).padding(.vertical, 12)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.raise))
-                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.line, lineWidth: 1))
-                        } else {
-                            Color.clear.frame(maxWidth: .infinity)
-                        }
-                    }
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
+/// The ledger's figures as tiles, without gauges.
+private func usageTiles(_ tiles: [(label: String, value: String, sub: String)]) -> [StatTile] {
+    tiles.map { StatTile(id: $0.label, label: $0.label, value: $0.value, detail: $0.sub, fraction: nil) }
 }
 
 /// bucketChart: one bar per bucket the server's calendar has reached, `metric` high; hovering a bar names its bucket in the
@@ -251,13 +224,13 @@ private struct Insights: View {
         let month = u["unit"].string == "month"
         VStack(alignment: .leading, spacing: 0) {
             Color.clear.frame(height: 12)
-            StatTiles(width: width, tiles: [
+            StatTiles(width: width, tiles: usageTiles([
                 ("Cost / session", Usage.insightCost(u, "costPerSession"), "within this selection"),
                 ("Cost / turn", Usage.insightCost(u, "costPerTurn"), "within this selection"),
                 ("Average turn duration", ins["averageDurationMs"].number.map(formatDurationMs) ?? "\u{2014}",
                  "\(Usage.count(ins, "timedTurns")) turns with timing"),
                 ("Pricing coverage", coverage.value, coverage.sub),
-            ])
+            ]))
             if let line = Usage.comparisonLine(u) {
                 Text(line).font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 12)
             }
@@ -308,12 +281,6 @@ private struct SessionsCard: View {
 
 // MARK: - Breakdowns
 
-/// The categorical series colours (BriareusChart, from the tokens), the only place a hue means which one: four slots and the
-/// tail's grey.
-private func seriesColor(_ slot: Int) -> Color {
-    Color(nsColor: NSColor(hex: BriareusChart.seriesColor(slot)))
-}
-
 /// The ring of each row's share of the tokens and its caption, `132px` square.
 private struct ShareRing: View {
     var ring: Usage.Ring
@@ -329,7 +296,7 @@ private struct ShareRing: View {
                     let start = -90 + at * 360
                     var path = Path()
                     path.addArc(center: center, radius: (40 * scale).rounded(), startAngle: .degrees(start), endAngle: .degrees(start + sweep), clockwise: false)
-                    ctx.stroke(path, with: .color(seriesColor(s.slot)), style: StrokeStyle(lineWidth: (13 * scale).rounded(), lineCap: .butt))
+                    ctx.stroke(path, with: .color(Theme.series(s.slot)), style: StrokeStyle(lineWidth: (13 * scale).rounded(), lineCap: .butt))
                     at += s.share
                 }
             }
@@ -401,7 +368,7 @@ private struct ProjectCard: View {
             if gone || Usage.count(p, "turns") == 0 { d.colors = Array(repeating: Theme.muted, count: t.heads.count) }
             // The bar wears its slice's colour, which ties it to the ring; with no ring it is the accent, magnitude alone.
             d.barColumn = 4; d.bar = Usage.num(p, "totalTokens") / max
-            d.barColor = ring?.slots[i].map(seriesColor) ?? Theme.accent
+            d.barColor = ring?.slots[i].map(Theme.series) ?? Theme.accent
             d.on = model.query.isPicked(.project, Usage.optionKey(p))
             d.action = { model.pickRow(.project, p) }
             t.rows.append(d)
@@ -448,7 +415,7 @@ private struct SimpleCard: View {
                 d.fonts[0] = .monoSmall; d.colors[1] = Theme.muted
             }
             d.cells += usageCells(r, total: false)
-            d.swatch = ring?.slots[i].map(seriesColor)
+            d.swatch = ring?.slots[i].map(Theme.series)
             d.on = model.query.isPicked(filter, Usage.rowKey(filter, r))
             let f = filter
             d.action = { model.pickRow(f, r) }
