@@ -66,6 +66,28 @@ enum Dialogs {
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         return read()
     }
+    /// Two days, a first and a last, picked under a caption; nil when cancelled.
+    static func dateRange(_ caption: String, from: Date, to: Date) -> (Date, Date)? {
+        let alert = NSAlert()
+        alert.messageText = caption
+        alert.addButton(withTitle: "Apply")
+        alert.addButton(withTitle: "Cancel")
+        func picker(_ value: Date) -> NSDatePicker {
+            let p = NSDatePicker()
+            p.datePickerElements = .yearMonthDay
+            p.datePickerStyle = .textFieldAndStepper
+            p.dateValue = value
+            return p
+        }
+        let first = picker(from), last = picker(to)
+        let grid = NSGridView(views: [[NSTextField(labelWithString: "From"), first], [NSTextField(labelWithString: "To"), last]])
+        grid.rowSpacing = 8
+        grid.frame = NSRect(origin: .zero, size: grid.fittingSize)
+        alert.accessoryView = grid
+        alert.window.initialFirstResponder = first
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return (first.dateValue, last.dateValue)
+    }
     /// A password or passphrase, typed hidden under `label`; nil when cancelled.
     static func password(_ caption: String, label: String) -> String? { text(caption, label: label, secure: true) }
 }
