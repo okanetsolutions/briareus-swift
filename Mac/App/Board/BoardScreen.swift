@@ -567,7 +567,7 @@ struct BoardScreen: View {
         if model.tab == .pulls { pullList(filter: filter, shown: shown) } else { issueList(filter: filter, shown: shown) }
     }
 
-    /// The pull requests waiting on the user's review: labelled required-dev-review, not theirs, and not stacked on
+    /// The pull requests waiting on the user's review: labelled requires-dev-review, not theirs, and not stacked on
     /// another, or labelled feedback-implemented on one they review.
     @ViewBuilder private var reviewList: some View {
         let shown = model.reviewPulls

@@ -134,11 +134,11 @@ func pullsFind(_ pulls: [PullSummary], _ number: Int) -> PullSummary? { pulls.fi
 // MARK: - Review List
 
 /// The label that asks a developer to review a pull request.
-let reviewListRequestLabel = "required-dev-review"
+let reviewListRequestLabel = "requires-dev-review"
 /// The label that says the author has answered a review.
 let reviewListAnsweredLabel = "feedback-implemented"
 
-/// The pull requests waiting on `me`'s review, in board order: those labelled `required-dev-review` that are not assigned
+/// The pull requests waiting on `me`'s review, in board order: those labelled `requires-dev-review` that are not assigned
 /// to `me` and are not stacked on another (outside a stack, or its first), and those labelled `feedback-implemented` that
 /// `me` is a reviewer of. None without a login.
 func reviewList(_ pulls: [PullSummary], stacks: JSON, me: String?) -> [PullSummary] {

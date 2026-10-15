@@ -180,7 +180,7 @@ struct BoardScreen: View {
 
     // MARK: Pull requests
 
-    /// The pull requests the filters show, or for `review` the Review List's: labelled required-dev-review, not the
+    /// The pull requests the filters show, or for `review` the Review List's: labelled requires-dev-review, not the
     /// user's, and not stacked on another, or labelled feedback-implemented on one they review.
     @ViewBuilder private func pullRows(_ pulls: [PullSummary], review: Bool = false) -> some View {
         let shown = review ? reviewList(pulls, stacks: board["stacks"], me: reviewer) : pulls.filter { filters.pulls.passes(BoardRow($0)) }

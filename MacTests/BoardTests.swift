@@ -834,10 +834,10 @@ final class BoardTests: XCTestCase {
 
     func testReviewListKeepsWhatWaitsOnMyReview() {
         let pulls = PullSummary.parseList(j(#"""
-        [{"number":1,"labels":[{"name":"required-dev-review"}],"assignees":[]},
-         {"number":2,"labels":[{"name":"Required-Dev-Review"}],"assignees":["Me"]},
-         {"number":3,"labels":[{"name":"required-dev-review"}],"stack":{"id":7,"position":1,"total":2}},
-         {"number":4,"labels":[{"name":"required-dev-review"}],"stack":{"id":7,"position":2,"total":2}},
+        [{"number":1,"labels":[{"name":"requires-dev-review"}],"assignees":[]},
+         {"number":2,"labels":[{"name":"Requires-Dev-Review"}],"assignees":["Me"]},
+         {"number":3,"labels":[{"name":"requires-dev-review"}],"stack":{"id":7,"position":1,"total":2}},
+         {"number":4,"labels":[{"name":"requires-dev-review"}],"stack":{"id":7,"position":2,"total":2}},
          {"number":5,"labels":[{"name":"feedback-implemented"}],"reviewers":[{"user":"me","state":"changes_requested"}],
           "stack":{"id":7,"position":2,"total":2},"assignees":["me"]},
          {"number":6,"labels":[{"name":"feedback-implemented"}],"reviewers":[{"user":"someone","state":"requested"}]},
