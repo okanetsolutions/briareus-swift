@@ -63,7 +63,7 @@ struct ConversationScreen: View {
         .onChange(of: asked != nil || renaming) { _, open in model.paused = open }
         .alert(asked.flatMap(conversationActionQuestion) ?? "",
                isPresented: Binding(get: { asked != nil }, set: { if !$0 { asked = nil } }), presenting: asked) { action in
-            Button(confirmLabel(action), role: action == "delete" || action == "cancel" ? .destructive : nil) {
+            Button(conversationConfirmLabel(action), role: action == "delete" || action == "cancel" ? .destructive : nil) {
                 model.mutate(action)
             }
             Button("Cancel", role: .cancel) {}
@@ -305,6 +305,9 @@ struct ConversationScreen: View {
                 if store.supports("session_webhook") {
                     Button(s.raw["webhook"]["armed"].is(true) ? "Webhook \u{25CF}" : "Webhook", systemImage: "bolt") { navigate(.webhook(session: s.raw)) }
                 }
+                if store.supports("session_stats") {
+                    Button("Resources", systemImage: "gauge.with.dots.needle.33percent") { navigate(.sessionStats(session: s.raw)) }
+                }
             }
             Section {
                 if store.supports("rename") {
@@ -346,27 +349,5 @@ struct ConversationScreen: View {
             Image(systemName: "ellipsis.circle")
         }
         .accessibilityLabel("Conversation actions")
-    }
-
-    private func confirmLabel(_ action: String) -> String {
-        switch action {
-        case "delete": return "Delete"
-        case "cancel": return "Stop"
-        case "close": return "Close"
-        case "reopen": return "Reopen"
-        case "compact": return "Compact"
-        case "clear": return "Clear"
-        default: return "Confirm"
-        }
-    }
-}
-
-private extension View {
-    /// Opens on the latest message; short transcripts still read from the top where the system allows it.
-    @ViewBuilder func conversationStartsAtBottom() -> some View {
-        if #available(iOS 18.0, *) {
-            defaultScrollAnchor(.bottom, for: .initialOffset).defaultScrollAnchor(.bottom, for: .sizeChanges)
-                .defaultScrollAnchor(.top, for: .alignment)
-        } else { defaultScrollAnchor(.bottom) }
     }
 }

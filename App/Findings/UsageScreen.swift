@@ -356,13 +356,13 @@ struct UsageScreen: View {
         } else {
             let month = u["unit"].string == "month"
             Section {
-                UsageTiles(tiles: [
+                StatTiles(tiles: usageTiles([
                     ("Cost", Usage.costOrDash(u), Usage.costNote(u)),
                     ("Tokens", Usage.tokens(Usage.num(u, "totalTokens")),
                      "\(Usage.tokens(Usage.num(u, "inputTokens"))) in · \(Usage.tokens(Usage.num(u, "outputTokens"))) out"),
                     ("Sessions", "\(Usage.count(u, "sessions"))", "\(Usage.count(u, "turns")) turn\(Usage.plural(Usage.count(u, "turns")))"),
                     ("Agent time", Usage.durationOrDash(Usage.num(u, "durationMs")), "summed over every turn"),
-                ])
+                ]))
                 .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             }
             if UsageBars.plots(u, "totalTokens") {
@@ -385,12 +385,12 @@ struct UsageScreen: View {
             let coverage = Usage.pricingCoverage(u)
             let month = u["unit"].string == "month"
             Section {
-                UsageTiles(tiles: [
+                StatTiles(tiles: usageTiles([
                     ("Cost / session", Usage.insightCost(u, "costPerSession"), "within this selection"),
                     ("Cost / turn", Usage.insightCost(u, "costPerTurn"), "within this selection"),
                     ("Average turn", ins["averageDurationMs"].number.map(formatDurationMs) ?? "—", "\(Usage.count(ins, "timedTurns")) turns with timing"),
                     ("Pricing coverage", coverage.value, coverage.sub),
-                ])
+                ]))
                 .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             } footer: {
                 if let line = Usage.comparisonLine(u) { Text(line) }
@@ -452,7 +452,7 @@ struct UsageScreen: View {
                     let gone = p["gone"].is(true)
                     // A project that ran nothing, or one no longer in Settings, is greyed out; it still adds up into the totals.
                     breakdownRow(gone ? "\(label) (removed)" : label, p, dim: gone || Usage.count(p, "turns") == 0,
-                                 swatch: nil, bar: (Usage.num(p, "totalTokens") / busiest, ring?.slots[i].map(usageSeriesColor) ?? Theme.accent),
+                                 swatch: nil, bar: (Usage.num(p, "totalTokens") / busiest, ring?.slots[i].map(Theme.series) ?? Theme.accent),
                                  on: model.query.isPicked(.project, Usage.optionKey(p))) { model.pickRow(.project, p) }
                 }
             }
@@ -467,7 +467,7 @@ struct UsageScreen: View {
                 if let ring { UsageRing(ring: ring).listRowBackground(Theme.row) }
                 ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
                     let (name, dim) = breakdownName(f, r)
-                    breakdownRow(name, r, dim: dim, swatch: ring?.slots[i].map(usageSeriesColor), bar: nil,
+                    breakdownRow(name, r, dim: dim, swatch: ring?.slots[i].map(Theme.series), bar: nil,
                                  on: model.query.isPicked(f, Usage.rowKey(f, r)),
                                  pick: model.overall ? { model.pickRow(f, r) } : nil)
                 }
@@ -531,33 +531,9 @@ struct UsageScreen: View {
 
 // MARK: - Pieces
 
-/// The categorical series colours (BriareusChart, from the tokens), the only place a hue means which one: four slots and the
-/// tail's grey, the same in both modes.
-private func usageSeriesColor(_ slot: Int) -> Color {
-    let h = BriareusChart.seriesColor(slot)
-    return Color(light: h, dark: h)
-}
-
-/// Stat tiles two across: the label, the figure, and the line under it.
-private struct UsageTiles: View {
-    var tiles: [(label: String, value: String, sub: String)]
-    var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-            ForEach(Array(tiles.enumerated()), id: \.offset) { _, t in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(t.label).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    Text(t.value).font(.title2.weight(.semibold).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.6)
-                    Text(t.sub).font(.caption2).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-                .background(Theme.raise, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
-                .accessibilityElement(children: .combine)
-            }
-        }
-    }
+/// The ledger's figures as tiles, without gauges.
+private func usageTiles(_ tiles: [(label: String, value: String, sub: String)]) -> [StatTile] {
+    tiles.map { StatTile(id: $0.label, label: $0.label, value: $0.value, detail: $0.sub, fraction: nil) }
 }
 
 /// One bar per bucket the server's calendar has reached; touching a bar names it above the chart.
@@ -615,7 +591,7 @@ private struct UsageRing: View {
         VStack(spacing: 6) {
             Chart(Array(ring.slices.enumerated()), id: \.offset) { _, s in
                 SectorMark(angle: .value("Share", s.share), innerRadius: .ratio(0.62), angularInset: 1.5)
-                    .foregroundStyle(usageSeriesColor(s.slot))
+                    .foregroundStyle(Theme.series(s.slot))
             }
             .frame(width: 120, height: 120)
             Text("share of tokens").font(.caption2).foregroundStyle(.secondary)

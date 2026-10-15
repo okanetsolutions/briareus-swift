@@ -33,7 +33,7 @@ struct StatusScreen: View {
     var body: some View {
         let o = projects.overview
         VStack(spacing: 0) {
-            PaneHeader(title: "\u{25C9} Status", subtitle: subtitle(o))
+            PaneHeader(title: "\u{25C9} Status", subtitle: subtitle(o), buttons: serverButton)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     Color.clear.frame(height: 4)
@@ -62,6 +62,13 @@ struct StatusScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await projects.load() } }
     }
 
+    /// What the machine spends on the sessions working here, on a server that reports it.
+    private var serverButton: [HeaderButton] {
+        guard store.supports("server_stats") else { return [] }
+        return [HeaderButton(glyph: "gauge.with.dots.needle.33percent", label: "\u{25A4} Server", tip: "The server's CPU, memory and disks") {
+            Navigator.shared.push(.serverStats)
+        }]
+    }
     private func subtitle(_ o: SessionOverview) -> String {
         if o.quiet { return "nothing waits for you" }
         return "\(o.needsYouCount) waiting for you \u{00B7} \(o.workingCount) working"
