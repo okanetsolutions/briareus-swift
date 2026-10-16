@@ -22,6 +22,8 @@ enum SleepWindows {
             let host = UIHostingController(rootView: SleepScreen(model: SleepModel.shared))
             host.view.backgroundColor = .clear
             window.rootViewController = host
+            // Any touch wakes it, a swipe or a long press as well as a tap.
+            window.addGestureRecognizer(TouchWatcher())
             window.alpha = 0
             window.isHidden = false
             UIView.animate(withDuration: 0.6) { window.alpha = 1 }
