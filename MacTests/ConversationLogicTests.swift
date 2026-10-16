@@ -161,4 +161,30 @@ final class ConversationLogicTests: XCTestCase {
         XCTAssertFalse(sessionUsageRowsPresent(["usage": ["sessions": 1], "costUsd": 1]))
         XCTAssertTrue(sessionUsageRowsPresent(["costUsd": 1]))
     }
+
+    // MARK: Working line
+
+    func testSessionReadsItsBackgroundTasks() {
+        let s = session(["id": "a", "status": "running", "backgroundTasks": [["name": "Bash", "summary": "sleep 120"], ["name": "Monitor"], ["summary": "no name"]]])
+        XCTAssertEqual(s.backgroundTasks, [BackgroundTask(name: "Bash", summary: "sleep 120"), BackgroundTask(name: "Monitor")])
+        XCTAssertEqual(session(["id": "a", "status": "running"]).backgroundTasks, [])
+    }
+    func testWorkingLineWaitsOnBackgroundWorkOnlyWhileRunning() {
+        let bash = BackgroundTask(name: "Bash", summary: "sleep 120")
+        let thinking = workingLineText(status: "running", background: [], tick: 0)
+        let waiting = workingLineText(status: "running", background: [bash], tick: 0)
+        XCTAssertNotEqual(waiting, thinking)
+        XCTAssertTrue(waiting.contains("Bash") && waiting.contains("sleep 120"))
+        // Several tasks are counted rather than listed.
+        let several = workingLineText(status: "running", background: [bash, BackgroundTask(name: "Agent")], tick: 0)
+        XCTAssertTrue(several.contains("2") && !several.contains("sleep 120"))
+        // Queued and starting sessions say so whatever the record carries.
+        for status in ["queued", "preparing", "starting"] {
+            XCTAssertEqual(workingLineText(status: status, background: [bash], tick: 0), workingLineText(status: status, background: [], tick: 0))
+            XCTAssertNotEqual(workingLineText(status: status, background: [], tick: 0), thinking)
+        }
+        // With nothing to wait on, the verb spins with the tick.
+        XCTAssertNotEqual(workingLineText(status: "running", background: [], tick: 25), thinking)
+        XCTAssertEqual(workingLineText(status: "running", background: [bash], tick: 25), waiting)
+    }
 }

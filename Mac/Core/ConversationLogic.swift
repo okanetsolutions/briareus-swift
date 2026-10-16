@@ -216,6 +216,33 @@ func conversationChipText(_ s: Session, _ chip: ComposerChip) -> String {
 }
 func reviewLoopChipText(_ on: Bool) -> String { on ? "\u{1F501} Review loop: on" : "\u{1F501} Review loop" }
 
+/// One piece of background work a running turn waits on, from a session record's `backgroundTasks`.
+struct BackgroundTask: Equatable, Sendable {
+    /// The tool that started it: `Agent`, `Task`, `Monitor` or `Bash`.
+    var name: String
+    /// What it runs, when the server says.
+    var summary: String?
+
+    init(name: String, summary: String? = nil) { self.name = name; self.summary = summary }
+    /// Needs a name.
+    init?(_ j: JSON) {
+        guard let name = j["name"].nonEmpty else { return nil }
+        self.init(name: name, summary: j["summary"].nonEmpty)
+    }
+}
+
+/// What the working line says after its glyph: the queue or the start-up in those states, the background work a running
+/// turn has left to wait on (it is waiting then, not thinking), else the spinning verb.
+func workingLineText(status: String, background: [BackgroundTask], tick: Int) -> String {
+    if status == "queued" { return "Queued\u{2026}" }
+    if status == "preparing" || status == "starting" { return "Starting up\u{2026}" }
+    if status == "running", let first = background.first {
+        if background.count > 1 { return "Waiting on \(background.count) background tasks\u{2026}" }
+        return "Waiting on \(first.name)\(first.summary.map { ": \($0)" } ?? "")\u{2026}"
+    }
+    return "\(workingVerb(tick))\u{2026}"
+}
+
 /// What a message sent now does, under the conversation's composer.
 func conversationComposerNote(active: Bool, liveInput: Bool, uploading: Bool, files: Int, empty: Bool) -> String {
     if active { return liveInput ? "Sent into the running turn" : "Queued for the next turn" }

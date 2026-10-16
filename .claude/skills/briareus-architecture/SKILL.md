@@ -55,7 +55,7 @@ Search here before writing a component.
 
 **iPhone settings kit** (`App/Settings/SettingsFormKit.swift`): `SettingsFormChrome`, `SettingsTextRow`, `SettingsValueRow`, `SettingsLabel`, `SettingsInfoButton`, `SettingsVerdict`, `SettingsErrorSection`, `SettingsUnavailableView`.
 
-**Core view logic** (shared by both apps): `LinkedState`, `Session.isClosed`, `BoardAction.startable`/`isSuggested(for:)`/`isDestructive`, `PullRecord`, `PullSnapshot`, `RunServe`, `SettingsRecordForm`, `IssueRowContent` with `RowFact` and `SubIssueProgress`, `PullRowContent` with `PullMark`, `ChecksState` and `RowTone` (each app maps a tone with `Theme.color(_:)`; the reference for converging the rest), `BoardRow`, `BoardFilter`, `BoardAction`, `ReviewStatus`, `StackPosition`, `mergeWarnings`, `issuesNested`, `issuePrompt`, `SettingsField` and the settings form bodies, `CarText`.
+**Core view logic** (shared by both apps): `LinkedState`, `Session.isClosed`, `workingLineText` with `Session.backgroundTasks` (the transcript's working line), `ProjectField.note(on:)` (what a project switch's note says), `BoardAction.startable`/`isSuggested(for:)`/`isDestructive`, `PullRecord`, `PullSnapshot`, `RunServe`, `SettingsRecordForm`, `IssueRowContent` with `RowFact` and `SubIssueProgress`, `PullRowContent` with `PullMark`, `ChecksState` and `RowTone` (each app maps a tone with `Theme.color(_:)`; the reference for converging the rest), `BoardRow`, `BoardFilter`, `BoardAction`, `ReviewStatus`, `StackPosition`, `mergeWarnings`, `issuesNested`, `issuePrompt`, `SettingsField` and the settings form bodies, `CarText`.
 
 ## Known duplicates to converge
 
@@ -77,6 +77,7 @@ Converged, for reference when a similar pair appears:
 | `boardErrands` / `rowActions`, suggested and destructive errands | `BoardAction.startable`, `isSuggested(for:)`, `isDestructive`. The errand symbols stay per app: the Mac's are emoji that mirror Windows, and iPhone menus need SF Symbols |
 | The two `PullModel`s | `PullRecord` (reads, merge and branch-update gating and bodies, edit echo), `PullSnapshot`, `RunServe` (the Run tab) |
 | The six `*SettingsScreen.swift` pairs | Their `*FormState`s, and `SettingsRecordForm` for operations, the save body's id, the answer and the discard message |
+| `WorkingIndicator` / `WorkingLine` | `workingLineText`: queued, starting up, waiting on background work, or the spinning verb |
 
 Next: the pull request screens still read the `pr` JSON directly (`model.pr["..."]`, about 34 reads across both). Read those through `PullRecord` when splitting `PullScreen`.
 

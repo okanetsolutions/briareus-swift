@@ -298,14 +298,7 @@ struct ProjectSettingsScreen: View {
         case .project:
             Section { field(.repo); field(.label) }.listRowBackground(Theme.row)
             // Switching a project off keeps it, and its settings, without a session starting on it.
-            if state.offered(.enabled) {
-                Section { check(.enabled) } footer: {
-                    if !state.bool(.enabled) {
-                        Text("Inactive: no session can be started on it and it is left out of the project lists; its settings are kept for when it is switched back on.")
-                    }
-                }
-                .listRowBackground(Theme.row)
-            }
+            checkSection(.enabled)
             Section { field(.localDir); field(.board) }.listRowBackground(Theme.row)
             Section { field(.setup); field(.php) } header: { Text("Setup") } footer: {
                 Text("This project's own prompt wording is kept on the server; saving here keeps it as it is.")
@@ -320,14 +313,8 @@ struct ProjectSettingsScreen: View {
                 Section { runtime(.review) } header: { Text("Runtime") }.listRowBackground(Theme.row)
             }
             Section { field(.publish) }.listRowBackground(Theme.row)
-            if state.offered(.autoLoop) {
-                Section { check(.autoLoop) } footer: {
-                    if state.bool(.autoLoop) {
-                        Text("Every finding of a session's review-loop round, low severity and parked ones too, goes to Implement feedback on its own, and the fix is pushed and reviewed again until a round comes back clean and code-approved. The loop's round limit and repeated-findings check still stop one that cannot converge. Sessions still need their review loop switched on; a standalone Code review keeps its manual findings.")
-                    }
-                }
-                .listRowBackground(Theme.row)
-            }
+            checkSection(.autoLoop)
+            checkSection(.babysit)
             // Each step runs as a turn of its own, on the code review's runtime unless it names one; a step switched off has none.
             Section {
                 check(.testSheet)
@@ -348,10 +335,7 @@ struct ProjectSettingsScreen: View {
                 Text("The orchestrator's standing instructions for this project live on the server, in its “Orchestrator instructions” template.")
             }
             .listRowBackground(Theme.row)
-            Section { check(.isSelf) } footer: {
-                Text("Tick it on the repository whose code is running right now, and on no other. An orchestrator on any project that finds a flaw in the tooling running it (a briefing, a worker tool, a loop) can then send a fix worker here, review loop armed, and merge its pull request once the loop approves and the checks are green. The running server keeps its code until you redeploy.")
-            }
-            .listRowBackground(Theme.row)
+            checkSection(.isSelf)
         case .env:
             Section { field(.env) }.listRowBackground(Theme.row)
         case .run:
@@ -368,6 +352,16 @@ struct ProjectSettingsScreen: View {
     @ViewBuilder private func check(_ f: ProjectField) -> some View {
         if state.offered(f) {
             Toggle(isOn: model.toggle(f)) { Text(f.def.label) }.tint(Theme.accent)
+        }
+    }
+
+    /// A switch in a section of its own, its note (when it says anything in its state) as the footer.
+    @ViewBuilder private func checkSection(_ f: ProjectField) -> some View {
+        if state.offered(f) {
+            Section { check(f) } footer: {
+                if let note = f.note(on: state.bool(f)) { Text(note) }
+            }
+            .listRowBackground(Theme.row)
         }
     }
 

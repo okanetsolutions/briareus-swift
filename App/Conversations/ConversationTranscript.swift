@@ -67,7 +67,7 @@ struct ConversationTranscript: View, Equatable {
             ForEach(Array(session.queued.items.enumerated()), id: \.offset) { index, item in
                 QueuedBubble(text: item["text"].string ?? "Message", removable: removable) { dropQueued(index) }
             }
-            if session.isActive { WorkingIndicator(status: session.status) }
+            if session.isActive { WorkingIndicator(status: session.status, background: session.backgroundTasks) }
         }
     }
 
@@ -285,19 +285,3 @@ private struct QueuedBubble: View {
     }
 }
 
-/// The agent at work: the spinner's glyph and "Thinking…", "Queued…" or "Starting up…".
-private struct WorkingIndicator: View {
-    let status: String
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: reduceMotion ? 3 : 0.12)) { context in
-            let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.12)
-            let verb = status == "queued" ? "Queued" : (status == "preparing" || status == "starting") ? "Starting up" : workingVerb(tick)
-            HStack(spacing: 8) {
-                Text(reduceMotion ? "\u{273B}" : workingGlyph(tick)).font(.body.weight(.semibold)).foregroundStyle(Theme.accent).frame(width: 16)
-                Text("\(verb)\u{2026}").font(.subheadline).foregroundStyle(Theme.accent)
-            }
-        }
-        .accessibilityElement().accessibilityLabel(status == "running" ? "Agent is working" : "Agent is \(status)")
-    }
-}
