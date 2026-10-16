@@ -103,6 +103,8 @@ struct Session: Equatable, Sendable {
     /// Closed: it takes no messages until it is reopened, and its rows are drawn dimmed.
     var isClosed: Bool { status == "closed" }
     var liveInput: Bool { raw["liveInput"].is(true) }
+    /// Background work the running turn still waits on: sub-agents, Monitors and background shell commands.
+    var backgroundTasks: [BackgroundTask] { raw["backgroundTasks"].items.compactMap(BackgroundTask.init) }
     var queued: JSON { raw["queued"] }
     var reviewLoopOn: Bool { !raw["reviewLoop"].isNull }
     /// The server arms the review loop only on sessions started from scratch on a task.

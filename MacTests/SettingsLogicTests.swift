@@ -50,6 +50,30 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertNil(try ProjectFormState(row: ["repo": "o/r", "enabled": true]).body().get().object?["autonomousReviewLoop"])
     }
 
+    func testProjectBabysitSwitchIsSentWhenTheServerHasIt() throws {
+        var s = ProjectFormState(row: ["id": 4, "repo": "o/r", "babysitPrs": false])
+        XCTAssertTrue(s.offered(.babysit))
+        XCTAssertEqual(ProjectField.babysit.tab, .review)
+        s.bools[.babysit] = true
+        XCTAssertTrue(s.tabChanged(.review))
+        XCTAssertEqual(try s.body().get()["babysitPrs"], true)
+        // A server that predates the babysitter neither shows nor gets the switch.
+        let old = ProjectFormState(row: ["repo": "o/r"])
+        XCTAssertFalse(old.offered(.babysit))
+        XCTAssertNil(try old.body().get().object?["babysitPrs"])
+    }
+
+    func testProjectSwitchNotesFollowTheirState() {
+        XCTAssertNotNil(ProjectField.enabled.note(on: false))
+        XCTAssertNil(ProjectField.enabled.note(on: true))
+        for f in [ProjectField.autoLoop, .babysit] {
+            XCTAssertNotNil(f.note(on: true))
+            XCTAssertNil(f.note(on: false))
+        }
+        XCTAssertNotNil(ProjectField.isSelf.note(on: false))
+        XCTAssertNil(ProjectField.dbPool.note(on: true))
+    }
+
     func testProjectBodyRefusesABadRepoOrBudget() {
         var s = ProjectFormState(row: [:])
         s.texts[.repo] = "nope"

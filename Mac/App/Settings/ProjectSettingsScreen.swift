@@ -276,9 +276,6 @@ struct ProjectSettingsScreen: View {
             SettingsPair { field(.repo) } right: { field(.label) }
             // Switching a project off keeps it, and its settings, without a session starting on it.
             check(.enabled)
-            if state.offered(.enabled) && !state.bool(.enabled) {
-                SettingsNote(text: "Inactive: no session can be started on it and it is left out of the project lists; its settings are kept for when it is switched back on.")
-            }
             Color.clear.frame(height: 4)
             field(.localDir)
             field(.board)
@@ -299,9 +296,7 @@ struct ProjectSettingsScreen: View {
             runtimeRow(.review)
             field(.publish)
             check(.autoLoop)
-            if state.offered(.autoLoop) && state.bool(.autoLoop) {
-                SettingsNote(text: "Every finding of a session's review-loop round, low severity and parked ones too, goes to ⚙ Implement feedback on its own, and the fix is pushed and reviewed again until a round comes back clean and code-approved. The loop's round limit and repeated-findings check still stop one that cannot converge. Sessions still need their review loop switched on; a standalone ⌕ Code review keeps its manual findings.")
-            }
+            check(.babysit)
             // Each step runs as a turn of its own, on the code review's runtime unless it names one; a step switched off has none.
             check(.testSheet)
             if state.bool(.testSheet) { runtimeRow(.testSheet).padding(.leading, 23) }
@@ -316,7 +311,6 @@ struct ProjectSettingsScreen: View {
             field(.budget)
             SettingsNote(text: "The orchestrator's standing instructions for this project live on the server, in its “Orchestrator instructions” template.")
             check(.isSelf)
-            SettingsNote(text: "Tick it on the repository whose code is running right now, and on no other. An orchestrator on any project that finds a flaw in the tooling running it (a briefing, a worker tool, a loop) can then send a fix worker here, review loop armed, and merge its pull request once the loop approves and the checks are green. The running server keeps its code until you redeploy.")
         case .env:
             field(.env)
         case .run:
@@ -331,9 +325,11 @@ struct ProjectSettingsScreen: View {
         }
     }
 
+    /// The switch and, when it says anything in its state, its note under it.
     @ViewBuilder private func check(_ f: ProjectField) -> some View {
         if state.offered(f) {
             SettingsCheck(label: f.def.label, on: state.bool(f)) { model.toggle(f) }.padding(.bottom, 10)
+            if let note = f.note(on: state.bool(f)) { SettingsNote(text: note) }
         }
     }
 
