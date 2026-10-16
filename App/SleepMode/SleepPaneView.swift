@@ -11,10 +11,10 @@ struct SleepPaneView: View {
                 Text(pane.title).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink).lineLimit(1)
                 Spacer(minLength: 0)
             }
-            Text([pane.repo, pane.branch].compactMap { $0 }.joined(separator: " · "))
+            Text(pane.place)
                 .font(.caption).foregroundStyle(Theme.muted).lineLimit(1)
             if let path = pane.path {
-                Label(path, systemImage: pane.writes ? "pencil" : "doc.text")
+                Label(path, systemImage: pane.fileSymbol)
                     .font(.caption.monospaced()).foregroundStyle(Theme.accent).lineLimit(1).truncationMode(.head)
             }
             SleepCode(pane: pane)
@@ -38,13 +38,11 @@ private struct SleepCode: View {
     var body: some View {
         GeometryReader { geo in
             Group {
-                if pane.path == nil {
-                    note("Waiting for its first file")
-                } else if pane.code == nil {
-                    note("Reading…")
-                } else if pane.code?.isEmpty == true {
-                    note("Nothing to show for this file")
-                } else {
+                switch pane.content {
+                case .waiting: note("Waiting for its first file")
+                case .reading: note("Reading…")
+                case .empty: note("Nothing to show for this file")
+                case .code:
                     let lines = pane.visibleLines(rows: max(Int(geo.size.height / lineHeight), 1))
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(lines) { line in

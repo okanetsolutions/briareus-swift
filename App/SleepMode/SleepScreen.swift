@@ -12,7 +12,7 @@ struct SleepScreen: View {
     var body: some View {
         let panes = model.wall.shown(compact ? 2 : 4)
         VStack(alignment: .leading, spacing: 12) {
-            SleepHeader(working: model.wall.working, replaying: model.wall.replaying)
+            SleepHeader(state: model.wall.state)
             if panes.isEmpty {
                 ContentUnavailableView("Nothing running", systemImage: "moon.zzz",
                                        description: Text("Sessions show here as they write code and run commands."))
@@ -34,8 +34,15 @@ struct SleepScreen: View {
 }
 
 private struct SleepHeader: View {
-    var working: Bool
-    var replaying: Bool
+    var state: SleepWallState
+
+    private var label: String {
+        switch state {
+        case .working: return "Working"
+        case .replaying: return "Replaying recent work"
+        case .idle: return "Idle"
+        }
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -43,8 +50,7 @@ private struct SleepHeader: View {
                 Text(context.date, style: .time).font(.largeTitle.weight(.light).monospacedDigit()).foregroundStyle(Theme.ink)
             }
             Spacer()
-            Label(replaying ? "Replaying recent work" : working ? "Working" : "Idle",
-                  systemImage: replaying ? "clock.arrow.circlepath" : "moon.zzz")
+            Label(label, systemImage: state.symbol)
                 .font(.footnote).foregroundStyle(Theme.muted)
         }
     }

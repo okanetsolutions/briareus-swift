@@ -95,6 +95,28 @@ final class SleepModeLogicTests: XCTestCase {
         XCTAssertNil(wall.apply(.file(path: "b.ts", writes: true), session: "unknown", now: t0))
     }
 
+    func testPaneContentAndWallStateFollowTheWork() {
+        var wall = SleepWall(capacity: 1)
+        XCTAssertEqual(wall.state, .idle)
+        wall.update(session("s1"), now: t0)
+        XCTAssertEqual(wall.state, .working)
+        XCTAssertEqual(wall.panes[0].content, .waiting)
+        XCTAssertEqual(wall.panes[0].place, "okanet/app \u{00B7} feat")
+        let fetch = wall.apply(.file(path: "a.ts", writes: false), session: "s1", now: t0)!
+        XCTAssertEqual(wall.panes[0].content, .reading)
+        XCTAssertNotEqual(wall.panes[0].fileSymbol, SleepPane(sessionId: "x", title: "", repo: "", status: "", writes: true,
+                                                             since: t0, touched: t0, replay: false).fileSymbol)
+        wall.loaded(fetch, code: [])
+        XCTAssertEqual(wall.panes[0].content, .empty)
+        wall.loaded(fetch, code: code(["x"]))
+        XCTAssertEqual(wall.panes[0].content, .code)
+        var replayed = SleepWall(capacity: 1)
+        replayed.update(session("old", "idle"), now: t0)
+        _ = replayed.apply(.command("ls"), session: "old", now: t0, replay: true)
+        XCTAssertEqual(replayed.state, .replaying)
+        XCTAssertEqual(Set([SleepWallState.working, .replaying, .idle].map(\.symbol)).count, 3)
+    }
+
     func testAFileIsHeldUntilTypedOutOrTheDwellPasses() {
         var wall = SleepWall(capacity: 1)
         wall.update(session("s1"), now: t0)
@@ -187,9 +209,13 @@ final class SleepModeLogicTests: XCTestCase {
         XCTAssertFalse(wall.replaying)
         XCTAssertEqual(wall.panes.map(\.sessionId), ["new"])
         XCTAssertEqual(wall.ticker.map(\.text), ["live"])
-        // While a live pane shows, replayed steps are dropped.
-        _ = wall.apply(.command("replayed"), session: "old", now: t0, replay: true)
+        // While live work is recent, replayed steps are dropped; once it has gone quiet, the replay takes over.
+        _ = wall.apply(.command("replayed"), session: "old", now: t0.addingTimeInterval(30), replay: true)
         XCTAssertEqual(wall.ticker.map(\.text), ["live"])
+        _ = wall.apply(.command("replayed"), session: "old", now: t0.addingTimeInterval(61), replay: true)
+        XCTAssertEqual(wall.panes.map(\.sessionId), ["old"])
+        XCTAssertTrue(wall.replaying)
+        XCTAssertEqual(wall.ticker.map(\.text), ["live", "replayed"])
     }
 
     func testReplaySessionsAreTheMostRecentWithARepository() {

@@ -1,5 +1,5 @@
 // Sleep mode on a phone or iPad: after "Sleep after" minutes with no touch while the app is in front, the screen shows
-// what every working session is doing (SleepModeLogic.swift decides what). It follows the `events` stream with its
+// what every working session is doing (SleepModeLogic.swift decides what) in a window of its own (SleepWindows). It follows the `events` stream with its
 // transcript lines only while asleep, reads the files sessions touch, and replays recent work when nothing runs. Any
 // touch wakes it. The Mac's twin is Mac/App/SleepMode/SleepModel.swift.
 import Foundation
@@ -20,11 +20,17 @@ final class SleepModel: ObservableObject {
     @Published var sleepAfter: Int { didSet { UserDefaults.standard.set(sleepAfter, forKey: Key.after) } }
 
     private var lastInput = Date()
+    /// Whether the app is in front. The store stays active while CarPlay shows it, but sleep is only for a screen in hand.
+    private var inFront = false
     /// Whether a window already runs `watchIdle`: an iPad's windows each start it, and one is enough.
     private var watching = false
     private var work: [Task<Void, Never>] = []
     private var replay = SleepReplay([])
     private var replayLoading = false
+    /// When a replay was last read, so one that came back empty is read again a little later rather than every beat.
+    private var replayRead: Date?
+    /// When the last replayed step was shown.
+    private var replayed = Date.distantPast
     /// Files already read this sleep, by repository, branch and path, so a replay's next round reads none again.
     private var files: [String: [[CodeToken]]] = [:]
 
@@ -34,7 +40,7 @@ final class SleepModel: ObservableObject {
 
     // MARK: Intents
 
-    /// A touch anywhere in the app: the idle clock starts again, and a sleeping app wakes.
+    /// A touch anywhere in the app, or typing: the idle clock starts again, and a sleeping app wakes.
     func touched() {
         lastInput = Date()
         if asleep { wake() }
@@ -42,15 +48,24 @@ final class SleepModel: ObservableObject {
 
     /// Puts the app to sleep once it has gone untouched long enough, for as long as the calling task runs.
     func watchIdle() async {
+        TouchWatcher.install()
         guard !watching else { return }
         watching = true
         defer { watching = false }
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             let store = Store.shared
-            guard !asleep, store.active, store.client != nil, store.supports("events") else { continue }
+            guard !asleep, inFront, store.client != nil, store.supports("events") else { continue }
             if sleepIsDue(lastInput: lastInput, now: Date(), minutes: sleepAfter) { fallAsleep() }
         }
+    }
+
+    /// The app came to the front or left it: either way it is awake and the idle clock starts again, and a window that
+    /// appeared meanwhile is watched too.
+    func phaseChanged(active: Bool) {
+        inFront = active
+        wake()
+        if active { TouchWatcher.install() }
     }
 
     func wake() {
@@ -68,6 +83,7 @@ final class SleepModel: ObservableObject {
         wall = SleepWall(capacity: Self.capacity)
         replay = SleepReplay([])
         replayLoading = false
+        replayRead = nil
         asleep = true
         work = [Task { await follow() }, Task { await beat() }]
     }
@@ -99,29 +115,35 @@ final class SleepModel: ObservableObject {
 
     /// A working session's last few steps, so its pane shows something before its next one.
     private func seed(_ s: Session) async {
-        guard let answer = try? await Store.shared.call("session", ["sessionId": .string(s.id), "since": 0]), asleep else { return }
-        for step in sleepSteps(answer["events"], repo: s.repo, limit: 8) {
+        guard Store.shared.supports("session"), let answer = try? await Store.shared.call("session", ["sessionId": .string(s.id), "since": 0]), asleep else { return }
+        for step in sleepSteps(answer["events"], repo: s.repo, limit: SleepWall.seedSteps) {
             if let fetch = wall.apply(step, session: s.id, now: Date()) { read(fetch) }
         }
     }
 
-    /// The typing clock, and a replayed step every few seconds while nothing works.
+    /// The typing clock, and a replayed step every few seconds while nothing works. The wall is only published when a
+    /// beat changed it, so an idle wall redraws nothing.
     private func beat() async {
-        var n = 0
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 80_000_000)
             guard asleep else { return }
             let now = Date()
-            for fetch in wall.tick(chars: Self.charsPerBeat, now: now) { read(fetch) }
-            n += 1
-            if n % 30 == 0 { replayStep(now) }
+            var next = wall
+            let fetches = next.tick(chars: Self.charsPerBeat, now: now)
+            if next != wall { wall = next }
+            fetches.forEach(read)
+            if now.timeIntervalSince(replayed) >= SleepWall.replayInterval { replayStep(now) }
         }
     }
 
     private func replayStep(_ now: Date) {
         guard wall.wantsReplay(now: now) else { return }
+        replayed = now
         if replay.isEmpty {
-            if !replayLoading { replayLoading = true; Task { await loadReplay() } }
+            guard !replayLoading, replayRead.map({ now.timeIntervalSince($0) >= SleepWall.replayRetry }) ?? true else { return }
+            replayLoading = true
+            replayRead = now
+            Task { await loadReplay() }
             return
         }
         guard let (id, step) = replay.next() else { return }
@@ -130,11 +152,12 @@ final class SleepModel: ObservableObject {
 
     private func loadReplay() async {
         var queues: [(sessionId: String, steps: [SleepStep])] = []
+        guard Store.shared.supports("session") else { replayLoading = false; return }
         for s in sleepReplaySessions(Array(wall.sessions.values), limit: Self.capacity) {
             guard let answer = try? await Store.shared.call("session", ["sessionId": .string(s.id), "since": 0]) else { continue }
-            queues.append((s.id, sleepSteps(answer["events"], repo: s.repo, limit: 40)))
+            queues.append((s.id, sleepSteps(answer["events"], repo: s.repo, limit: SleepWall.replaySteps)))
         }
-        // Read once a sleep: with nothing to replay, the wall waits for live work.
+        replayLoading = false
         if asleep { replay = SleepReplay(queues) }
     }
 

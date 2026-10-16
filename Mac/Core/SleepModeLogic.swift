@@ -120,6 +120,31 @@ struct SleepCommand: Equatable, Sendable, Identifiable {
     var replay: Bool
 }
 
+/// What a pane's code area shows.
+enum SleepPaneContent: Equatable, Sendable {
+    /// The session has touched no file yet.
+    case waiting
+    /// Its file is being read.
+    case reading
+    /// Nothing to show for its file: binary, too large, or not on the server.
+    case empty
+    case code
+}
+
+/// What the whole wall is showing, for its header.
+enum SleepWallState: Equatable, Sendable {
+    case working, replaying, idle
+
+    /// The SF Symbol each app draws beside it.
+    var symbol: String {
+        switch self {
+        case .working: return "hammer"
+        case .replaying: return "clock.arrow.circlepath"
+        case .idle: return "moon.zzz"
+        }
+    }
+}
+
 /// One session's pane: its header and the file being typed out.
 struct SleepPane: Equatable, Sendable, Identifiable {
     var sessionId: String
@@ -149,6 +174,16 @@ struct SleepPane: Equatable, Sendable, Identifiable {
 
     var id: String { sessionId }
     var done: Bool { code != nil && typed >= total }
+
+    var content: SleepPaneContent {
+        guard path != nil else { return .waiting }
+        guard let code else { return .reading }
+        return code.isEmpty ? .empty : .code
+    }
+    /// The SF Symbol beside the file's path: a pencil for one being written, a page for one being read.
+    var fileSymbol: String { writes ? "pencil" : "doc.text" }
+    /// The line under the title: the repository and the branch.
+    var place: String { [repo, branch].compactMap { $0 }.joined(separator: " \u{00B7} ") }
 
     static func == (a: SleepPane, b: SleepPane) -> Bool {
         a.sessionId == b.sessionId && a.title == b.title && a.repo == b.repo && a.branch == b.branch && a.status == b.status
@@ -191,6 +226,13 @@ struct SleepWall: Equatable, Sendable {
     /// Lines of a file a pane types out.
     static let maxLines = 160
     static let tickerLength = 30
+    /// A working session's last steps shown when it first appears, so its pane has something before its next one.
+    static let seedSteps = 8
+    /// Steps of each recent session a replay goes through.
+    static let replaySteps = 40
+    /// Seconds between replayed steps, and before a replay with nothing to show is read again.
+    static let replayInterval: TimeInterval = 2.4
+    static let replayRetry: TimeInterval = 30
 
     let capacity: Int
     private(set) var panes: [SleepPane] = []
@@ -211,8 +253,10 @@ struct SleepWall: Equatable, Sendable {
     /// Showing only replayed steps.
     var replaying: Bool { !panes.isEmpty && panes.allSatisfy(\.replay) }
     var working: Bool { sessions.values.contains { $0.isActive } }
+    var state: SleepWallState { replaying ? .replaying : working ? .working : .idle }
 
-    /// No session works and none has shown a live step for a minute: time to replay recent work.
+    /// No session works and none has shown a live step for a minute: time to replay recent work (its panes taking over
+    /// from the live ones that went quiet).
     func wantsReplay(now: Date) -> Bool {
         !working && (lastLive.map { now.timeIntervalSince($0) > 60 } ?? true)
     }
@@ -237,7 +281,11 @@ struct SleepWall: Equatable, Sendable {
 
     /// A session's step, live or replayed. Returns the file to read when a pane takes a new one.
     mutating func apply(_ step: SleepStep, session id: String, now: Date, replay: Bool = false) -> SleepFetch? {
-        if replay && panes.contains(where: { !$0.replay }) { return nil }
+        if replay && panes.contains(where: { !$0.replay }) {
+            // Live work holds the wall until it has been quiet long enough for a replay.
+            guard wantsReplay(now: now) else { return nil }
+            panes.removeAll { !$0.replay }
+        }
         if !replay {
             lastLive = now
             if panes.contains(where: \.replay) { dropReplay() }

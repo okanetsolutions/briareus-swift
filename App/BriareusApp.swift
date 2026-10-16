@@ -3,7 +3,6 @@ import SwiftUI
 @main
 struct BriareusApp: App {
     @StateObject private var store = Store.shared
-    @StateObject private var sleep = SleepModel.shared
     @Environment(\.scenePhase) private var phase
     var body: some Scene {
         WindowGroup { shell { RootTabs() } }
@@ -22,7 +21,6 @@ struct BriareusApp: App {
             Group {
                 if store.client != nil { page() } else { PairingView() }
             }
-            if sleep.asleep { SleepScreen(model: sleep).transition(.opacity) }
             if phase != .active {
                 Theme.canvas.ignoresSafeArea()
                 Label("Briareus", systemImage: "square.stack.3d.up.fill").font(.largeTitle.bold()).foregroundStyle(Theme.accent)
@@ -30,19 +28,17 @@ struct BriareusApp: App {
         }
         .tint(Theme.accent)
         .noWritingTools()
-        .animation(.easeInOut(duration: 0.6), value: sleep.asleep)
         .environmentObject(store)
         .task { await store.restore() }
-        .task { TouchWatcher.install(); await sleep.watchIdle() }
+        .task { await SleepModel.shared.watchIdle() }
+        .onReceive(SleepModel.shared.$asleep) { SleepWindows.set(shown: $0) }
         // Polling stops while the app is out of sight; the car's screen keeps it going on its own.
         .onChange(of: phase, initial: true) { _, now in
             store.active = now == .active || CarScreen.connected
             // The screen stays on while the app is open, as an agent's work is watched rather than touched; iOS
             // locks it again on its own schedule once the app leaves the front.
             UIApplication.shared.isIdleTimerDisabled = now == .active
-            // Back in front, the app is awake and the idle clock starts again.
-            sleep.wake()
-            if now == .active { TouchWatcher.install() }
+            SleepModel.shared.phaseChanged(active: now == .active)
         }
     }
 }
