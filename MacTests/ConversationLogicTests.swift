@@ -177,6 +177,12 @@ final class ConversationLogicTests: XCTestCase {
         XCTAssertFalse(transcriptAnswered(transcriptBlocks([said])))
         XCTAssertFalse(transcriptAnswered(transcriptBlocks([said, result, tool])))
         XCTAssertFalse(transcriptAnswered([]))
+        // The server's own lines after the answer leave it answered; a message handed into the turn does not.
+        let info = event(["seq": 4, "kind": "info", "text": "PR #7 is open"])
+        let stderr = event(["seq": 5, "kind": "stderr", "text": "warning"])
+        let user = event(["seq": 6, "kind": "user", "text": "and then?"])
+        XCTAssertTrue(transcriptAnswered(transcriptBlocks([said, result, info, stderr])))
+        XCTAssertFalse(transcriptAnswered(transcriptBlocks([said, result, info, user])))
     }
     func testWorkingLineWaitsOnBackgroundWorkOnlyWhileRunning() {
         let bash = BackgroundTask(name: "Bash", summary: "sleep 120")

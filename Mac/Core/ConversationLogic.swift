@@ -231,10 +231,18 @@ struct BackgroundTask: Equatable, Sendable {
     }
 }
 
-/// Whether the agent has answered and said nothing since: the transcript ends on the turn's result. A running turn that
-/// has answered and still lists background work is waiting on it; one still speaking is not, whatever it backgrounded.
+/// Whether the agent has answered and said nothing since: past the server's own lines (a pull request's state, a quiet
+/// timer, stderr), the transcript ends on the turn's result. A running turn that has answered and still lists background
+/// work is waiting on it; one still speaking is not, whatever it backgrounded.
 func transcriptAnswered(_ blocks: [TranscriptBlock]) -> Bool {
-    if case .event(let e)? = blocks.last { return e.kind == "result" }
+    for block in blocks.reversed() {
+        switch block {
+        case .preparation: continue
+        case .tools: return false
+        case .event(let e):
+            if ["text", "user", "ask", "result"].contains(e.kind) { return e.kind == "result" }
+        }
+    }
     return false
 }
 
