@@ -6,12 +6,13 @@ import SwiftUI
 struct WorkingLine: View {
     var status: String
     var background: [BackgroundTask]
+    var answered: Bool
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.12)) { context in
             let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.12)
             HStack(spacing: 8) {
                 Text(workingGlyph(tick)).font(Theme.bodySemibold).foregroundStyle(Theme.accent).frame(width: 16)
-                Text(verbatim: workingLineText(status: status, background: background, tick: tick)).font(Theme.footnote).foregroundStyle(Theme.muted)
+                Text(verbatim: workingLineText(status: status, background: background, answered: answered, tick: tick)).font(Theme.footnote).foregroundStyle(Theme.muted)
                     .lineLimit(1).truncationMode(.tail)
             }
             .frame(height: 24)

@@ -218,7 +218,7 @@ func reviewLoopChipText(_ on: Bool) -> String { on ? "\u{1F501} Review loop: on"
 
 /// One piece of background work a running turn waits on, from a session record's `backgroundTasks`.
 struct BackgroundTask: Equatable, Sendable {
-    /// The tool that started it: `Agent`, `Task`, `Monitor` or `Bash`.
+    /// What it is: `Bash`, `Monitor`, or a sub-agent's type (`general-purpose`, `Explore`, …, `agent` when unnamed).
     var name: String
     /// What it runs, when the server says.
     var summary: String?
@@ -231,12 +231,19 @@ struct BackgroundTask: Equatable, Sendable {
     }
 }
 
+/// Whether the agent has answered and said nothing since: the transcript ends on the turn's result. A running turn that
+/// has answered and still lists background work is waiting on it; one still speaking is not, whatever it backgrounded.
+func transcriptAnswered(_ blocks: [TranscriptBlock]) -> Bool {
+    if case .event(let e)? = blocks.last { return e.kind == "result" }
+    return false
+}
+
 /// What the working line says after its glyph: the queue or the start-up in those states, the background work a running
-/// turn has left to wait on (it is waiting then, not thinking), else the spinning verb.
-func workingLineText(status: String, background: [BackgroundTask], tick: Int) -> String {
+/// turn that has answered has left to wait on (it is waiting then, not thinking), else the spinning verb.
+func workingLineText(status: String, background: [BackgroundTask], answered: Bool, tick: Int) -> String {
     if status == "queued" { return "Queued\u{2026}" }
     if status == "preparing" || status == "starting" { return "Starting up\u{2026}" }
-    if status == "running", let first = background.first {
+    if status == "running", answered, let first = background.first {
         if background.count > 1 { return "Waiting on \(background.count) background tasks\u{2026}" }
         return "Waiting on \(first.name)\(first.summary.map { ": \($0)" } ?? "")\u{2026}"
     }

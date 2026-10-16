@@ -67,7 +67,7 @@ struct ConversationTranscript: View, Equatable {
             ForEach(Array(session.queued.items.enumerated()), id: \.offset) { index, item in
                 QueuedBubble(text: item["text"].string ?? "Message", removable: removable) { dropQueued(index) }
             }
-            if session.isActive { WorkingIndicator(status: session.status, background: session.backgroundTasks) }
+            if session.isActive { WorkingIndicator(status: session.status, background: session.backgroundTasks, answered: transcriptAnswered(blocks)) }
         }
     }
 

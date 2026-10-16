@@ -37,6 +37,7 @@ struct TranscriptColumn: View, Equatable {
     /// The parts of the session the column shows: a poll that changed only the rest does not lay it out again.
     private static func sameShown(_ a: Session, _ b: Session) -> Bool {
         a.raw["error"] == b.raw["error"] && a.status == b.status && a.queued == b.queued && a.heldTriage == b.heldTriage
+            && a.backgroundTasks == b.backgroundTasks
     }
 
     private var can: Bool { !busy && !uncertain }
@@ -67,7 +68,7 @@ struct TranscriptColumn: View, Equatable {
             if let triage = session.heldTriage, Store.shared.supports("complete_findings") {
                 TriageBox(model: model, triage: triage, decisions: decisions, note: triageNote, enabled: can).padding(.top, 14)
             }
-            if session.isActive { WorkingLine(status: session.status, background: session.backgroundTasks).padding(.top, 12) }
+            if session.isActive { WorkingLine(status: session.status, background: session.backgroundTasks, answered: transcriptAnswered(blocks)).padding(.top, 12) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
