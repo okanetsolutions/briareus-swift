@@ -600,8 +600,8 @@ private struct ConversationFooter: View {
                     AttachButton(enabled: files.count < attachmentsMax) { files.pick() }
                 }
                 if SavedPrompts.offered {
-                    PromptsButton(repo: model.session.repo, text: composer.text) { body in
-                        composer.text = composer.text.cTrimmed.isEmpty ? body : composer.text + "\n\n" + body
+                    PromptsButton(repo: model.session.repo, text: composer.text) { prompt in
+                        composer.text = prompt.inserted(into: composer.text)
                         composer.focusNow()
                     }
                 }
