@@ -1,5 +1,5 @@
 // What the board's screens share on a phone: the errand catalog and the runner that starts an errand (its confirmation,
-// its question in a sheet), the rows of pull requests, issues and conversations, and the badges and chips they carry.
+// its question in ErrandInputSheet), the rows of pull requests, issues and conversations, and the badges and chips they carry.
 import SwiftUI
 import UIKit
 
@@ -136,7 +136,7 @@ private struct ErrandPrompts: ViewModifier {
                 Text(paidNote(p))
             }
             .sheet(item: $runner.asking) { p in
-                ErrandInputSheet(pending: p) { text in
+                ErrandInputSheet(pending: p, repo: runner.repo) { text in
                     var p = p
                     p.input = text
                     start(p)
@@ -152,46 +152,9 @@ private struct ErrandPrompts: ViewModifier {
     }
 }
 
-private func paidNote(_ p: PendingErrand) -> String {
+func paidNote(_ p: PendingErrand) -> String {
     let hint = p.action.hint.isEmpty ? "" : "\(p.action.hint). "
     return "\(hint)This runs a paid agent on pull request #\(p.number) and may write to GitHub."
-}
-
-/// The errand's question: a box for the answer, what it costs, and Start, off while a required answer is empty.
-private struct ErrandInputSheet: View {
-    let pending: PendingErrand
-    let start: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var text = ""
-    @FocusState private var focused: Bool
-    private var trimmed: String { text.cTrimmed }
-    private var input: ActionInput? { pending.action.input }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField(input.flatMap { $0.placeholder.isEmpty ? nil : $0.placeholder } ?? input?.label ?? "", text: $text, axis: .vertical)
-                        .lineLimit(5...14).focused($focused)
-                } header: {
-                    Text(input?.label ?? "")
-                } footer: {
-                    Text(paidNote(pending))
-                }
-                .listRowBackground(Theme.row)
-            }
-            .scrollContentBackground(.hidden).background(Theme.canvas)
-            .navigationTitle(pending.action.label).navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Start") { dismiss(); start(trimmed) }.bold()
-                        .disabled(trimmed.isEmpty && input?.required == true)
-                }
-            }
-            .onAppear { focused = true }
-        }
-    }
 }
 
 /// What an errand start left to say: why it failed, and whether it may have started anyway.
