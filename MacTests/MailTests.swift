@@ -41,6 +41,24 @@ final class MailTests: XCTestCase {
         XCTAssertFalse(a.find(2)!.readOnly)
     }
 
+    func testOnlyAConnectedMailboxNotReadOnlyIsWrittenThrough() {
+        let a = MailAccounts(j(#"{"accounts":[{"id":1,"provider":"gmail","email":"r@example.com","access":"read"},{"id":2,"provider":"outlook","email":"m@example.com","access":"manage"},{"id":3,"provider":"gmail","email":"s@example.com","access":"manage","status":"reauth"},{"id":4,"provider":"gmail","email":"u@example.com"}],"providers":[]}"#))!
+        XCTAssertFalse(a.writable(1)); XCTAssertTrue(a.writable(2)); XCTAssertFalse(a.writable(3))
+        XCTAssertTrue(a.writable(4), "a server that does not say is asked anyway")
+        XCTAssertFalse(a.writable(9))
+    }
+
+    func testAReplyNeedsTextWithinTheLimitAndIsSentAsTyped() {
+        XCTAssertNil(mailReplyBody("")); XCTAssertNil(mailReplyBody(" \n\t "))
+        XCTAssertNil(mailReplyBody(String(repeating: "a", count: mailReplyLimit + 1)))
+        XCTAssertEqual(mailReplyBody(String(repeating: "a", count: mailReplyLimit))?["text"].string?.count, mailReplyLimit)
+        XCTAssertEqual(mailReplyBody("  Thanks,\nAna\n"), ["text": "  Thanks,\nAna\n"])
+        XCTAssertTrue(mailReplyAccepted(j(#"{"status":"accepted","action":"reply"}"#)))
+        XCTAssertFalse(mailReplyAccepted(j(#"{"status":"queued"}"#))); XCTAssertFalse(mailReplyAccepted([:]))
+        XCTAssertNotEqual(mailReplyError(status: 403), mailReplyError(status: 502), "read-only and an uncertain send say different things")
+        XCTAssertEqual(mailReplyError(status: 0), mailReplyError(status: 502), "no answer is as uncertain as a 502")
+    }
+
     func testTheSyncWindowIsAWholeNumberOfDaysFrom1To365() {
         for bad in ["", "0", "366", "-1", "+1", "1.5", "NaN", "1e2", "2x", "999999999999999999999999"] { XCTAssertNil(mailSyncDays(bad), bad) }
         XCTAssertEqual(mailSyncDays(" 365 "), 365); XCTAssertEqual(mailSyncDays("1"), 1)

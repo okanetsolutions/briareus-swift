@@ -1,6 +1,7 @@
 // The mail inbox (the Windows client's screen_mail_inbox.c, core #120): the mail the server keeps synced from every
 // connected mailbox or one, newest first, 50 to a page, with a search, a label or folder, a thread and read, inbox and star
-// filters; a message opens beside the list as plain, selectable text, and Move to Trash moves it to the provider's trash.
+// filters; a message opens beside the list as plain, selectable text (MailReader.swift), Reply answers it and Move to
+// Trash moves it to the provider's trash.
 // Reading here marks nothing read, and no HTML, image or link of a message is loaded. An Admin token's.
 import AppKit
 import SwiftUI
@@ -31,6 +32,8 @@ final class MailInboxModel: ObservableObject {
     private var failures = 0
     /// Which filter a page or a body answers: an answer for an older one is dropped.
     private var generation = 0
+    /// The reply being written to the open message.
+    let reply = MailReplyModel()
 
     static var offered: Bool { Store.shared.isAdmin && Store.shared.supports("settings_mail_accounts") && Store.shared.supports("mail_messages") }
     var coolingDown: Bool { retryUntil.map { $0 > Date() } ?? false }
@@ -112,10 +115,11 @@ final class MailInboxModel: ObservableObject {
 
     func open(_ m: MailMessage) {
         guard Store.shared.supports("mail_message"), accounts.readable.contains(m.accountID) else { return }
+        if selected != m.key { reply.cancel() }
         selected = m.key; body = nil; bodyError = nil
         Task { await loadBody(m) }
     }
-    func close() { selected = nil; body = nil; bodyError = nil }
+    func close() { selected = nil; body = nil; bodyError = nil; reply.cancel() }
     func loadBody(_ m: MailMessage) async {
         guard selected == m.key, readingKey != m.key, !coolingDown else { return }
         readingKey = m.key; readingBody = true
@@ -147,9 +151,9 @@ final class MailInboxModel: ObservableObject {
 
     /// Whether a message's mailbox may move it to the trash: the server has the route and the mailbox was not connected
     /// read-only.
-    func canTrash(_ m: MailMessage) -> Bool {
-        Store.shared.supports("delete_mail_message") && accounts.readable.contains(m.accountID) && !(accounts.find(m.accountID)?.readOnly ?? false)
-    }
+    func canTrash(_ m: MailMessage) -> Bool { Store.shared.supports("delete_mail_message") && accounts.writable(m.accountID) }
+    /// Whether a message may be answered: the server has the route and its mailbox may send.
+    func canReply(_ m: MailMessage) -> Bool { Store.shared.supports("reply_mail_message") && accounts.writable(m.accountID) }
     /// Moves the message, not its thread, to Gmail's Trash or Outlook's Deleted Items once confirmed; the provider keeps
     /// it there, so it is not erased. Gone from the list once the server says so.
     func trash(_ m: MailMessage) {
@@ -393,89 +397,5 @@ private struct MailRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
-    }
-}
-
-/// The open message: its subject and people, its labels, Open at the provider, its text and its attachments, described.
-private struct MailReader: View {
-    @ObservedObject var model: MailInboxModel
-
-    var body: some View {
-        let m = model.body ?? model.selectedSummary
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Spacer()
-                if let url = model.body?.webURL {
-                    Button("Open at \(model.accounts.find(m?.accountID ?? 0)?.providerName ?? "the provider") ↗") { openWebURL(url) }.dashButton(.bordered)
-                }
-                if let m, model.canTrash(m) {
-                    Button(model.trashing == m.key ? "Moving…" : "Move to Trash") { model.trash(m) }
-                        .dashButton(.bordered).disabled(model.trashing != nil)
-                        .help("Move this message to the provider's trash")
-                }
-                Button { model.close() } label: { Image(systemName: "xmark") }.buttonStyle(IconButtonStyle()).help("Close the message")
-            }
-            .padding(.horizontal, 18).padding(.vertical, 8)
-            Rectangle().fill(Theme.line).frame(height: 1)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    if let m {
-                        Text(m.shownSubject).font(Theme.title3).foregroundStyle(Theme.ink).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                        people(m)
-                        if !m.labels.isEmpty {
-                            FlowLayout(spacing: 4, lineSpacing: 4) {
-                                ForEach(m.labels, id: \.self) { l in
-                                    Text(l).font(Theme.caption2).foregroundStyle(Theme.muted).padding(.horizontal, 6).frame(height: 18)
-                                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.line, lineWidth: 1))
-                                }
-                            }
-                        }
-                        Rectangle().fill(Theme.line).frame(height: 1).padding(.vertical, 6)
-                    }
-                    if let e = model.bodyError {
-                        Notice(message: e)
-                        if let s = model.selectedSummary {
-                            Button("Try again") { Task { await model.loadBody(s) } }.dashButton(.bordered).disabled(model.readingBody || model.coolingDown)
-                        }
-                    }
-                    if model.readingBody { LoadingNote(text: "Loading the message…") }
-                    if let b = model.body {
-                        if b.truncated { Notice(message: "The server cut this message short. Open it at the provider to read all of it.") }
-                        // Its text as text: no HTML, images, scripts or live links.
-                        SelectableText(expandTabs(b.text?.isEmpty == false ? b.text! : "This message has no text in the synced copy."),
-                                       font: SelectableFont.system(14), color: b.text?.isEmpty == false ? Theme.ink : Theme.muted)
-                        if !b.attachments.isEmpty {
-                            Text("Attachments (described only; their content is not synced)").font(Theme.footnoteSemibold).foregroundStyle(Theme.ink).padding(.top, 14)
-                            ForEach(Array(b.attachments.enumerated()), id: \.offset) { _, a in
-                                HStack(spacing: 6) {
-                                    Image(systemName: "paperclip").font(.system(size: 10)).foregroundStyle(Theme.muted)
-                                    Text("\(a.name) · \(a.mimeType) · \(ByteCountFormatter.string(fromByteCount: Int64(a.size), countStyle: .file))")
-                                        .font(Theme.footnote).foregroundStyle(Theme.muted).textSelection(.enabled)
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 18).padding(.vertical, 14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
-    @ViewBuilder private func people(_ m: MailMessage) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            line("From", m.sender)
-            if !m.to.isEmpty { line("To", m.to) }
-            if !m.cc.isEmpty { line("Cc", m.cc) }
-            if !m.replyTo.isEmpty { line("Reply-To", m.replyTo) }
-            line("Received", m.receivedAt.map { formatEventTime($0) } ?? "unknown")
-            if let a = model.accounts.find(m.accountID) { line("Mailbox", a.title) }
-        }
-    }
-    private func line(_ title: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(title).font(Theme.footnote).foregroundStyle(Theme.muted).frame(width: 70, alignment: .leading)
-            Text(value).font(Theme.footnote).foregroundStyle(Theme.ink).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-        }
     }
 }
