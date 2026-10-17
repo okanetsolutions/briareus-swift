@@ -1,4 +1,4 @@
-// The Settings tab: this device's connection (who it is, what it may do, revoke or forget it), the voice mode's OpenAI key, then for an Admin token
+// The Settings tab: this device's connection (who it is, what it may do, revoke or forget it), the voice mode's ElevenLabs key, then for an Admin token
 // the Mac app's settings page as the Mac's settings sidebar lists it: the projects (in the server's order, which Edit
 // rearranges, as each row's Move up and Move down do), the providers sessions start on, the database pool, the SSH
 // servers, the Forge accounts and the Slack workspaces. Each row opens its form.
@@ -31,7 +31,7 @@ struct SettingsScreen: View {
                     Label("Voice", systemImage: "waveform")
                 }
             } footer: {
-                Text("The OpenAI API key a project's voice conversation talks to GPT-Realtime with, and what its conversations have cost.")
+                Text("The ElevenLabs API key a project's voice conversation talks to ElevenLabs Agents with, and what its conversations have cost.")
             }
             .listRowBackground(Theme.row)
             let why = settingsUnavailableReason("settings_projects", path: "settings/projects", what: "Project settings", manage: "projects")
