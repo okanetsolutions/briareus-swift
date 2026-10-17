@@ -399,6 +399,7 @@ final class VoiceTests: XCTestCase {
         XCTAssertTrue(instructions.contains("\"Fix the login\""))
         XCTAssertTrue(instructions.contains(Voice.updatePrefix))
         XCTAssertTrue(instructions.contains(Voice.sentPrefix))
+        XCTAssertTrue(instructions.contains(Voice.appPrefix))
         let project = Voice.session(voice: Voice.defaultVoice, project: "HQ", toolIDs: ["t1"])
         XCTAssertEqual(project["conversation_config"]["agent"]["prompt"]["tool_ids"], ["t1"])
         XCTAssertTrue(VoiceTool.sendMessage.definition["parameters"]["required"].strings.contains("session_id"))

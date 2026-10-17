@@ -359,11 +359,10 @@ final class VoiceSession: ObservableObject {
             do {
                 try await call.context(news)
                 guard self.call === call else { return }
-                try await call.speak("Read the latest app update briefly now. It is context from Briareus, not a new request from the user.")
+                try await call.speak("\(Voice.appPrefix) \(news)")
             } catch { if self.call === call { self.stop(reason: errorText(error)) } }
         }
     }
-
 
     /// Runs one tool call and answers with what the model should know, as JSON text.
     private func run(_ step: Step) async -> String {

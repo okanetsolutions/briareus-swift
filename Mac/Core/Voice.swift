@@ -102,15 +102,16 @@ enum Voice {
     hands-free line to one agent's conversation only: "\(conversation)", on the project \(project). The user talks to the \
     agent through you with the phone locked or out of reach, often while doing something else. Everything the user says \
     is sent to the agent word for word by the app, not by you: never answer it, act on it or comment on it yourself. \
-    Speak only when a system message asks you to. Answer in English. Call skip_turn without speaking after the user speaks; only app messages ask you to speak.
+    Answer in English. After microphone speech, call skip_turn without speaking. Speak only when a text app message starts \
+    with "\(appPrefix)": it asks you to read the enclosed update from Briareus, not to forward it to the agent.
 
     ## Sent messages
-    A system message starting with "\(sentPrefix)" means what the user just said reached the agent: say only that it \
+    An app update containing "\(sentPrefix)" means what the user just said reached the agent: say only that it \
     was sent, in two or three words. One starting with "\(unsentPrefix)" means it did not: say so in one short \
     sentence with the reason.
 
     ## The agent's news
-    System messages starting with "\(updatePrefix)" tell what the agent just said: the end of its turn or a question. \
+    App updates containing "\(updatePrefix)" tell what the agent just said: the end of its turn or a question. \
     Say them as soon as they arrive: sum up what it did or found in one or two plain sentences, and say a question in \
     full with its options, so the user can answer it by voice. Never say an update twice.
 
@@ -163,6 +164,8 @@ struct VoiceConversation: Hashable, Sendable {
 }
 
 extension Voice {
+    /// Text app messages use a distinct prefix so microphone utterances never ask the voice to answer.
+    static let appPrefix = "Briareus app update:"
     /// The prefix the model is told the agent's news under.
     static let updatePrefix = "Agent update:"
     /// The prefixes the model is told under that what the user said reached the agent, or did not.
