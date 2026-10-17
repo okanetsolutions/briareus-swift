@@ -1,4 +1,4 @@
-// The voice mode's session and tools: what GPT-Realtime is started with, which calls a tool makes on the project, what it
+// The voice mode's session and tools: what ElevenLabs is started with, which calls a tool makes on the project, what it
 // answers, and what a conversation costs.
 import XCTest
 @testable import BriareusMacCore
@@ -6,37 +6,39 @@ import XCTest
 final class VoiceTests: XCTestCase {
     private func j(_ s: String) -> JSON { JSON.parse(s)! }
 
-    func testSessionCarriesTheVoiceTheProjectAndEveryTool() {
-        let session = Voice.session(voice: "cedar", project: "HQ (o/hq)")
-        XCTAssertEqual(session["type"], "realtime")
-        XCTAssertEqual(session["model"], "gpt-realtime-2.1-mini")
-        // WebRTC negotiates the format; the voice is chosen and the user's speech is transcribed for the captions.
-        XCTAssertEqual(session["audio"], ["input": ["transcription": ["model": "gpt-4o-mini-transcribe"]], "output": ["voice": "cedar"]])
-        XCTAssertEqual(session["tool_choice"], "auto")
-        let names = session["tools"].items.compactMap { $0["name"].string }
-        XCTAssertEqual(names, VoiceTool.allCases.map(\.rawValue))
-        let instructions = session["instructions"].string!
+    func testSessionCarriesTheEnglishVoiceTheProjectAndPrivateClientTools() {
+        let session = Voice.session(voice: Voice.voices[1], project: "HQ (o/hq)", toolIDs: ["t1", "t2"])
+        let config = session["conversation_config"]
+        XCTAssertEqual(config["tts"]["model_id"], "eleven_v4_turbo")
+        XCTAssertEqual(config["tts"]["voice_id"], .string(Voice.voices[1]))
+        XCTAssertEqual(config["agent"]["language"], "en")
+        XCTAssertEqual(config["agent"]["first_message"], "")
+        XCTAssertEqual(session["platform_settings"]["auth"]["enable_auth"], true)
+        XCTAssertEqual(config["agent"]["prompt"]["tool_ids"], ["t1", "t2"])
+        XCTAssertEqual(config["asr"]["provider"], "scribe_realtime")
+        let instructions = config["agent"]["prompt"]["prompt"].string!
         XCTAssertTrue(instructions.contains("HQ (o/hq)"))
-        XCTAssertTrue(instructions.contains("## Confirmation"))
-        XCTAssertEqual(Voice.session(voice: "gleam", project: "HQ")["audio"]["output"]["voice"], "marin")
-        XCTAssertEqual(Voice.endpoint.absoluteString, "https://api.openai.com/v1/realtime/calls")
+        XCTAssertEqual(Voice.session(voice: "marin", project: "HQ")["conversation_config"]["tts"]["voice_id"], .string(Voice.defaultVoice))
+        for tool in VoiceTool.allCases {
+            let body = Voice.toolBody(tool)["tool_config"]
+            XCTAssertEqual(body["type"], "client")
+            XCTAssertEqual(body["name"], .string(tool.rawValue))
+            XCTAssertEqual(body["parameters"], tool.definition["parameters"])
+            XCTAssertEqual(body["expects_response"], true)
+            XCTAssertEqual(body["response_timeout_secs"], 120)
+        }
+        XCTAssertEqual(Set(Voice.voices).count, 3)
+        for voice in Voice.voices { XCTAssertFalse(Voice.voiceName(voice).isEmpty) }
     }
 
-    func testCostAddsUpEachResponseAndTranscriptionAtTheirPrices() {
+    func testCostTracksElapsedAgentTimeWithoutInventingLLMCharges() {
         var cost = VoiceCost()
-        // 1M fresh audio in ($10), 1M cached audio ($0.30), 1M text in of which half cached ($0.30 + $0.03),
-        // 1M audio out ($20) and 1M text out ($2.40).
-        cost.add(response: j(#"{"input_tokens":3000000,"output_tokens":2000000,"input_token_details":{"text_tokens":1000000,"audio_tokens":2000000,"#
-            + #""cached_tokens_details":{"text_tokens":500000,"audio_tokens":1000000}},"#
-            + #""output_token_details":{"text_tokens":1000000,"audio_tokens":1000000}}"#))
-        XCTAssertEqual(cost.dollars, 33.03, accuracy: 0.0001)
-        cost.add(transcription: j(#"{"type":"tokens","input_tokens":1000000,"output_tokens":1000000}"#))
-        XCTAssertEqual(cost.dollars, 39.28, accuracy: 0.0001)
-        cost.add(transcription: j(#"{"type":"duration","seconds":12}"#))
-        XCTAssertEqual(cost.dollars, 39.28, accuracy: 0.0001)
-        XCTAssertEqual(cost.tokens, 7_000_000)
-        XCTAssertEqual(cost.line(elapsed: 65), "≈ $39.28 · 1:05 · 7000.0k tokens")
-        XCTAssertEqual(VoiceCost().line(), "≈ $0.0000 · 0:00 · 0 tokens")
+        cost.update(seconds: 120)
+        XCTAssertEqual(cost.dollars, 0.16, accuracy: 1e-9)
+        cost.update(seconds: 180)
+        XCTAssertEqual(cost.dollars, 0.24, accuracy: 1e-9)
+        cost.update(seconds: -1)
+        XCTAssertEqual(cost.dollars, 0)
     }
 
     func testUsageAddsUpTheConversationsKept() {
@@ -51,7 +53,8 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(VoiceRecord(records[1].json), records[1])
         // A conversation kept from GPT-Live, which the app used to offer, is not counted.
         XCTAssertNil(VoiceRecord(["engine": "gpt-live-1", "seconds": 60, "dollars": 0.05, "date": 1000]))
-        XCTAssertNotNil(VoiceRecord(["seconds": 60, "dollars": 0.05, "date": 1000]))
+        XCTAssertNil(VoiceRecord(["seconds": 60, "dollars": 0.05, "date": 1000]))
+        XCTAssertNil(VoiceRecord(["engine": "gpt-realtime-2.1-mini", "seconds": 60, "dollars": 0.05, "date": 1000]))
         XCTAssertEqual(VoiceCost.time(65), "1:05")
         XCTAssertEqual(VoiceCost.time(3723), "1:02:03")
     }
@@ -387,21 +390,17 @@ final class VoiceTests: XCTestCase {
 
     // MARK: One conversation, hands-free
 
-    func testACallHeldToOneConversationHasNoToolsAndNeverAnswersTheUserByItself() {
-        let session = Voice.session(voice: "marin", project: "HQ (o/hq)", conversation: "Fix the login")
-        XCTAssertEqual(session["tools"], [])
-        XCTAssertEqual(session["tool_choice"], "none")
-        let turns = session["audio"]["input"]["turn_detection"]
-        XCTAssertEqual(turns["create_response"], false)
-        XCTAssertEqual(turns["silence_duration_ms"].int, Voice.heldPauseMilliseconds)
-        let instructions = session["instructions"].string!
+    func testACallHeldToOneConversationHasNoClientToolsAndCanSkipItsTurn() {
+        let session = Voice.session(voice: Voice.defaultVoice, project: "HQ (o/hq)", conversation: "Fix the login", toolIDs: ["t1"])
+        let prompt = session["conversation_config"]["agent"]["prompt"]
+        XCTAssertEqual(prompt["tool_ids"], [])
+        XCTAssertEqual(prompt["built_in_tools"]["skip_turn"]["params"]["system_tool_type"], "skip_turn")
+        let instructions = prompt["prompt"].string!
         XCTAssertTrue(instructions.contains("\"Fix the login\""))
         XCTAssertTrue(instructions.contains(Voice.updatePrefix))
         XCTAssertTrue(instructions.contains(Voice.sentPrefix))
-        // The project's call keeps every tool, each naming its conversation, and answers the user itself.
-        let project = Voice.session(voice: "marin", project: "HQ (o/hq)")
-        XCTAssertEqual(project["tools"].items.count, VoiceTool.allCases.count)
-        XCTAssertTrue(project["audio"]["input"]["turn_detection"].isNull)
+        let project = Voice.session(voice: Voice.defaultVoice, project: "HQ", toolIDs: ["t1"])
+        XCTAssertEqual(project["conversation_config"]["agent"]["prompt"]["tool_ids"], ["t1"])
         XCTAssertTrue(VoiceTool.sendMessage.definition["parameters"]["required"].strings.contains("session_id"))
     }
 

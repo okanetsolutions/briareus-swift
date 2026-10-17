@@ -1,7 +1,7 @@
-// The voice mode's side of GPT-Realtime, OpenAI's realtime voice model: the session it opens, the tools it calls on the
+// The voice mode's side of ElevenLabs Agents: the session it opens, the tools it calls on the
 // client API, and what each answer becomes for the model to say. No UI and no audio here.
 //
-// GPT-Realtime holds the spoken conversation and decides itself which tool to call. The phone runs each call on /api/v1
+// ElevenLabs holds the spoken conversation and decides itself which tool to call. The phone runs each call on /api/v1
 // with its own token and answers with a short JSON summary. A voice conversation belongs to one project: no tool names a
 // repository, the phone puts that project's in every call. Opened from one of the project's conversations, it is held to
 // that one: a hands-free line to its agent, which gets what the user says word for word, sent by the phone once they
@@ -9,24 +9,20 @@
 import Foundation
 
 enum Voice {
-    /// Where a call starts: the phone posts its WebRTC offer with the session, and the SDP answer comes back.
-    static let endpoint = URL(string: "https://api.openai.com/v1/realtime/calls")!
-    /// The data channel GPT-Realtime sends and takes its JSON events on.
-    static let channel = "oai-events"
-    static let model = "gpt-realtime-2.1-mini"
-    static let title = "GPT-Realtime 2.1 mini"
-    /// What writes out the user's speech for the captions; the model hears the audio itself.
-    static let transcriber = "gpt-4o-mini-transcribe"
-    static let defaultVoice = "marin"
-    /// Marin first, the default; then the Realtime API's other voices.
-    static let voices = ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"]
+    static let model = "eleven_v4_turbo"
+    static let title = "Eleven v4 Turbo"
+    static let defaultVoice = "cjVigY5qzO86Huf0OWal"
+    static let voices = [defaultVoice, "EXAVITQu4vr4xnSDxMaL", "JBFqnCBsd6RMkjVDRZzb"]
+    static func voiceName(_ id: String) -> String {
+        [defaultVoice: "Eric · American English", voices[1]: "Sarah · American English",
+         voices[2]: "George · British English"][id] ?? "Eric · American English"
+    }
 
-    /// How the voice speaks: short, in the speaker's language, about one project, and never claiming what a tool
+    /// How the voice speaks: short, in English, about one project, and never claiming what a tool
     /// has not confirmed; then the tools' rules.
     static func instructions(project: String) -> String { """
     You are the voice of Briareus, an app that runs coding agents on the user's projects. This conversation is about one \
-    project only: \(project). The user talks to you hands-free, often with the phone locked. Answer in the language the \
-    user speaks, in one or two short sentences. Speak only when the user has said something; do not volunteer updates. \
+    project only: \(project). The user talks to you hands-free, often with the phone locked. Answer in English, in one or two short sentences. Speak only when the user has said something; do not volunteer updates. \
     Use the tools for anything about the project's conversations, agents, pull requests, issues or findings, and say only \
     what they confirm. If the user asks about another project, say this conversation can only work on \(project). Do what \
     the user asks right away, without asking them to confirm; the one exception is merging a pull request, which waits \
@@ -106,7 +102,7 @@ enum Voice {
     hands-free line to one agent's conversation only: "\(conversation)", on the project \(project). The user talks to the \
     agent through you with the phone locked or out of reach, often while doing something else. Everything the user says \
     is sent to the agent word for word by the app, not by you: never answer it, act on it or comment on it yourself. \
-    Speak only when a system message asks you to. Answer in the language the user speaks.
+    Speak only when a system message asks you to. Answer in English. Call skip_turn without speaking after the user speaks; only app messages ask you to speak.
 
     ## Sent messages
     A system message starting with "\(sentPrefix)" means what the user just said reached the agent: say only that it \
@@ -122,32 +118,34 @@ enum Voice {
     Say the relevant facts in a few plain sentences, without Markdown, ids, URLs or code.
     """ }
 
-    /// What starts a call over WebRTC: the voice, the captions' transcriber and the tools, all on one project. `project`
-    /// is how it is named aloud: its label and repository. Held to one of its conversations, named aloud by
-    /// `conversation`, it carries that conversation's tools only. WebRTC settles the audio format; the SDP offer goes
-    /// beside this, as another field of the form.
-    static func session(voice: String, project: String, conversation: String? = nil) -> JSON {
-        var input: JSON = ["transcription": ["model": .string(transcriber)]]
-        let output: JSON = ["voice": .string(voices.contains(voice) ? voice : defaultVoice)]
-        guard let conversation else {
-            return ["type": "realtime",
-                    "model": .string(model),
-                    "instructions": .string(instructions(project: project)),
-                    "audio": ["input": input, "output": output],
-                    "tools": .array(VoiceTool.allCases.map(\.definition)),
-                    "tool_choice": "auto"]
+    /// The private agent's settings. Project tools run on the phone, never with the device token at ElevenLabs.
+    static func session(voice: String, project: String, conversation: String? = nil, toolIDs: [String] = []) -> JSON {
+        var prompt: JSON = ["prompt": .string(conversation.map { instructions(conversation: $0, project: project) }
+                                                           ?? instructions(project: project)),
+                            "llm": .string(Meet.agentLLM), "tool_ids": JSON(conversation == nil ? toolIDs : [])]
+        if conversation != nil {
+            prompt["built_in_tools"] = ["skip_turn": ["type": "system", "name": "skip_turn", "params": ["system_tool_type": "skip_turn"]]]
         }
-        // Held to one conversation, the model never answers the user by itself: the phone sends what they said to the
-        // agent once they pause, and asks the voice to speak only for the agent's news and what was sent.
-        input["turn_detection"] = ["type": "server_vad", "silence_duration_ms": JSON(heldPauseMilliseconds),
-                                   "create_response": false, "interrupt_response": true]
-        return ["type": "realtime",
-                "model": .string(model),
-                "instructions": .string(instructions(conversation: conversation, project: project)),
-                "audio": ["input": input, "output": output],
-                "tools": [],
-                "tool_choice": "none"]
+        return ["name": "Briareus voice",
+                "platform_settings": ["auth": ["enable_auth": true]],
+                "conversation_config": [
+                    "asr": ["provider": "scribe_realtime"],
+                    "turn": ["turn_eagerness": "patient"],
+                    "conversation": ["max_duration_seconds": JSON(Meet.maxSeconds),
+                                     "client_events": ["user_transcript", "agent_response", "client_tool_call", "vad_score", "interruption", "audio"]],
+                    "tts": ["model_id": .string(model), "voice_id": .string(voices.contains(voice) ? voice : defaultVoice)],
+                    "agent": ["first_message": "", "language": "en", "prompt": prompt]]]
     }
+
+    /// A registered client tool with the existing schema and a timeout long enough for the Briareus API.
+    static func toolBody(_ tool: VoiceTool) -> JSON {
+        var config = tool.definition
+        config["type"] = "client"
+        config["expects_response"] = true
+        config["response_timeout_secs"] = 120
+        return ["tool_config": config]
+    }
+
 }
 
 // MARK: - One conversation
@@ -232,34 +230,11 @@ extension Voice {
 
 // MARK: - Cost
 
-/// What a conversation has cost so far, in dollars, from the token usage OpenAI reports: each response's on
-/// `response.done`, and each transcription of the user's speech on its completed event. Prices per million tokens, as
-/// OpenAI lists them for gpt-realtime-2.1-mini and gpt-4o-mini-transcribe.
-/// An estimate: OpenAI's own bill is the reference.
+/// The ElevenAgents base charge; the LLM is billed separately. This estimate excludes plan discounts.
 struct VoiceCost: Equatable, Sendable {
     private(set) var dollars = 0.0
-    private(set) var tokens = 0
 
-    /// A response's usage: input split into text, audio and image, each with a cached part; output into text and audio.
-    mutating func add(response usage: JSON) {
-        tokens += (usage["input_tokens"].int ?? 0) + (usage["output_tokens"].int ?? 0)
-        let input = usage["input_token_details"], cached = input["cached_tokens_details"], output = usage["output_token_details"]
-        func n(_ j: JSON) -> Double { Double(j.int ?? 0) }
-        let fresh = (text: n(input["text_tokens"]) - n(cached["text_tokens"]),
-                     audio: n(input["audio_tokens"]) - n(cached["audio_tokens"]),
-                     image: n(input["image_tokens"]) - n(cached["image_tokens"]))
-        dollars += (max(fresh.text, 0) * 0.60 + n(cached["text_tokens"]) * 0.06
-                    + max(fresh.audio, 0) * 10 + n(cached["audio_tokens"]) * 0.30
-                    + max(fresh.image, 0) * 0.80 + n(cached["image_tokens"]) * 0.08
-                    + n(output["text_tokens"]) * 2.40 + n(output["audio_tokens"]) * 20) / 1_000_000
-    }
-
-    /// A transcription's usage, when it is billed by tokens.
-    mutating func add(transcription usage: JSON) {
-        guard usage["type"].string == "tokens" else { return }
-        tokens += (usage["input_tokens"].int ?? 0) + (usage["output_tokens"].int ?? 0)
-        dollars += (Double(usage["input_tokens"].int ?? 0) * 1.25 + Double(usage["output_tokens"].int ?? 0) * 5) / 1_000_000
-    }
+    mutating func update(seconds: Double) { dollars = max(0, seconds) / 60 * Meet.agentMinuteCost }
 
     /// "$0.0123", with more places while it is under a cent.
     static func dollars(_ amount: Double) -> String {
@@ -272,8 +247,7 @@ struct VoiceCost: Equatable, Sendable {
     }
     /// What the screen shows under the controls after `elapsed` seconds.
     func line(elapsed: Double = 0) -> String {
-        let tokenText = tokens >= 1000 ? String(format: "%.1fk tokens", Double(tokens) / 1000) : "\(tokens) tokens"
-        return "≈ \(Self.dollars(dollars)) · \(Self.time(elapsed)) · \(tokenText)"
+        return "≈ \(Self.dollars(dollars)) + LLM · \(Self.time(elapsed))"
     }
 }
 
@@ -288,9 +262,9 @@ struct VoiceRecord: Equatable, Sendable {
     init(seconds: Double, dollars: Double, date: Date) {
         self.seconds = seconds; self.dollars = dollars; self.date = date
     }
-    /// What `json` saved. One kept from another model (GPT-Live, which the app used to offer) is not this one's.
+    /// Only ElevenLabs records belong to this tally; legacy OpenAI history stays in its original store.
     init?(_ j: JSON) {
-        guard (j["engine"].string ?? Voice.model) == Voice.model, let seconds = j["seconds"].number,
+        guard j["engine"].string == Voice.model, let seconds = j["seconds"].number,
               let dollars = j["dollars"].number, let date = j["date"].number else { return nil }
         self.init(seconds: seconds, dollars: dollars, date: Date(timeIntervalSince1970: date))
     }
@@ -376,7 +350,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
     static let conversationCases: [VoiceTool] = [.readConversation, .sendMessage, .stopConversation, .readPullRequest,
                                                  .readReviewRound, .completeReviewRound]
 
-    /// A Realtime function tool.
+    /// A provider-independent function tool schema.
     var definition: JSON { definition(held: false) }
     /// The tool held to one conversation: it names no conversation nor pull request, as the phone puts the held ones in.
     var heldDefinition: JSON { definition(held: true) }

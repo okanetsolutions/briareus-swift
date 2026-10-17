@@ -1,6 +1,6 @@
 import Foundation
 
-/// One spoken conversation with GPT-Realtime about one project: the WebRTC call, the captions, and the tools it calls,
+/// One spoken conversation with ElevenLabs about one project: the ElevenLabs call, the captions, and the tools it calls,
 /// each held to that project. It outlives the screen that started it, so it goes on from any tab and with the phone
 /// locked, and ends when the user ends it or after a silence. What it cost and how long it ran are kept.
 /// Opened from one of the project's conversations, it is held to that one: a hands-free line to its agent, which gets
@@ -38,26 +38,25 @@ final class VoiceSession: ObservableObject {
     @Published private(set) var started: Date?
     /// When the conversation ended; with `started`, how long it ran.
     @Published private(set) var finished: Date?
-    /// What the conversation has cost so far, from the usage OpenAI reports.
+    /// What the conversation has cost so far, from elapsed ElevenAgents time; LLM charges are separate.
     @Published private(set) var cost = VoiceCost()
     /// Why the last conversation failed or ended by itself.
     @Published private(set) var notice: String?
 
     private var call: LiveCall?
     private var reader: Task<Void, Never>?
-    private var hush: Task<Void, Never>?
+    private var pause: Task<Void, Never>?
     private var watchdog: Task<Void, Never>?
     private var lastActivity = Date()
     /// How many pieces of the user's speech have been heard: a yes must come after the read-back it answers.
     private var heard = 0
-    /// The function calls of each response, by response id, answered together once the response is done.
-    private var calls: [String: [Task<(id: String, output: String), Never>]] = [:]
+    /// In-flight client tool calls, cancelled when the call ends.
+    private var calls: [String: Task<Void, Never>] = [:]
     private var seenCalls: Set<String> = []
     /// The merges read back to the user, with how much had been heard at the time.
     private var readBacks: [String: Int] = [:]
     /// The merges read back, by the same key: the call pinned to the head the user heard about, and its base.
     private var merges: [String: (arguments: JSON, base: String)] = [:]
-    private var sequence = 0
     /// A held conversation's transcript, followed: read through `cursor`, its news told through `told`, and the events
     /// not told yet. `held` is its record as last read.
     private var follower: Task<Void, Never>?
@@ -69,13 +68,14 @@ final class VoiceSession: ObservableObject {
     /// A response is under way, or the user is speaking: news told now waits for the voice to be free.
     private var responding = false, userSpeaking = false
     /// News was told that no response has said yet.
+    private var pendingNews: [String] = []
     private var owed = false
     /// What the user said to the held conversation's agent and was not sent yet: sent once they pause.
     private var dictation: [String] = []
     /// A response was asked for and has not started or failed yet; tool calls whose outputs are still to be sent.
-    private var requested = false, answering = 0
+    private var requested = false
     /// The voice is free to say news now: nothing it says or hears would be cut, and no tool output is still owed.
-    private var free: Bool { !responding && !requested && !userSpeaking && calls.isEmpty && answering == 0 }
+    private var free: Bool { !responding && !requested && !userSpeaking && calls.isEmpty }
 
     private init() {}
 
@@ -95,7 +95,7 @@ final class VoiceSession: ObservableObject {
         let settings = VoiceSettings.shared
         let key: String
         do {
-            guard let saved = try settings.key() else { notice = "Add your OpenAI API key in Settings › Voice."; return }
+            guard let saved = try settings.key() else { notice = "Add your ElevenLabs API key in Settings › Voice."; return }
             key = saved
         } catch { notice = error.localizedDescription; return }
         phase = .connecting
@@ -103,25 +103,30 @@ final class VoiceSession: ObservableObject {
         conversation = held
         lines = []; steps = []; heard = 0; calls = [:]; seenCalls = []; readBacks = [:]; merges = [:]; muted = false
         cursor = held?.cursor ?? 0; told = cursor; untold = []; self.held = nil; caughtUp = cursor > 0
-        responding = false; userSpeaking = false; owed = false; requested = false; answering = 0; dictation = []
+        responding = false; userSpeaking = false; owed = false; pendingNews = []; requested = false; dictation = []
         started = nil; finished = nil
         cost = VoiceCost()
         let call = LiveCall()
         self.call = call
         let named = project.title == project.repo ? project.repo : "\(project.title) (\(project.repo))"
-        let session = Voice.session(voice: settings.voice, project: named, conversation: held?.title)
+        let selectedVoice = settings.voice
         reader = Task { [weak self] in
             do {
-                let events = try await call.open(key: key, session: session)
-                for try await event in events { self?.handle(event) }
+                let events = try await call.open(key: key, voice: selectedVoice, project: named, held: held?.title)
+                for try await event in events {
+                    guard !Task.isCancelled, self?.call === call else { return }
+                    self?.handle(event)
+                }
+                guard self?.call === call else { return }
                 self?.ended(nil)
             } catch {
+                guard self?.call === call else { return }
                 self?.ended(errorText(error))
             }
         }
     }
 
-    /// Hangs up: closing the WebRTC call ends the Realtime session.
+    /// Hangs up: closing the ElevenLabs call ends the conversation.
     func stop(reason: String? = nil) {
         guard phase == .connecting || phase == .live else { return }
         if let reason { notice = reason }
@@ -132,7 +137,11 @@ final class VoiceSession: ObservableObject {
 
     func toggleMute() {
         muted.toggle()
-        call?.mute(muted)
+        guard let call else { return }
+        let on = muted
+        Task {
+            do { try await call.mute(on) } catch { if self.call === call { self.stop(reason: errorText(error)) } }
+        }
         // Muted mid-sentence, the speech may never be heard to stop: news waiting on it is said now.
         if muted && userSpeaking {
             userSpeaking = false
@@ -147,11 +156,12 @@ final class VoiceSession: ObservableObject {
         reader?.cancel(); reader = nil
         watchdog?.cancel(); watchdog = nil
         follower?.cancel(); follower = nil
-        calls.values.joined().forEach { $0.cancel() }; calls = [:]
-        hush?.cancel(); hush = nil
+        calls.values.forEach { $0.cancel() }; calls = [:]
+        pause?.cancel(); pause = nil
         call?.close(); call = nil
         speaking = false
         if let started {
+            cost.update(seconds: elapsed())
             let now = Date()
             finished = now
             VoiceHistory.shared.add(VoiceRecord(seconds: now.timeIntervalSince(started), dollars: cost.dollars, date: now))
@@ -159,79 +169,58 @@ final class VoiceSession: ObservableObject {
         phase = .off
     }
 
-    private func nextID() -> String { sequence += 1; return "briareus_\(sequence)" }
     private func touch() { lastActivity = Date() }
 
     // MARK: Events
 
-    private func handle(_ event: JSON) {
-        switch event["type"].string {
-        case "session.created":
+    private func handle(_ event: LiveCall.Event) {
+        switch event {
+        case .ready:
             guard phase == .connecting else { return }
             phase = .live
             started = Date()
             touch()
             watch()
             if conversation != nil { follow() }
-        case "error":
-            notice = event["error"]["message"].string ?? "GPT-Realtime reported an error."
-            // A response asked for and refused does not start.
-            requested = false
-        case "input_audio_buffer.speech_started":
-            userSpeaking = true
-        case "input_audio_buffer.speech_stopped":
-            userSpeaking = false
-        case "response.created":
-            // Any response made after the news was put in says it.
-            responding = true; requested = false
-            owed = false
-        case "input_audio_buffer.committed":
-            // A piece of the user's speech the model hears, transcribed or not.
+        case .heard(let text):
             heard += 1
+            caption(user: true, lines.last?.user == true ? " " + text : text)
             touch()
-        case "conversation.item.input_audio_transcription.completed":
-            // A whole utterance, not a fragment: it is set apart from one before it on the same line.
-            caption(user: true, event["transcript"].string.map { lines.last?.user == true ? " " + $0 : $0 })
-            cost.add(transcription: event["usage"])
+            if conversation != nil { dictation.append(text); scheduleDictation() }
+        case .said(let text):
+            caption(user: false, lines.last?.user == false ? " " + text : text)
+            requested = false
             touch()
-            if conversation != nil {
-                if let said = event["transcript"].string { dictation.append(said) }
-                dictate()
-            }
-        case "response.output_audio_transcript.delta":
-            caption(user: false, event["delta"].string)
-            talking()
-            touch()
-        case "response.output_item.done":
-            called(event["item"], in: event["response_id"].string ?? "")
-        case "response.done":
-            cost.add(response: event["response"]["usage"])
-            // A response cut off by the user does not go on by itself; what its calls did is still told.
-            let response = event["response"]
-            responding = false
-            let goingOn = answer(response["id"].string ?? "", goOn: response["status"].string == "completed" || response["id"].isNull)
-            if owed && !goingOn && free { respond() }
-        default:
-            break
+        case .agent(let talking, let busy):
+            speaking = talking; responding = busy
+            if !busy { requested = false }
+            if !busy && owed && free { respond() }
+        case .activity(let on):
+            guard userSpeaking != on else { return }
+            userSpeaking = on
+            if on { touch(); pause?.cancel() }
+            else if conversation != nil && !dictation.isEmpty { scheduleDictation() }
+            if !on && owed && free { respond() }
+        case .tool(let id, let name, let args):
+            called(id: id, name: name, args: args)
         }
     }
 
-    /// WebRTC plays the voice itself; it reads as speaking while its words keep coming.
-    private func talking() {
-        speaking = true
-        hush?.cancel()
-        hush = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1.5))
-            if !Task.isCancelled { self?.speaking = false }
+    private func scheduleDictation() {
+        pause?.cancel()
+        pause = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(Voice.heldPauseMilliseconds)) } catch { return }
+            self?.dictate()
         }
     }
 
-    /// Ends the conversation after the silence the settings allow, as GPT-Realtime bills the audio it hears and says.
+    /// Ends the conversation after the silence the settings allow, as ElevenLabs bills conversation time.
     private func watch() {
         watchdog = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
                 guard let self, self.phase == .live else { continue }
+                self.cost.update(seconds: self.elapsed())
                 if self.speaking || !self.calls.isEmpty { self.touch(); continue }
                 let minutes = VoiceSettings.shared.idleMinutes
                 if minutes > 0, Date().timeIntervalSince(self.lastActivity) > Double(minutes * 60) {
@@ -253,41 +242,23 @@ final class VoiceSession: ObservableObject {
 
     // MARK: Tools
 
-    /// A finished output item: a function call starts running at once, under the response it belongs to.
-    private func called(_ item: JSON, in response: String) {
-        guard item["type"].string == "function_call", let id = item["call_id"].string, let name = item["name"].string,
-              seenCalls.insert(id).inserted else { return }
-        var args = item["arguments"].string.flatMap(JSON.parse) ?? [:]
+    /// Client tools keep the existing project ownership, permissions and merge read-back checks.
+    private func called(id: String, name: String, args: JSON) {
+        guard seenCalls.insert(id).inserted, let call else { return }
         let tool = VoiceTool(rawValue: name)
-        // A call held to one conversation acts on that one, and on its pull request.
-        if let held = conversation, let tool { args = Voice.holding(args, tool, to: held.id, pull: self.held?.pullNumber) }
+        let args = conversation.flatMap { held in tool.map { Voice.holding(args, $0, to: held.id, pull: self.held?.pullNumber) } } ?? args
         let step = Step(tool: tool, name: name, args: args, state: .running)
         steps.append(step)
         touch()
-        calls[response, default: []].append(Task { (id, await self.run(step)) })
-    }
-
-    /// Once a response is done, answers every call it made and has the model go on; whether it will.
-    @discardableResult
-    private func answer(_ response: String, goOn: Bool) -> Bool {
-        guard let pending = calls[response], !pending.isEmpty, let call else { return false }
-        calls[response] = nil
-        answering += 1
-        Task {
-            var outputs: [(id: String, output: String)] = []
-            for call in pending { outputs.append(await call.value) }
+        calls[id] = Task {
+            let output = await self.run(step)
+            guard !Task.isCancelled, self.call === call else { return }
+            do { try await call.answer(id: id, output: output) }
+            catch { self.stop(reason: errorText(error)); return }
             guard self.call === call else { return }
-            answering -= 1
-            for (id, output) in outputs {
-                call.send(["type": "conversation.item.create", "event_id": .string(nextID()),
-                           "item": ["type": "function_call_output", "call_id": .string(id), "output": .string(output)]])
-            }
-            if goOn {
-                requested = true
-                call.send(["type": "response.create", "event_id": .string(nextID())])
-            } else if owed && free { respond() }
+            self.calls[id] = nil
+            if self.owed && self.free { self.respond() }
         }
-        return goOn
     }
 
     // MARK: The held conversation
@@ -334,9 +305,8 @@ final class VoiceSession: ObservableObject {
 
     /// Puts the agent's news into the conversation and has the voice say it once it is free.
     private func tell(_ news: String) {
-        guard let call, phase == .live else { return }
-        call.send(["type": "conversation.item.create", "event_id": .string(nextID()),
-                   "item": ["type": "message", "role": "system", "content": [["type": "input_text", "text": .string(news)]]]])
+        guard call != nil, phase == .live else { return }
+        pendingNews.append(news)
         owed = true
         touch()
         if free { respond() }
@@ -352,7 +322,9 @@ final class VoiceSession: ObservableObject {
         let step = Step(tool: .sendMessage, name: VoiceTool.sendMessage.rawValue, args: ["text": .string(text)], state: .running)
         steps.append(step)
         touch()
+        let activeCall = call
         Task {
+            guard self.call === activeCall, !Task.isCancelled else { return }
             @MainActor func finish(_ state: Step.State) {
                 if let i = self.steps.firstIndex(where: { $0.id == step.id }) { self.steps[i].state = state }
             }
@@ -362,10 +334,12 @@ final class VoiceSession: ObservableObject {
             }
             do {
                 _ = try await Store.shared.call("message", ["sessionId": .string(id), "text": .string(text)], timeout: 60)
+                guard self.call === activeCall else { return }
                 finish(.done)
                 if let repo = self.repo { Task { try? await Store.shared.feed(repo).loadSessions(fresh: true) } }
                 self.confirm("\(Voice.sentPrefix) \(text)")
             } catch {
+                guard self.call === activeCall else { return }
                 let said = errorText(error)
                 finish(.failed(said))
                 self.confirm("\(Voice.unsentPrefix) \(said)")
@@ -373,22 +347,23 @@ final class VoiceSession: ObservableObject {
         }
     }
 
-    /// Has the voice say whether what the user said was sent: briefly, and only when it is free, as the user has
-    /// started another message or news is about to be told.
-    private func confirm(_ said: String) {
-        guard let call, phase == .live else { return }
-        call.send(["type": "conversation.item.create", "event_id": .string(nextID()),
-                   "item": ["type": "message", "role": "system", "content": [["type": "input_text", "text": .string(said)]]]])
-        guard free, !owed else { return }
-        requested = true
-        call.send(["type": "response.create", "event_id": .string(nextID())])
-    }
+    /// Acknowledgements use the same queue as agent news, so nothing cuts off the user or the voice.
+    private func confirm(_ said: String) { tell(said) }
 
     private func respond() {
-        guard let call, phase == .live else { return }
+        guard let call, phase == .live, !pendingNews.isEmpty else { return }
+        let news = pendingNews.joined(separator: "\n")
+        pendingNews = []
         owed = false; requested = true
-        call.send(["type": "response.create", "event_id": .string(nextID())])
+        Task {
+            do {
+                try await call.context(news)
+                guard self.call === call else { return }
+                try await call.speak("Read the latest app update briefly now. It is context from Briareus, not a new request from the user.")
+            } catch { if self.call === call { self.stop(reason: errorText(error)) } }
+        }
     }
+
 
     /// Runs one tool call and answers with what the model should know, as JSON text.
     private func run(_ step: Step) async -> String {
