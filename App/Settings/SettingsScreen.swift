@@ -27,13 +27,12 @@ struct SettingsScreen: View {
         List {
             connection
             Section {
-                DestinationLink(destination: .voiceSettings) {
-                    Label("Voice", systemImage: "waveform")
-                }
+                DestinationLink(destination: .voiceSettings) { Label("Voice", systemImage: "waveform") }
             } footer: {
                 Text("The ElevenLabs API key a project's voice conversation talks to ElevenLabs Agents with, and what its conversations have cost.")
             }
             .listRowBackground(Theme.row)
+            DeviceSettingsSections()
             let why = settingsUnavailableReason("settings_projects", path: "settings/projects", what: "Project settings", manage: "projects")
             if let why {
                 Section { EmptyView() } header: { Text("Server settings") } footer: { Text(why) }
