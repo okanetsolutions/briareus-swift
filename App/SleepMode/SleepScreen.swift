@@ -82,14 +82,28 @@ private struct SleepTicker: View {
         let shown = Array(commands.suffix(count))
         VStack(alignment: .leading, spacing: 3) {
             ForEach(Array(shown.enumerated()), id: \.element.id) { i, c in
-                (Text(c.project).foregroundStyle(Theme.accent) + Text("  $ ").foregroundStyle(Theme.muted) + Text(c.text).foregroundStyle(Theme.ink))
+                line(c)
                     .font(.caption.monospaced())
                     .lineLimit(1)
-                    .opacity(0.35 + 0.65 * Double(i + 1) / Double(max(shown.count, 1)))
+                    .opacity(fade(i, of: shown.count))
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeOut(duration: 0.25), value: commands.last?.id)
+    }
+
+    /// One command as "project  $ text", each part in its own colour.
+    private func line(_ command: SleepCommand) -> Text {
+        let project: Text = Text(command.project).foregroundStyle(Theme.accent)
+        let prompt: Text = Text("  $ ").foregroundStyle(Theme.muted)
+        let text: Text = Text(command.text).foregroundStyle(Theme.ink)
+        return project + prompt + text
+    }
+
+    /// Older commands fade out: the newest is opaque and the oldest shown is at 35%.
+    private func fade(_ index: Int, of total: Int) -> Double {
+        let position = Double(index + 1) / Double(max(total, 1))
+        return 0.35 + 0.65 * position
     }
 }
