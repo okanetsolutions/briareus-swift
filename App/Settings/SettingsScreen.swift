@@ -1,7 +1,6 @@
-// The Settings tab: this device's connection (who it is, what it may do, revoke or forget it), the voice mode's ElevenLabs key, then for an Admin token
-// the Mac app's settings page as the Mac's settings sidebar lists it: the projects (in the server's order, which Edit
-// rearranges, as each row's Move up and Move down do), the providers sessions start on, the database pool, the SSH
-// servers, the Forge accounts and the Slack workspaces. Each row opens its form.
+// The Settings tab: this device's connection, ElevenLabs voice and device settings, then for an Admin token
+// the projects (in server order, rearranged by Edit or Move up/down), providers, database pool, SSH servers,
+// Forge accounts and Slack workspaces. Each row opens its form, matching the Mac settings sidebar.
 import SwiftUI
 
 struct SettingsScreen: View {
