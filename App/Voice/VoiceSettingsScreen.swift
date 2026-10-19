@@ -104,3 +104,15 @@ struct VoiceSettingsScreen: View {
         do { try work(); error = nil } catch { self.error = error.localizedDescription }
     }
 }
+
+// The Voice entry in the Settings tab.
+struct VoiceSettingsSection: View {
+    var body: some View {
+        Section {
+            DestinationLink(destination: .voiceSettings) { Label("Voice", systemImage: "waveform") }
+        } footer: {
+            Text("The ElevenLabs API key a project's voice conversation talks to ElevenLabs Agents with, and what its conversations have cost.")
+        }
+        .listRowBackground(Theme.row)
+    }
+}
