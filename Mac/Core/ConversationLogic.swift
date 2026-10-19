@@ -216,6 +216,48 @@ func conversationChipText(_ s: Session, _ chip: ComposerChip) -> String {
 }
 func reviewLoopChipText(_ on: Bool) -> String { on ? "\u{1F501} Review loop: on" : "\u{1F501} Review loop" }
 
+/// One piece of background work a running turn waits on, from a session record's `backgroundTasks`.
+struct BackgroundTask: Equatable, Sendable {
+    /// What it is: `Bash`, `Monitor`, or a sub-agent's type (`general-purpose`, `Explore`, …, `agent` when unnamed).
+    var name: String
+    /// What it runs, when the server says.
+    var summary: String?
+
+    init(name: String, summary: String? = nil) { self.name = name; self.summary = summary }
+    /// Needs a name.
+    init?(_ j: JSON) {
+        guard let name = j["name"].nonEmpty else { return nil }
+        self.init(name: name, summary: j["summary"].nonEmpty)
+    }
+}
+
+/// Whether the agent has answered and said nothing since: past the server's own lines (a pull request's state, a quiet
+/// timer, stderr), the transcript ends on the turn's result. A running turn that has answered and still lists background
+/// work is waiting on it; one still speaking is not, whatever it backgrounded.
+func transcriptAnswered(_ blocks: [TranscriptBlock]) -> Bool {
+    for block in blocks.reversed() {
+        switch block {
+        case .preparation: continue
+        case .tools: return false
+        case .event(let e):
+            if ["text", "user", "ask", "result"].contains(e.kind) { return e.kind == "result" }
+        }
+    }
+    return false
+}
+
+/// What the working line says after its glyph: the queue or the start-up in those states, the background work a running
+/// turn that has answered has left to wait on (it is waiting then, not thinking), else the spinning verb.
+func workingLineText(status: String, background: [BackgroundTask], answered: Bool, tick: Int) -> String {
+    if status == "queued" { return "Queued\u{2026}" }
+    if status == "preparing" || status == "starting" { return "Starting up\u{2026}" }
+    if status == "running", answered, let first = background.first {
+        if background.count > 1 { return "Waiting on \(background.count) background tasks\u{2026}" }
+        return "Waiting on \(first.name)\(first.summary.map { ": \($0)" } ?? "")\u{2026}"
+    }
+    return "\(workingVerb(tick))\u{2026}"
+}
+
 /// What a message sent now does, under the conversation's composer.
 func conversationComposerNote(active: Bool, liveInput: Bool, uploading: Bool, files: Int, empty: Bool) -> String {
     if active { return liveInput ? "Sent into the running turn" : "Queued for the next turn" }
