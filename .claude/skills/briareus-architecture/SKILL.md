@@ -28,7 +28,7 @@ View (`App/**`, `Mac/App/**`) -> Model (`@MainActor ObservableObject`, `*Model.s
 | Projects, conversations | `Conversations/` | `Sidebar/`, `Conversation/` | `ConversationLogic.swift`, `PhoneConversations.swift`, `SessionOverview.swift`, `LiveEvents.swift`, `EventStream.swift`, `WebhookLogic.swift`, `MailWakeLogic.swift` (Mac only: the iPhone app has no mail) |
 | Board, pull requests, issues | `Board/` | `Board/` | `Board.swift`, `BoardLogic.swift`, `BoardEdits.swift`, `ProjectBoard.swift`, `IssuePage.swift`, `PullFiles.swift`, `Diff.swift` |
 | Findings, Status, Usage | `Findings/` | `Findings/` | `FindingsLogic.swift`, `PhoneFindings.swift`, `UsageLogic.swift` |
-| Settings | `Settings/` | `Settings/` | `SettingsLogic.swift`, `AccountSettingsLogic.swift` |
+| Settings | `Settings/` | `Settings/` | `SettingsLogic.swift`, `SSHServerLogic.swift` (the SSH server form), `AccountSettingsLogic.swift` |
 | Forge | `Forge/` | `Board/ProjectForgeTab.swift`, `Board/ForgeSiteView.swift` | `Forge.swift` |
 | Shared browser | `Conversations/SharedBrowserScreen.swift` | `Conversation/SharedBrowserScreen.swift` | `SharedBrowser.swift` |
 | Voice | `Voice/` | `Conversation/VoiceNote.swift` | `Voice.swift` |
