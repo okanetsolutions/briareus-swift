@@ -11,8 +11,16 @@ final class AttentionTests: XCTestCase {
         XCTAssertEqual(ssh.detail, "o/heedly · Fix checks · deploy@10.0.0.5:22 · asked in a turn nobody started")
         XCTAssertEqual(ssh.expiresAt, Date(timeIntervalSince1970: 1791400000))
         XCTAssertNotNil(ssh.at)
+        XCTAssertFalse(ssh.elevated)
         XCTAssertEqual(list[1].detail, "as nadin in HQ")
         XCTAssertFalse(list[2].isApproval); XCTAssertEqual(list[2].label, "Question"); XCTAssertEqual(list[2].sessionID, "s3")
         XCTAssertNotNil(list[2].at)
+    }
+
+    func testSudoApprovalsAreElevated() {
+        let list = AttentionItem.parse(j(#"{"items":[{"id":"ssh:r2","kind":"ssh","title":"web-1","request":{"id":"r2","username":"deploy","host":"h","sudo":true}},{"id":"slack:q1","kind":"slack","title":"Slack","request":{"id":"q1","sudo":true}}]}"#))
+        XCTAssertTrue(list[0].elevated)
+        XCTAssertNotEqual(list[0].detail, AttentionItem.parse(j(#"{"items":[{"id":"ssh:r2","kind":"ssh","title":"web-1","request":{"id":"r2","username":"deploy","host":"h"}}]}"#))[0].detail)
+        XCTAssertFalse(list[1].elevated)
     }
 }
