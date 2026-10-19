@@ -1,147 +1,10 @@
 // An SSH server a project's agents may run commands on, as the Mac's form on a phone. The Server tab: label, project,
-// host and port, username and private key path, the permission mode and whether sessions may use it. The Database tab,
+// host and port, username and private key path, the SSH and sudo passwords on a server that takes them (write-only: the
+// server only says whether one is stored), the permission mode and whether sessions may use it. The Database tab,
 // on a server that stores one: where the database listens as seen from the server, and the login for it, which the
 // server keeps encrypted and opens only through GET …/db-credentials, read here when the tab first shows; a save sends
 // only the half of the login that changed. Saved through /settings/ssh/servers, which needs an Admin token.
 import SwiftUI
-
-@MainActor
-private final class SSHServerFormModel: ObservableObject {
-    /// The open tab stays open from one server to the next, as the other settings forms' do.
-    static var openTab: SSHServerTab = .server
-    /// The box a clone opens on: its label.
-    static var pendingFocus: SSHServerField?
-
-    @Published var state: SSHServerFormState
-    @Published var tab: SSHServerTab { didSet { Self.openTab = tab; if tab == .database { readLogin() } } }
-    /// Reading the stored database login, and why the last read failed.
-    @Published var readingLogin = false
-    @Published var loginError: String?
-    @Published var saving = false
-    @Published var deleting = false
-    @Published var error: String?
-    @Published var scrollToken = 0
-    let defaults: JSON?
-    var focusFirst: SSHServerField?
-
-    init(row: JSON?, defaults: JSON?) {
-        let r: JSON = row?.isObject == true ? row! : defaults?.isObject == true ? defaults! : [:]
-        // A new server starts on the first project, as the web's form does, and where its label is typed.
-        let s = SSHServerFormState(row: r, firstRepo: SettingsLists.shared.projects.list.first?["repo"].nonEmpty,
-                                   database: Store.shared.supports("ssh_server_db_credentials"))
-        state = s
-        self.defaults = defaults
-        if s.id == 0 && row == nil { focusFirst = .label; Self.openTab = .server }
-        if let f = Self.pendingFocus { focusFirst = f; Self.pendingFocus = nil; Self.openTab = f.tab }
-        if !s.offersDatabase { Self.openTab = .server }
-        tab = Self.openTab
-        if tab == .database { readLogin() }
-    }
-
-    var busy: Bool { saving || deleting }
-    func tabDot(_ t: SSHServerTab) -> Bool { state.dirty && state.tabChanged(t) }
-
-    func binding(_ f: SSHServerField) -> Binding<String> {
-        Binding(get: { self.state.text(f) }, set: { v in
-            // The port boxes take digits only, five at most; the others up to 1024 characters, as their edits do.
-            let value = f.def.kind == .number ? String(v.filter { $0.isASCII && $0.isNumber }.prefix(5)) : String(v.prefix(1024))
-            guard value != self.state.text(f) else { return }
-            self.state.texts[f] = value
-            self.changed()
-        })
-    }
-    var enabledBinding: Binding<Bool> {
-        Binding(get: { self.state.enabled }, set: { v in guard v != self.state.enabled else { return }; self.state.enabled = v; self.changed() })
-    }
-    var repoBinding: Binding<String> {
-        Binding(get: { self.state.repo }, set: { v in guard v != self.state.repo else { return }; self.state.repo = v; self.changed() })
-    }
-    var modeBinding: Binding<String> {
-        Binding(get: { self.state.mode }, set: { v in guard v != self.state.mode else { return }; self.state.mode = v; self.changed() })
-    }
-
-    private func changed() { if !state.dirty { state.dirty = true } }
-    var discardMessage: String {
-        state.discardMessage
-    }
-    private func showError(_ text: String?) {
-        guard let text else { return }
-        error = text; scrollToken += 1
-    }
-
-    /// The login stored on the server, opened, into its boxes; once, the first time the Database tab shows.
-    func readLogin() {
-        guard state.id != 0, state.offersDatabase, !state.loginKnown, !readingLogin,
-              Store.shared.supports("ssh_server_db_credentials") else { return }
-        let id = state.id
-        loginError = nil
-        readingLogin = true
-        Task {
-            defer { readingLogin = false }
-            do {
-                let r = try await Store.shared.call("ssh_server_db_credentials", ["id": .number(id)])
-                guard state.id == id, !state.loginKnown else { return }
-                guard r["credentials"].isObject else { loginError = settingsUnexpectedResponse; return }
-                state.loginRead(r["credentials"])
-            } catch {
-                guard state.id == id, let text = failure(error) else { return }
-                loginError = text
-            }
-        }
-    }
-
-    func save(done: @escaping () -> Void) {
-        guard !busy, Store.shared.supports(state.saveOperation) else { return }
-        let body: JSON
-        switch state.saveRequest() {
-        case .failure(let p): tab = SSHServerTab(rawValue: p.tab) ?? .server; showError(p.message); return
-        case .success(let b): body = b
-        }
-        saving = true
-        Task {
-            defer { saving = false }
-            do {
-                let r = try await Store.shared.call(state.saveOperation, body)
-                let row = r["server"]
-                guard row.isObject else { showError(settingsUnexpectedResponse); return }
-                // The server's word on what was saved: an empty label is now user@host:port, and a new server has an id.
-                error = nil
-                state.saved(row, sent: body)
-                Task { try? await SettingsLists.shared.loadSSH() }
-                done()
-            } catch {
-                showError(failure(error))
-            }
-        }
-    }
-
-    func delete(done: @escaping () -> Void) {
-        guard state.id != 0, !busy else { return }
-        deleting = true
-        Task {
-            defer { deleting = false }
-            do {
-                try await Store.shared.call("delete_ssh_server", ["id": .number(state.id)])
-                state.dirty = false
-                Task { try? await SettingsLists.shared.loadSSH() }
-                done()
-            } catch {
-                showError(failure(error))
-            }
-        }
-    }
-
-    /// What a clone starts from: what the form holds now, saved or not, its database login too, without the label that
-    /// named this one.
-    func cloneRow() -> JSON? {
-        switch state.copy() {
-        case .failure(let p): tab = SSHServerTab(rawValue: p.tab) ?? .server; showError(p.message); return nil
-        case .success(let copy):
-            Self.pendingFocus = .label
-            return copy
-        }
-    }
-}
 
 struct SSHServerSettingsScreen: View {
     let row: JSON?
@@ -248,6 +111,16 @@ struct SSHServerSettingsScreen: View {
             Text("Connection")
         }
         .listRowBackground(Theme.row)
+        // The passwords only on a server that takes them; it keeps them sealed and only says whether one is stored.
+        if state.offersPasswords {
+            Section {
+                secret(.password)
+                secret(.sudoPassword)
+            } header: {
+                Text("Passwords")
+            }
+            .listRowBackground(Theme.row)
+        }
         Section {
             Picker(selection: model.modeBinding) {
                 ForEach(["ask", "allow"], id: \.self) { Text(SSHServerFormState.modeTitle($0)).tag($0) }
@@ -296,6 +169,20 @@ struct SSHServerSettingsScreen: View {
                                     : "A password is stored. Type one to replace it; leave empty to keep it."
         }
         return f == .dbUsername ? "Empty it to remove the stored login, password and all." : nil
+    }
+
+    /// A write-only password: empty, it says whether one is stored; a switch under it removes the stored one on save.
+    private func secret(_ f: SSHServerField) -> some View {
+        var def = f.def
+        def.cue = state.cue(f)
+        return Group {
+            SettingsTextRow(def: def, text: model.binding(f), focus: $focus, key: f)
+            if state.stored(f) {
+                Toggle("Remove the stored \(f.def.label.lowercased()) on save",
+                       isOn: Binding(get: { state.clear.contains(f) }, set: { _ in model.toggleClear(f) }))
+                    .tint(Theme.accent)
+            }
+        }
     }
 
     private func field(_ f: SSHServerField, hint: String? = nil) -> some View {

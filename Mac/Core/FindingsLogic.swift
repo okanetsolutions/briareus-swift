@@ -144,6 +144,8 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
     /// The approval's own id, which the decision names.
     var requestID: String? { request["id"].nonEmpty }
     var expiresAt: Date? { request["expiresAt"].number.map { Date(timeIntervalSince1970: $0 / 1000) } }
+    /// An SSH command run as root with the server's stored sudo password; the command shown is the sudo wrapper around it.
+    var elevated: Bool { kind == "ssh" && request["sudo"].is(true) }
 
     /// What kind of wait it is, in a word or two.
     var label: String {
@@ -168,6 +170,7 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
         if kind == "ssh", let user = request["username"].nonEmpty, let host = request["host"].nonEmpty {
             parts.append("\(user)@\(host)\(request["port"].int32.map { ":\($0)" } ?? "")")
         }
+        if elevated { parts.append("as root") }
         if kind == "slack", let ws = request["workspaceLabel"].nonEmpty { parts.append("as \(request["sendsAs"].nonEmpty ?? "you") in \(ws)") }
         if request["unattended"].is(true) { parts.append("asked in a turn nobody started") }
         return parts.joined(separator: " · ")

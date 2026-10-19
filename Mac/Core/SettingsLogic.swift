@@ -638,7 +638,7 @@ enum SSHServerTab: Int, CaseIterable, Sendable {
 }
 
 enum SSHServerField: Int, CaseIterable, Sendable {
-    case label, host, port, username, key, dbHost, dbPort, dbUsername, dbPassword
+    case label, host, port, username, key, password, sudoPassword, dbHost, dbPort, dbUsername, dbPassword
     var def: SettingsField {
         switch self {
         case .label: return SettingsField(key: "label", kind: .text, label: "Label", cue: "Production web server", hint: "Leave empty to name it user@host:port.")
@@ -646,7 +646,12 @@ enum SSHServerField: Int, CaseIterable, Sendable {
         case .port: return SettingsField(key: "port", kind: .number, label: "Port", cue: "22", mono: true)
         case .username: return SettingsField(key: "username", kind: .text, label: "Username", cue: "deploy", mono: true)
         case .key: return SettingsField(key: "identityFile", kind: .text, label: "Private key path", cue: "/home/you/.ssh/id_ed25519",
-            hint: "Absolute path on the machine running Briareus; leave empty for its default SSH keys or agent. Password prompts are not supported.", mono: true)
+            hint: "Absolute path on the machine running Briareus; leave empty for its default SSH keys or agent. Not used while a password is stored.", mono: true)
+        case .password: return SettingsField(key: "password", kind: .text, label: "Password", cue: "empty = key authentication",
+            hint: "Signs in with this password instead of a key. Stored encrypted and never shown again.", mono: true, secret: true)
+        case .sudoPassword: return SettingsField(key: "sudoPassword", kind: .text, label: "Sudo password", cue: "empty = no sudo",
+            hint: "Lets agents run a command as root, on its own approval. Separate from the SSH login; stored encrypted and never shown again.",
+            mono: true, secret: true)
         case .dbHost: return SettingsField(key: "dbHost", kind: .text, label: "Database host", cue: "127.0.0.1",
             hint: "Where the database listens, as seen from the SSH server itself. Leave empty for 127.0.0.1.", mono: true)
         case .dbPort: return SettingsField(key: "dbPort", kind: .number, label: "Database port", cue: "3306", mono: true)
@@ -661,6 +666,11 @@ enum SSHServerField: Int, CaseIterable, Sendable {
     /// The login's two boxes, which the server's rows never carry: it keeps them sealed and opens them only through
     /// GET …/db-credentials.
     var isLogin: Bool { self == .dbUsername || self == .dbPassword }
+    /// The passwords the server keeps sealed and never sends back: its rows only say whether one is stored
+    /// (`hasPassword`, `hasSudoPassword`). Empty keeps the stored one; typed replaces it; removed sends "".
+    var isWriteOnly: Bool { self == .password || self == .sudoPassword }
+    /// The row's flag for a write-only box.
+    var storedKey: String { self == .password ? "hasPassword" : "hasSudoPassword" }
     static func on(_ t: SSHServerTab) -> [SSHServerField] { allCases.filter { $0.tab == t } }
 }
 
@@ -681,16 +691,20 @@ struct SSHServerFormState: Equatable, Sendable {
     /// The login stored on the server, once it is known: read through GET …/db-credentials, or none stored.
     var login = DBLogin()
     var loginKnown = true
+    /// The stored passwords to remove on save.
+    var clear: Set<SSHServerField> = []
 
     /// A new server starts on the first project, as the web's form does, on port 22; on a server that stores a database
-    /// login (`database`), with the database where the server's own default puts it.
-    init(row: JSON, firstRepo: String? = nil, database: Bool = false) {
+    /// login (`database`), with the database where the server's own default puts it; on one that takes SSH and sudo
+    /// passwords (`passwords`), with neither stored.
+    init(row: JSON, firstRepo: String? = nil, database: Bool = false, passwords: Bool = false) {
         var r: JSON = row.isObject ? row : [:]
         if Self.rowID(r) == 0 {
             if r["repo"].nonEmpty == nil, let firstRepo, !firstRepo.isEmpty { r["repo"] = .string(firstRepo) }
             if r.object?["port"] == nil { r["port"] = 22 }
             if database && r.object?["dbHost"] == nil { r["dbHost"] = "127.0.0.1" }
             if database && r.object?["dbPort"] == nil { r["dbPort"] = 3306 }
+            if passwords && r.object?["hasPassword"] == nil { r["hasPassword"] = false; r["hasSudoPassword"] = false }
         }
         self.row = r
         loginKnown = !hasLogin
@@ -704,6 +718,25 @@ struct SSHServerFormState: Equatable, Sendable {
     /// The server stores a database login per SSH server: its rows say where the database listens.
     var offersDatabase: Bool { row.object?["dbHost"] != nil }
     var hasLogin: Bool { row["hasDbCredentials"].is(true) }
+    /// The server takes SSH and sudo passwords: its rows say whether one is stored.
+    var offersPasswords: Bool { row.object?["hasPassword"] != nil }
+    func stored(_ f: SSHServerField) -> Bool { f.isWriteOnly && row[f.storedKey].is(true) }
+    /// A tab's boxes as the form shows them: the passwords only on a server that takes them.
+    func fields(on t: SSHServerTab) -> [SSHServerField] { SSHServerField.on(t).filter { offersPasswords || !$0.isWriteOnly } }
+    /// Whether a server takes passwords, from its list: any row that says whether one is stored. An empty list cannot
+    /// tell, and is taken as a current server's.
+    static func takesPasswords(_ rows: [JSON]) -> Bool { rows.isEmpty || rows.contains { $0.object?["hasPassword"] != nil } }
+    /// What a write-only box says while it is empty: that it is removed on save, that one is stored, or its own cue.
+    func cue(_ f: SSHServerField) -> String? {
+        if clear.contains(f) { return "Removed on save" }
+        if stored(f) { return "Stored · type a new one to replace it" }
+        return f.def.cue
+    }
+    /// Marks a stored password for removal on save, emptying its box, or takes the mark back.
+    mutating func toggleClear(_ f: SSHServerField) {
+        guard f.isWriteOnly else { return }
+        if clear.contains(f) { clear.remove(f) } else { clear.insert(f); texts[f] = "" }
+    }
 
     static func savedRepo(_ row: JSON) -> String { row["repo"].nonEmpty ?? "" }
     /// A server without a mode asks, as the server's own default does.
@@ -715,12 +748,16 @@ struct SSHServerFormState: Equatable, Sendable {
         enabled = Self.savedEnabled(row)
         repo = Self.savedRepo(row)
         mode = Self.savedMode(row)
-        // A clone's row carries the login it was copied with; a saved one only says whether there is one.
-        for f in SSHServerField.allCases { texts[f] = f.isLogin ? row[f.key].string ?? savedText(f) : Self.fieldText(row, f) }
+        // A clone's row carries the login and passwords it was copied with; a saved one only says whether there are any.
+        for f in SSHServerField.allCases {
+            texts[f] = f.isLogin || f.isWriteOnly ? row[f.key].string ?? savedText(f) : Self.fieldText(row, f)
+        }
+        clear = []
         dirty = false
     }
     static func fieldText(_ row: JSON, _ f: SSHServerField) -> String {
-        f.def.kind == .number ? SettingsText.numberText(row[f.key]) : row[f.key].string ?? ""
+        if f.isWriteOnly { return "" }
+        return f.def.kind == .number ? SettingsText.numberText(row[f.key]) : row[f.key].string ?? ""
     }
     /// A box's value as saved: the login's as last read, the others as the row has them.
     func savedText(_ f: SSHServerField) -> String {
@@ -742,8 +779,10 @@ struct SSHServerFormState: Equatable, Sendable {
 
     func body() -> Result<JSON, FormProblem> {
         var body: JSON = row.isObject ? row : [:]
-        for k in ["id", "hasDbCredentials", "dbUsername", "dbPassword"] { body.remove(k) }
-        for f in SSHServerField.on(.server) {
+        for k in ["id", "hasDbCredentials", "dbUsername", "dbPassword", "password", "sudoPassword", "hasPassword", "hasSudoPassword"] {
+            body.remove(k)
+        }
+        for f in SSHServerField.on(.server) where !f.isWriteOnly {
             let t = text(f).cTrimmed
             if f.def.kind == .number {
                 guard let port = SettingsText.port(t) else { return .failure(FormProblem(message: "Enter a port from 1 to 65535.")) }
@@ -756,6 +795,16 @@ struct SSHServerFormState: Equatable, Sendable {
         if (body["repo"].string ?? "").isEmpty { return .failure(FormProblem(message: "Choose the project whose sessions may use this server.")) }
         if (body["host"].string ?? "").isEmpty { return .failure(FormProblem(message: "Enter the host: a hostname or an IP address.")) }
         if (body["username"].string ?? "").isEmpty { return .failure(FormProblem(message: "Enter the username to connect as.")) }
+        if offersPasswords {
+            // Only what changed is sent, as typed: spaces may belong to a password. Left out, the stored one stays.
+            for f in [SSHServerField.password, .sudoPassword] {
+                let t = text(f)
+                if clear.contains(f) { body[f.key] = ""; continue }
+                if t.isEmpty { continue }
+                if let problem = Self.passwordProblem(t, f) { return .failure(FormProblem(message: problem)) }
+                body[f.key] = .string(t)
+            }
+        }
         if offersDatabase {
             let database = SSHServerTab.database.rawValue
             body["dbHost"] = .string(text(.dbHost).cTrimmed)
@@ -779,6 +828,15 @@ struct SSHServerFormState: Equatable, Sendable {
         return .success(body)
     }
 
+    /// Why the server would refuse a password: more than its askpass helper passes on (1023 UTF-8 bytes), or a NUL or a
+    /// line break in it.
+    static func passwordProblem(_ text: String, _ f: SSHServerField) -> String? {
+        let name = f == .sudoPassword ? "The sudo password" : "The SSH password"
+        if text.utf8.count > 1023 { return "\(name) is too long: at most 1023 bytes." }
+        if text.unicodeScalars.contains(where: { $0 == "\0" || $0 == "\r" || $0 == "\n" }) { return "\(name) cannot hold a line break." }
+        return nil
+    }
+
     /// The server's word on what was saved, from the body sent: what the login is now, when the form knows all of it.
     mutating func saved(_ newRow: JSON, sent body: JSON) {
         let user = body["dbUsername"].string, pass = body["dbPassword"].string
@@ -800,7 +858,9 @@ struct SSHServerFormState: Equatable, Sendable {
         body().map { b in
             var copy = b
             copy["label"] = ""
-            for f in [SSHServerField.dbUsername, .dbPassword] { copy.remove(f.key) }
+            for f in [SSHServerField.dbUsername, .dbPassword, .password, .sudoPassword] { copy.remove(f.key) }
+            // The passwords typed go with it; stored ones cannot, as they are never read back.
+            for f in [SSHServerField.password, .sudoPassword] where offersPasswords && !text(f).isEmpty { copy[f.key] = .string(text(f)) }
             if offersDatabase && !text(.dbUsername).cTrimmed.isEmpty {
                 copy["dbUsername"] = .string(text(.dbUsername).cTrimmed)
                 copy["dbPassword"] = .string(text(.dbPassword))
@@ -812,7 +872,9 @@ struct SSHServerFormState: Equatable, Sendable {
     /// Whether the form holds a change not saved yet, for the dot after the tab's title.
     var changed: Bool { SSHServerTab.allCases.contains { tabChanged($0) } }
     func tabChanged(_ t: SSHServerTab) -> Bool {
-        if t == .server && (enabled != Self.savedEnabled(row) || repo != Self.savedRepo(row) || mode != Self.savedMode(row)) { return true }
+        if t == .server && (enabled != Self.savedEnabled(row) || repo != Self.savedRepo(row) || mode != Self.savedMode(row) || !clear.isEmpty) {
+            return true
+        }
         if t == .database && !offersDatabase { return false }
         return SSHServerField.on(t).contains { text($0) != savedText($0) }
     }

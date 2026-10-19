@@ -256,6 +256,70 @@ final class SettingsLogicTests: XCTestCase {
         let clone = SSHServerFormState(row: copy)
         XCTAssertEqual(try clone.body().get()["dbUsername"], "app")
     }
+
+    func testSSHServerPasswords() throws {
+        // A server that predates passwords shows no boxes and is sent none of their keys.
+        let old = SSHServerFormState(row: ["id": 1, "repo": "o/r", "host": "h", "port": 22, "username": "u"])
+        XCTAssertFalse(old.offersPasswords)
+        XCTAssertEqual(old.fields(on: .server), [.label, .host, .port, .username, .key])
+        XCTAssertNil(try old.body().get().object?["password"])
+
+        // A new one on a current server: neither stored, nothing sent until typed, sent as typed.
+        var s = SSHServerFormState(row: [:], firstRepo: "o/r", passwords: true)
+        XCTAssertTrue(s.offersPasswords)
+        XCTAssertTrue(s.fields(on: .server).contains(.sudoPassword))
+        s.texts[.host] = "h"; s.texts[.username] = "u"
+        var body = try s.body().get()
+        XCTAssertNil(body.object?["password"]); XCTAssertNil(body.object?["sudoPassword"]); XCTAssertNil(body.object?["hasPassword"])
+        s.texts[.sudoPassword] = " s p "
+        body = try s.body().get()
+        XCTAssertEqual(body["sudoPassword"], " s p ")
+        XCTAssertNil(body.object?["password"])
+        XCTAssertTrue(s.tabChanged(.server))
+
+        // Refused before the server would: a line break, or more than 1023 bytes.
+        s.texts[.password] = "a\nb"
+        XCTAssertNotNil(s.body().failure)
+        s.texts[.password] = String(repeating: "é", count: 512)
+        XCTAssertNotNil(s.body().failure)
+        s.texts[.password] = String(repeating: "é", count: 511)
+        XCTAssertEqual(try s.body().get()["password"].string?.count, 511)
+
+        // Saved: the row only says what is stored, and the boxes start empty again.
+        let row: JSON = ["id": 5, "repo": "o/r", "host": "h", "port": 22, "username": "u", "hasPassword": true, "hasSudoPassword": false]
+        s.saved(row, sent: body)
+        XCTAssertEqual(s.text(.password), "")
+        XCTAssertTrue(s.stored(.password)); XCTAssertFalse(s.stored(.sudoPassword))
+        XCTAssertFalse(s.changed)
+        XCTAssertNotEqual(s.cue(.password), SSHServerField.password.def.cue)
+        XCTAssertNil(try s.body().get().object?["password"])
+
+        // Removing a stored one sends it empty; typing again takes the removal back on the model's side.
+        s.texts[.password] = "typed"
+        s.toggleClear(.password)
+        XCTAssertEqual(s.text(.password), "")
+        XCTAssertTrue(s.changed)
+        XCTAssertEqual(try s.body().get()["password"], "")
+        s.toggleClear(.password)
+        XCTAssertNil(try s.body().get().object?["password"])
+        XCTAssertFalse(s.changed)
+
+        // A clone carries the passwords typed, never the flags, and takes passwords too.
+        s.texts[.sudoPassword] = "root"
+        let copy = try s.copy().get()
+        XCTAssertEqual(copy["sudoPassword"], "root")
+        XCTAssertNil(copy.object?["password"]); XCTAssertNil(copy.object?["hasPassword"])
+        let clone = SSHServerFormState(row: copy, passwords: true)
+        XCTAssertEqual(clone.text(.sudoPassword), "root")
+        XCTAssertEqual(try clone.body().get()["sudoPassword"], "root")
+        XCTAssertFalse(clone.stored(.password))
+    }
+
+    func testSSHServerListSaysWhetherPasswordsAreTaken() {
+        XCTAssertTrue(SSHServerFormState.takesPasswords([]))
+        XCTAssertFalse(SSHServerFormState.takesPasswords([["id": 1, "host": "h"]]))
+        XCTAssertTrue(SSHServerFormState.takesPasswords([["id": 1, "host": "h", "hasPassword": false]]))
+    }
 }
 
 private extension Result where Failure == FormProblem {
