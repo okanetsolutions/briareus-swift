@@ -111,11 +111,11 @@ struct SSHServerSettingsScreen: View {
             Text("Connection")
         }
         .listRowBackground(Theme.row)
-        // The passwords only on a server that takes them; it keeps them sealed and only says whether one is stored.
+        // Each password only on a server that takes it; it keeps them sealed and only says whether one is stored.
         if state.offersPasswords {
             Section {
-                secret(.password)
-                secret(.sudoPassword)
+                if state.offers(.password) { secret(.password) }
+                if state.offers(.sudoPassword) { secret(.sudoPassword) }
             } header: {
                 Text("Passwords")
             }

@@ -61,9 +61,13 @@ struct SSHServerSettingsScreen: View {
         }
         SettingsPair { field(.host) } right: { field(.port) }
         SettingsPair { field(.username) } right: { field(.key) }
-        // The passwords only on a server that takes them; it keeps them sealed and only says whether one is stored.
+        // Each password only on a server that takes it; it keeps them sealed and only says whether one is stored.
         if state.offersPasswords {
-            SettingsPair { secret(.password) } right: { secret(.sudoPassword) }
+            SettingsPair {
+                if state.offers(.password) { secret(.password) }
+            } right: {
+                if state.offers(.sudoPassword) { secret(.sudoPassword) }
+            }
         }
         SettingsPair {
             SettingsLabeledSelect(label: "Permission mode", text: SSHServerFormState.modeTitle(state.mode),
