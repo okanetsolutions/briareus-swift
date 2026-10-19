@@ -7,9 +7,12 @@ import CarPlay
 @available(iOS 26.4, *)
 extension CarAssistant {
     /// Straight to dictation when the project has no saved prompts; else a list of them, with dictation first. A failed read
-    /// offers dictation beside Retry, so a prompts outage never blocks voice feedback.
+    /// offers dictation beside Retry, so a prompts outage never blocks voice feedback. Nothing happens while the car is busy,
+    /// as dictation itself would refuse then and leave the list on its loading screen.
     func feedback(_ action: BoardAction) {
+        guard phase == .ready || phase == .notice else { return }
         guard case .pull(let number) = focus, let repo = project?.repo, let client = store.client else { return }
+        guard SavedPrompts.offered else { dictate(.feedback(action)); return }
         let template = CPListTemplate(title: action.label, sections: [])
         template.emptyViewTitleVariants = ["Loading saved prompts…"]
         guard controller.templates.count == 2 else { return }
