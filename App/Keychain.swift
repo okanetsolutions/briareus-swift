@@ -4,7 +4,7 @@ import Security
 enum Keychain {
     /// The device token, one per server origin.
     static let device = "com.okanetsolutions.briareus.device"
-    /// The OpenAI API key the voice mode connects with, under the account "openai".
+    /// The ElevenLabs API key the voice mode connects with, under the account "elevenlabs".
     static let voice = "com.okanetsolutions.briareus.voice"
 
     private static func query(_ origin: String, _ service: String) -> [String: Any] {
