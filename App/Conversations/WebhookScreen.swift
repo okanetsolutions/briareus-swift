@@ -4,23 +4,8 @@
 // written through /sessions/{id}/webhook; pushed from the conversation's menu.
 import SwiftUI
 
-/// The two caps, each a whole number in its range.
-private enum WebhookField: Hashable, CaseIterable {
-    case perHour, maxTurns
-    var key: String { self == .perHour ? "perHour" : "maxTurns" }
-    var label: String { self == .perHour ? "Deliveries an hour" : "Turns in a row" }
-    var hint: String {
-        self == .perHour ? "Past it a sender is answered 429 with Retry-After. From 1 to 600."
-            : "Turns deliveries may start with no word from you; past it the webhook pauses until you say anything in the conversation (or save this form). From 1 to 1000."
-    }
-    var range: ClosedRange<Int> { self == .perHour ? 1...600 : 1...1000 }
-    var fallback: Int { self == .perHour ? 30 : 10 }
-    var def: SettingsField { SettingsField(key: key, kind: .number, label: label, hint: hint) }
-}
-
-/// The three switches, by the key they are sent under.
-private enum WebhookToggle: String, CaseIterable {
-    case armed, instructions, sshUnattended
+/// What each switch says on this screen.
+private extension WebhookToggle {
     var label: String {
         switch self {
         case .armed: return "Take deliveries"
@@ -67,7 +52,7 @@ private final class WebhookModel: ObservableObject {
     private func fill() {
         guard let hook else { return }
         for t in WebhookToggle.allCases { toggles[t] = hook[t.rawValue].is(true) }
-        for f in WebhookField.allCases { texts[f] = String(hook[f.key].int ?? f.fallback) }
+        for f in WebhookField.allCases { texts[f] = f.text(hook) }
         dirty = false
     }
 
@@ -136,17 +121,15 @@ private final class WebhookModel: ObservableObject {
     @discardableResult
     func save() -> WebhookField? {
         guard !busy, hook != nil else { return nil }
-        var body: JSON = [:]
-        for t in WebhookToggle.allCases { body[t.rawValue] = .bool(on(t)) }
-        for f in WebhookField.allCases {
-            guard let n = Int((texts[f] ?? "").cTrimmed), f.range.contains(n) else {
-                show("\(f.label) must be a whole number from \(f.range.lowerBound) to \(f.range.upperBound).", ok: false)
-                return f
-            }
-            body[f.key] = JSON(n)
+        let switches = Dictionary(uniqueKeysWithValues: WebhookToggle.allCases.map { ($0, on($0)) })
+        switch webhookSave(switches: switches, caps: texts) {
+        case .invalid(let f):
+            show(f.invalid, ok: false)
+            return f
+        case .body(let body):
+            submit("set_session_webhook", body)
+            return nil
         }
-        submit("set_session_webhook", body)
-        return nil
     }
     func rotate() { if !busy { submit("rotate_session_webhook") } }
 
@@ -241,7 +224,7 @@ struct WebhookScreen: View {
         Section {
             check(.armed, enabled: editable && (unfit == nil || model.on(.armed)))
             ForEach(WebhookField.allCases, id: \.self) { f in
-                SettingsTextRow(def: f.def, text: model.binding(f), enabled: editable, focus: $focus, key: f, onSubmit: save)
+                SettingsTextRow(def: f.def(.number), text: model.binding(f), enabled: editable, focus: $focus, key: f, onSubmit: save)
             }
             check(.sshUnattended, enabled: editable)
             check(.instructions, enabled: editable && model.on(.armed))

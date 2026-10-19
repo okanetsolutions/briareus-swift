@@ -31,6 +31,7 @@ struct ScreenView: View {
         case .serverSettings: ServerSettingsScreen()
         case .templatesSettings: TemplatesSettingsScreen()
         case .webhook(let session): WebhookScreen(session: session)
+        case .mailWake(let session): MailWakeScreen(session: session)
         case .sessionStats(let session): SessionStatsScreen(session: session)
         case .serverStats: ServerStatsScreen()
         }

@@ -362,6 +362,39 @@ func mailMerge(_ shown: [MailMessage], _ page: [MailMessage], readable: Set<Int>
 extension MailAccounts {
     /// The mailboxes whose mail can be read: connected ones.
     var readable: Set<Int> { Set(accounts.filter { !$0.needsSignIn }.map(\.id)) }
+    /// Whether a mailbox may be written through (a message moved to the trash, a reply sent): connected, and not
+    /// read-only.
+    func writable(_ id: Int) -> Bool { readable.contains(id) && !(find(id)?.readOnly ?? false) }
+}
+
+// MARK: - Replying
+
+/// The longest reply the server takes, in characters.
+let mailReplyLimit = 100_000
+
+/// `POST …/messages/{id}/reply`'s body for the text typed: nil while it is blank or over the limit.
+func mailReplyBody(_ text: String) -> JSON? {
+    guard !text.cTrimmed.isEmpty, text.count <= mailReplyLimit else { return nil }
+    return ["text": .string(text)]
+}
+
+/// Whether the server's answer to a reply says the provider took it.
+func mailReplyAccepted(_ answer: JSON) -> Bool { answer["status"].string == "accepted" }
+
+/// What a refused reply means, in words. No answer at all (status 0: a timeout or a dropped connection) is as uncertain as
+/// a 502: the provider may have taken it.
+func mailReplyError(status: Int) -> String {
+    switch status {
+    case 403: return "This mailbox was connected read-only. Connect it again in Mail accounts with access to manage mail, then try again."
+    case 0, 502: return "The provider did not answer clearly, so the reply may have gone out. Sync the mailbox and check Sent before trying again."
+    case 400: return "The server refused the reply. Check that it has text and is not too long."
+    case 404: return "That message is no longer in the synced copy. Refresh the list."
+    case 409: return "This mailbox needs signing in again. Open Mail accounts."
+    case 401: return "This token expired or was revoked. Reconnect to the server."
+    case 429: return "The server is rate limiting mail requests. Try again after a pause."
+    case 503: return "Mail is unavailable on the server right now."
+    default: return "The reply could not be sent."
+    }
 }
 
 /// An https address whose host holds nothing a link could hide another in, for Open at the provider.

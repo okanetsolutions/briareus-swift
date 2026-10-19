@@ -1,5 +1,5 @@
-// The conversation header's buttons: the shared browser, the webhook, Resources, then stopping, reopening, closing and
-// deleting the session, each where the server and the token allow it.
+// The conversation header's buttons: the shared browser, the ⚡ Webhook, ✉ Mail wake, Resources, then stopping,
+// reopening, closing and deleting the session, each where the server and the token allow it.
 import SwiftUI
 
 @MainActor
@@ -18,6 +18,12 @@ func conversationHeaderButtons(_ model: ConversationModel, store: Store) -> [Hea
         let armed = s.raw["webhook"]["armed"].is(true)
         out.append(HeaderButton(glyph: "bolt", label: armed ? "\u{26A1} Webhook \u{25CF}" : "\u{26A1} Webhook",
                                 tip: armed ? "Webhook (on)" : "Webhook") { Navigator.shared.push(.webhook(session: s.raw)) })
+    }
+    // An admin token's too; the record's mailWake says whether a rule is on.
+    if store.supports("session_mail_wake") {
+        let on = mailWakeOn(s.raw)
+        out.append(HeaderButton(glyph: "envelope", label: on ? "\u{2709} Mail wake \u{25CF}" : "\u{2709} Mail wake",
+                                tip: on ? "Mail wake (on)" : "Mail wake") { Navigator.shared.push(.mailWake(session: s.raw)) })
     }
     // What the session costs the machine, for any token.
     if store.supports("session_stats") {
