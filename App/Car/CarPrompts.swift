@@ -6,7 +6,8 @@ import CarPlay
 // phone's sheet and the Mac's 📚 offer them.
 @available(iOS 26.4, *)
 extension CarAssistant {
-    /// Straight to dictation when the project has no saved prompts; else a list of them, with dictation first.
+    /// Straight to dictation when the project has no saved prompts; else a list of them, with dictation first. A failed read
+    /// offers dictation beside Retry, so a prompts outage never blocks voice feedback.
     func feedback(_ action: BoardAction) {
         guard case .pull(let number) = focus, let repo = project?.repo, let client = store.client else { return }
         let template = CPListTemplate(title: action.label, sections: [])
@@ -32,13 +33,13 @@ extension CarAssistant {
             template.updateSections([])
             template.emptyViewTitleVariants = ["Loading saved prompts…"]
             template.emptyViewSubtitleVariants = []
+            let dictated = self.store.canTranscribe
+                ? [self.item("Dictate", action.input?.label, symbol: "mic") { [weak self] in self?.dictate(.feedback(action)) }] : []
             do {
                 let prompts = try await SavedPrompts.shared.list(repo)
                 guard current() else { return }
                 guard !prompts.isEmpty else { self.dictate(.feedback(action)); return }
                 let words = Purpose.feedback(action).confirmation
-                let dictated = self.store.canTranscribe
-                    ? [self.item("Dictate", action.input?.label, symbol: "mic") { [weak self] in self?.dictate(.feedback(action)) }] : []
                 let saved = prompts.map { p in
                     self.item(p.title, p.everywhere ? "Every project" : nil, symbol: p.everywhere ? "globe" : "text.quote") { [weak self] in
                         self?.ask(CarText.variants(p.title, before: words.before, after: "”?"), yes: words.yes) { self?.run(action, input: p.body) }
@@ -53,7 +54,7 @@ extension CarAssistant {
                     guard let template else { return }
                     self?.loadFeedback(action, template: template, repo: repo, number: number, client: client)
                 }
-                template.updateSections(Self.fit([self.section(words, [retry])]))
+                template.updateSections(Self.fit([self.section(words, dictated + [retry])]))
             }
         }
     }
