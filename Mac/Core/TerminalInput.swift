@@ -45,6 +45,22 @@ struct TermTarget: Equatable, Sendable {
     var sftpArguments: [String] { ["-P", String(port), "-o", "User=\(user)", "-o", "ServerAliveInterval=30", "--", host] }
 }
 
+/// How a program is started on a pseudo-terminal so that it is its controlling terminal. macOS's posix_spawn opens the
+/// terminal (its file actions) before it starts the new session, so the program would have the terminal as its input and
+/// output but no /dev/tty: ssh then cannot ask about an unknown host key or for a password and fails with "Host key
+/// verification failed." The shell runs as the session's leader, opens the terminal again (which makes it the
+/// controlling one) and becomes the program.
+enum PTYLaunch {
+    static let shell = "/bin/sh"
+    /// $0 is the program, $1 the terminal's path, the rest the program's arguments.
+    static let script = "exec 0<>\"$1\" || exit 255; shift; exec \"$0\" \"$@\""
+
+    /// The shell's arguments (after its own name) that run `program` with `arguments` on the terminal at `terminal`.
+    static func arguments(program: String, terminal: String, arguments: [String]) -> [String] {
+        ["-c", script, program, terminal] + arguments
+    }
+}
+
 // MARK: - Keys
 
 /// The keys that are sent as escape sequences rather than as the text they type.

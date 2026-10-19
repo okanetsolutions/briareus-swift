@@ -1,7 +1,7 @@
 // The programs the SSH and SFTP sessions tabs run: OpenSSH's ssh in a pseudo-terminal, its sftp on pipes. Each starts as
-// the leader of a session of its own (so ssh gets the terminal as its controlling one, and everything it starts can be
-// ended together), in the home folder, where ~/.ssh is. What it prints is read on a queue of its own and handed to the
-// main thread; its end is reported once everything it printed has been.
+// the leader of a session of its own (so everything it starts can be ended together; ssh gets the terminal as its
+// controlling one through PTYLaunch), in the home folder, where ~/.ssh is. What it prints is read on a queue of its own
+// and handed to the main thread; its end is reported once everything it printed has been.
 import Darwin
 import Foundation
 
@@ -77,7 +77,8 @@ final class ChildProcess {
         posix_spawn_file_actions_init(&actions)
         defer { posix_spawn_file_actions_destroy(&actions) }
         if let slaveName {
-            // Opened after setsid, the terminal becomes the program's controlling one.
+            // Opened here, before posix_spawn's setsid, the terminal is not yet the controlling one; PTYLaunch's shell
+            // opens it again once the session is its own.
             posix_spawn_file_actions_addopen(&actions, 0, slaveName, O_RDWR, 0)
             posix_spawn_file_actions_adddup2(&actions, 0, 1)
             posix_spawn_file_actions_adddup2(&actions, 0, 2)
@@ -97,13 +98,15 @@ final class ChildProcess {
         posix_spawnattr_setsigdefault(&attributes, &all)
         posix_spawnattr_setsigmask(&attributes, &none)
 
-        let argv: [UnsafeMutablePointer<CChar>?] = ([path] + arguments).map { strdup($0) } + [nil]
+        let program = slaveName == nil ? path : PTYLaunch.shell
+        let programArguments = slaveName.map { PTYLaunch.arguments(program: path, terminal: $0, arguments: arguments) } ?? arguments
+        let argv: [UnsafeMutablePointer<CChar>?] = ([program] + programArguments).map { strdup($0) } + [nil]
         let envp: [UnsafeMutablePointer<CChar>?] = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
         defer { argv.forEach { free($0) }; envp.forEach { free($0) } }
         var pid: pid_t = 0
         let result = argv.withUnsafeBufferPointer { a in
             envp.withUnsafeBufferPointer { e in
-                posix_spawn(&pid, path, &actions, &attributes, a.baseAddress, e.baseAddress)
+                posix_spawn(&pid, program, &actions, &attributes, a.baseAddress, e.baseAddress)
             }
         }
         closeAfter.forEach { close($0) }

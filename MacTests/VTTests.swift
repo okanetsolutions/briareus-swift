@@ -295,6 +295,11 @@ final class VTTests: XCTestCase {
         t.port = 0; XCTAssertEqual(t.problem, "The port 0 is not from 1 to 65535.")
     }
 
+    func testPTYLaunchHandsTheProgramItsTerminalAndArguments() {
+        let args = PTYLaunch.arguments(program: "/usr/bin/ssh", terminal: "/dev/ttys004", arguments: ["-p", "22", "--", "h"])
+        XCTAssertEqual(args, ["-c", PTYLaunch.script, "/usr/bin/ssh", "/dev/ttys004", "-p", "22", "--", "h"])
+    }
+
     func testSelectionFollowsItsTextAndCopies() {
         let vt = VTerminal(cols: 10, rows: 2, scrollback: 100)
         vt.feed("hello world\r\nnext")
