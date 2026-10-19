@@ -25,7 +25,12 @@ struct ErrandInputSheet: View {
                 Section {
                     TextField(input.flatMap { $0.placeholder.isEmpty ? nil : $0.placeholder } ?? input?.label ?? "", text: $text, axis: .vertical)
                         .lineLimit(5...14).focused($focused)
-                    if !prompts.prompts.isEmpty {
+                    if prompts.loading {
+                        ProgressView("Loading saved prompts…")
+                    } else if let error = prompts.error {
+                        ErrorNotice(message: error)
+                        Button("Retry saved prompts") { Task { await prompts.load() } }
+                    } else if !prompts.prompts.isEmpty {
                         SavedPromptsMenu(prompts: prompts.prompts) { text = $0.inserted(into: text) }
                     }
                 } header: {

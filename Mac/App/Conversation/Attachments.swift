@@ -234,8 +234,9 @@ final class SavedPrompts {
 
     /// 📚's menu: the prompts to put in the composer, then Save the text as a prompt, Edit a prompt and Delete a prompt.
     func pick(repo: String?, text: String, insert: @escaping (SavedPrompt) -> Void) {
-        Task {
+        Task { [owner = NSApp.modalWindow] in
             let prompts = await list(repo)
+            guard owner == nil || NSApp.modalWindow === owner else { return }
             var rows = prompts.map { p in MenuRow(title: (p.everywhere ? "🌐 " : "") + p.title) }
             if prompts.isEmpty { rows.append(MenuRow(title: "No saved prompts yet", enabled: false)) }
             rows.append(.divider)
