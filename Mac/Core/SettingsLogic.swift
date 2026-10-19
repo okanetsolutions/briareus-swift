@@ -81,7 +81,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
     case repo, label, enabled, localDir, board
     case setup, php
     case dbName, dbExt, dbPool, dbRestore
-    case reviewAuthor, publish, autoLoop, testSheet, testRun, qaNotes, sheetSteps, feedbackSteps
+    case reviewAuthor, publish, autoLoop, babysit, testSheet, testRun, qaNotes, sheetSteps, feedbackSteps
     case budget, isSelf
     case env
     case run, profiles
@@ -110,6 +110,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .publish: return SettingsField(key: "reviewPublishInstructions", kind: .area, label: "Publish steps",
             hint: "Sent to the agent as its own turn after a ⌕ Code review: this text and nothing else. Leave empty to run no turn after the review.", rows: 4)
         case .autoLoop: return SettingsField(key: "autonomousReviewLoop", kind: .bool, label: "Autonomous review loop: fix every finding and review again")
+        case .babysit: return SettingsField(key: "babysitPrs", kind: .bool, label: "Babysit pull requests: start the errand each open one needs")
         case .testSheet: return SettingsField(key: "reviewTestSheet", kind: .bool, label: "Write a test sheet when the 🎬 QA errand is started")
         case .testRun: return SettingsField(key: "reviewTestRun", kind: .bool, label: "Execute the test sheet and record a video of each scenario")
         case .qaNotes: return SettingsField(key: "qaNotes", kind: .area, label: "QA notes",
@@ -130,12 +131,27 @@ enum ProjectField: Int, CaseIterable, Sendable {
         }
     }
     var key: String { def.key ?? "" }
+    /// What a switch's note under it says, on or off; nil for no note. Both apps draw it beneath the switch.
+    func note(on: Bool) -> String? {
+        switch self {
+        case .enabled where !on:
+            return "Inactive: no session can be started on it and it is left out of the project lists; its settings are kept for when it is switched back on."
+        case .autoLoop where on:
+            return "Every finding of a session's review-loop round, low severity and parked ones too, goes to ⚙ Implement feedback on its own, and the fix is pushed and reviewed again until a round comes back clean and code-approved. The loop's round limit and repeated-findings check still stop one that cannot converge. Sessions still need their review loop switched on; a standalone ⌕ Code review keeps its manual findings."
+        case .babysit where on:
+            return "Every 15 minutes the server starts, once per head commit, the first errand each open non-draft pull request needs: 🔀 Solve conflicts, else 🧪 Fix failing checks, else a ⌕ Code review when the board recommends one. It runs on the code review's runtime and skips pull requests labelled blocked or do-not-merge and those with a session open. With a PR author set, conflicts and checks are fixed only on that author's pull requests."
+        case .isSelf:
+            return "Tick it on the repository whose code is running right now, and on no other. An orchestrator on any project that finds a flaw in the tooling running it (a briefing, a worker tool, a loop) can then send a fix worker here, review loop armed, and merge its pull request once the loop approves and the checks are green. The running server keeps its code until you redeploy."
+        default:
+            return nil
+        }
+    }
     /// The project and how a checkout of it is set up share the first tab.
     var tab: ProjectTab {
         switch self {
         case .repo, .label, .enabled, .localDir, .board, .setup, .php: return .project
         case .dbName, .dbExt, .dbPool, .dbRestore: return .database
-        case .reviewAuthor, .publish, .autoLoop, .testSheet, .testRun, .qaNotes, .sheetSteps, .feedbackSteps: return .review
+        case .reviewAuthor, .publish, .autoLoop, .babysit, .testSheet, .testRun, .qaNotes, .sheetSteps, .feedbackSteps: return .review
         case .budget, .isSelf: return .orchestrator
         case .env: return .env
         case .run, .profiles: return .run

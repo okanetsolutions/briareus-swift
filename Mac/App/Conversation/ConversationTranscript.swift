@@ -37,6 +37,7 @@ struct TranscriptColumn: View, Equatable {
     /// The parts of the session the column shows: a poll that changed only the rest does not lay it out again.
     private static func sameShown(_ a: Session, _ b: Session) -> Bool {
         a.raw["error"] == b.raw["error"] && a.status == b.status && a.queued == b.queued && a.heldTriage == b.heldTriage
+            && a.backgroundTasks == b.backgroundTasks
     }
 
     private var can: Bool { !busy && !uncertain }
@@ -67,7 +68,7 @@ struct TranscriptColumn: View, Equatable {
             if let triage = session.heldTriage, Store.shared.supports("complete_findings") {
                 TriageBox(model: model, triage: triage, decisions: decisions, note: triageNote, enabled: can).padding(.top, 14)
             }
-            if session.isActive { WorkingLine(status: session.status).padding(.top, 12) }
+            if session.isActive { WorkingLine(status: session.status, background: session.backgroundTasks, answered: transcriptAnswered(blocks)).padding(.top, 12) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -312,22 +313,6 @@ private struct EventView: View, Equatable {
 
 private struct Line: Shape {
     func path(in rect: CGRect) -> Path { var p = Path(); p.move(to: CGPoint(x: rect.minX, y: rect.minY)); p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY)); return p }
-}
-
-/// The agent at work: the spinner's glyph in the accent and "Thinking…", "Queued…" or "Starting up…".
-private struct WorkingLine: View {
-    var status: String
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.12)) { context in
-            let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.12)
-            let verb = status == "queued" ? "Queued" : (status == "preparing" || status == "starting") ? "Starting up" : workingVerb(tick)
-            HStack(spacing: 8) {
-                Text(workingGlyph(tick)).font(Theme.bodySemibold).foregroundStyle(Theme.accent).frame(width: 16)
-                Text(verbatim: "\(verb)\u{2026}").font(Theme.footnote).foregroundStyle(Theme.muted)
-            }
-            .frame(height: 24)
-        }
-    }
 }
 
 // MARK: - The held review round
