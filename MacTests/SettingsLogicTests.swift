@@ -278,8 +278,10 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertTrue(s.tabChanged(.server))
 
         // Refused before the server would: a line break, or more than 1023 bytes.
-        s.texts[.password] = "a\nb"
-        XCTAssertNotNil(s.body().failure)
+        for bad in ["a\nb", "a\rb", "a\0b"] {
+            s.texts[.password] = bad
+            XCTAssertNotNil(s.body().failure)
+        }
         s.texts[.password] = String(repeating: "é", count: 512)
         XCTAssertNotNil(s.body().failure)
         s.texts[.password] = String(repeating: "é", count: 511)
@@ -294,15 +296,21 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertNotEqual(s.cue(.password), SSHServerField.password.def.cue)
         XCTAssertNil(try s.body().get().object?["password"])
 
-        // Removing a stored one sends it empty; typing again takes the removal back on the model's side.
-        s.texts[.password] = "typed"
+        // Removing a stored one sends it empty; unticked, it stays; typing one replaces it instead.
+        s.setText(.password, "typed")
         s.toggleClear(.password)
         XCTAssertEqual(s.text(.password), "")
         XCTAssertTrue(s.changed)
+        XCTAssertNotEqual(s.cue(.password), s.cue(.sudoPassword))
         XCTAssertEqual(try s.body().get()["password"], "")
         s.toggleClear(.password)
         XCTAssertNil(try s.body().get().object?["password"])
         XCTAssertFalse(s.changed)
+        s.toggleClear(.password)
+        s.setText(.password, "new")
+        XCTAssertTrue(s.clear.isEmpty)
+        XCTAssertEqual(try s.body().get()["password"], "new")
+        s.setText(.password, "")
 
         // A clone carries the passwords typed, never the flags, and takes passwords too.
         s.texts[.sudoPassword] = "root"

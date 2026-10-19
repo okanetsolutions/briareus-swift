@@ -650,7 +650,7 @@ enum SSHServerField: Int, CaseIterable, Sendable {
         case .password: return SettingsField(key: "password", kind: .text, label: "Password", cue: "empty = key authentication",
             hint: "Signs in with this password instead of a key. Stored encrypted and never shown again.", mono: true, secret: true)
         case .sudoPassword: return SettingsField(key: "sudoPassword", kind: .text, label: "Sudo password", cue: "empty = no sudo",
-            hint: "Lets agents run a command as root, on its own approval. Separate from the SSH login; stored encrypted and never shown again.",
+            hint: "Lets agents run a command as root. Root commands follow the permission mode like any other, so with Don’t ask anything they run without approval. Separate from the SSH login; stored encrypted and never shown again.",
             mono: true, secret: true)
         case .dbHost: return SettingsField(key: "dbHost", kind: .text, label: "Database host", cue: "127.0.0.1",
             hint: "Where the database listens, as seen from the SSH server itself. Leave empty for 127.0.0.1.", mono: true)
@@ -731,6 +731,11 @@ struct SSHServerFormState: Equatable, Sendable {
         if clear.contains(f) { return "Removed on save" }
         if stored(f) { return "Stored · type a new one to replace it" }
         return f.def.cue
+    }
+    /// A box's new text. A password typed replaces the stored one rather than removing it.
+    mutating func setText(_ f: SSHServerField, _ value: String) {
+        texts[f] = value
+        if !value.isEmpty { clear.remove(f) }
     }
     /// Marks a stored password for removal on save, emptying its box, or takes the mark back.
     mutating func toggleClear(_ f: SSHServerField) {
@@ -833,7 +838,7 @@ struct SSHServerFormState: Equatable, Sendable {
     static func passwordProblem(_ text: String, _ f: SSHServerField) -> String? {
         let name = f == .sudoPassword ? "The sudo password" : "The SSH password"
         if text.utf8.count > 1023 { return "\(name) is too long: at most 1023 bytes." }
-        if text.unicodeScalars.contains(where: { $0 == "\0" || $0 == "\r" || $0 == "\n" }) { return "\(name) cannot hold a line break." }
+        if text.unicodeScalars.contains(where: { $0 == "\0" || $0 == "\r" || $0 == "\n" }) { return "\(name) cannot hold a line break or a NUL character." }
         return nil
     }
 

@@ -44,9 +44,7 @@ final class SSHServerFormModel: ObservableObject {
             // The port boxes take digits only, five at most; the others up to 1024 characters, as their edits do.
             let value = f.def.kind == .number ? String(v.filter { $0.isASCII && $0.isNumber }.prefix(5)) : String(v.prefix(1024))
             guard value != self.state.text(f) else { return }
-            self.state.texts[f] = value
-            // A password typed replaces the stored one rather than removing it.
-            if !value.isEmpty { self.state.clear.remove(f) }
+            self.state.setText(f, value)
             self.changed()
         })
     }
