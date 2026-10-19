@@ -1,5 +1,5 @@
 // Runs the phone's real prompt loader against a controllable Store, without a server or UI.
-// swiftc -parse-as-library Mac/Core/*.swift App/Shared/SavedPrompts.swift scripts/check_saved_prompts.swift -o /tmp/check-saved-prompts
+// swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/Shared/SavedPrompts.swift scripts/check_saved_prompts.swift -o /tmp/check-saved-prompts
 import Foundation
 
 @MainActor
