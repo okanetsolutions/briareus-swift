@@ -20,7 +20,9 @@ def config_list(name, values):
         vals = dict(values)
         vals['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone' if kind == 'Debug' else '-O'
         vals['DEBUG_INFORMATION_FORMAT'] = 'dwarf' if kind == 'Debug' else 'dwarf-with-dsym'
-        if kind == 'Debug': vals['ENABLE_TESTABILITY'] = 'YES'; vals['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] = 'DEBUG'
+        # Debug builds only the run destination's architecture, as the source Swift packages (ElevenLabs, LiveKit) do;
+        # otherwise a simulator test build also compiles the app for x86_64 and cannot find their arm64-only modules.
+        if kind == 'Debug': vals['ENABLE_TESTABILITY'] = 'YES'; vals['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] = 'DEBUG'; vals['ONLY_ACTIVE_ARCH'] = 'YES'
         ids.append(put(name+kind, f'{{isa = XCBuildConfiguration; buildSettings = {settings(vals)}; name = {kind};}}'))
     return put(name+'configs', '{isa = XCConfigurationList; buildConfigurations = ('+','.join(ids)+',); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;}')
 
