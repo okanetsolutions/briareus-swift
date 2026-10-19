@@ -36,7 +36,7 @@ struct SettingsSidebar: View {
 
     @ViewBuilder private var content: some View {
         // This computer's own settings come first: they need no Admin token.
-        MeetingSettingsRow(selected: selected == Screen.meetingSettings.id)
+        ThisComputerRows(selected: selected == Screen.meetingSettings.id)
         // Mail under This computer, each mailbox a row as a project is (Windows #141).
         if MailSettingsModel.offered { MailSettingsRows(selected: selected) }
         let why = settingsUnavailable("settings_projects", path: "settings/projects", what: "Project settings", manage: "projects")
@@ -291,7 +291,7 @@ private struct SettingsBackRow: View {
 }
 
 /// A section's summary: its title, a muted note after it, and its ＋ New.
-private struct SectionHeader: View {
+struct SectionHeader: View {
     var title: String
     var note: String? = nil
     var onNew: (() -> Void)?
@@ -328,7 +328,7 @@ private struct Explanation: View {
 /// A row of the projects, the pool or the SSH servers: its dot (`.dot.idle` when on, the plain grey dot when off), its label,
 /// and its repository or address under it, with the pool's `db` tag after a project that claims a server. A project row
 /// that can move has ↑ and ↓ at the right end of its first line while it is hovered or open.
-private struct ItemRow: View {
+struct ItemRow: View {
     /// Which way the row can go now, and what a click on an arrow does with -1 or 1.
     struct Moves {
         var up: Bool
@@ -400,18 +400,6 @@ private struct MoveArrow: View {
         .buttonStyle(.plain)
         .help(up ? "Move up" : "Move down")
         .onHover { hovered = $0 }
-    }
-}
-
-/// "This computer": the meeting assistant's row, its dot on once an ElevenLabs API key is saved.
-private struct MeetingSettingsRow: View {
-    var selected: Bool
-    @ObservedObject private var meeting = Meeting.shared
-    var body: some View {
-        SectionHeader(title: "This computer", onNew: nil)
-        ItemRow(label: "🎙 Meeting assistant", sub: meeting.hasKey ? "ElevenLabs API key saved" : "add an ElevenLabs API key",
-                enabled: meeting.hasKey, selected: selected) { Navigator.shared.show(.meetingSettings) }
-        Color.clear.frame(height: 16)
     }
 }
 

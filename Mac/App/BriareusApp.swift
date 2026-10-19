@@ -52,7 +52,7 @@ enum LiveSessions {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
-            Store.shared.restore()
+            Store.shared.restore(); InputMonitor.install()
             Updater.shared.start()
             // The app always opens filling the screen.
             if let window = NSApp.windows.first, let screen = window.screen ?? NSScreen.main {
@@ -153,6 +153,7 @@ struct MainWindow: View {
             if !connected { navigator.reset(); SessionFeed.shared.stop() } else { SessionFeed.shared.start() }
         }
         .onAppear { if store.connected { SessionFeed.shared.start() } }
+        .overlay { SleepOverlay() }.task { await SleepModel.shared.watchIdle() }
     }
 
     /// main.c layout(): the 268px sidebar, the main column and, beside a conversation, the 272px panel, the dividers drawn
