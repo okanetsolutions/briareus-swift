@@ -1,7 +1,7 @@
 // A settings form saved as one record on the server (a project, a provider, a database or SSH server, a Forge account, a
 // Slack workspace), the same on the iPhone and the Mac: which operation creates, updates or deletes it, the body a save
 // sends with the record's id, how the answer fills the form again, and what leaving it unsaved says. Each form's own
-// state (its fields and `body()`) is in SettingsLogic.swift and AccountSettingsLogic.swift.
+// state (its fields and `body()`) is in SettingsLogic.swift, SSHServerLogic.swift and AccountSettingsLogic.swift.
 import Foundation
 
 /// The operations and words of one kind of record.

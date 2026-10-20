@@ -31,7 +31,7 @@ enum Destination: Hashable, Identifiable {
     case slackWorkspaceSettings(row: JSON?, defaults: JSON?)
     /// A project's voice conversation, or a hands-free one held to one of its conversations.
     case voice(repo: String, conversation: VoiceConversation? = nil)
-    /// The voice mode's OpenAI key and choices.
+    /// The voice mode's ElevenLabs key and choices.
     case voiceSettings
     /// A session's ⚡ Webhook: its settings, URLs and keys.
     case webhook(session: JSON)

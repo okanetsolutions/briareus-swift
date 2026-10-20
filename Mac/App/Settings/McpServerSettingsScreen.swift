@@ -289,14 +289,9 @@ struct McpServerSettingsScreen: View {
     private func secret(_ f: McpServerField) -> some View {
         var def = f.def
         def.cue = state.clear.contains(f) ? "Removed on save" : state.cue(f)
-        return VStack(alignment: .leading, spacing: 0) {
-            SettingsFieldBox(def: def, text: model.binding(f), focus: $focus, key: f) { focus = next(after: f) }
-            if state.stored(f) {
-                SettingsCheck(label: "Remove the stored \(f == .oauthClientSecret ? "secret" : f.def.label.lowercased()) on save",
-                              on: state.clear.contains(f), height: 24) { model.toggleClear(f) }
-                    .padding(.top, -6).padding(.bottom, 10)
-            }
-        }
+        return SettingsSecretBox(def: def, text: model.binding(f), focus: $focus, key: f, stored: state.stored(f), removing: state.clear.contains(f),
+                                 removeLabel: "Remove the stored \(f == .oauthClientSecret ? "secret" : f.def.label.lowercased()) on save",
+                                 onToggleRemove: { model.toggleClear(f) }) { focus = next(after: f) }
     }
     private func next(after f: McpServerField) -> McpServerField {
         let order: [McpServerField] = state.stdio ? [.name, .label, .command, .args, .env]

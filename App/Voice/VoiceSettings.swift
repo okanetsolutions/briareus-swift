@@ -1,17 +1,17 @@
 import Foundation
 
-/// What the voice mode connects with: the OpenAI API key, kept in this device's Keychain, and the choices kept in
+/// What the voice mode connects with: the ElevenLabs API key, kept in this device's Keychain, and the choices kept in
 /// its defaults.
 @MainActor
 final class VoiceSettings: ObservableObject {
     static let shared = VoiceSettings()
 
-    private static let account = "openai"
-    private enum Key { static let voice = "voice.voice", idle = "voice.idleMinutes" }
+    private static let account = "elevenlabs"
+    private enum Key { static let voice = "voice.elevenlabs.voice", idle = "voice.idleMinutes" }
 
     @Published private(set) var hasKey: Bool
     @Published var voice: String { didSet { UserDefaults.standard.set(voice, forKey: Key.voice) } }
-    /// Minutes of silence after which a conversation ends by itself, as GPT-Realtime bills the audio it hears.
+    /// Minutes of silence after which a conversation ends by itself, as ElevenLabs bills conversation time.
     @Published var idleMinutes: Int { didSet { UserDefaults.standard.set(idleMinutes, forKey: Key.idle) } }
 
     private init() {
@@ -27,12 +27,16 @@ final class VoiceSettings: ObservableObject {
         let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         try Keychain.save(key, origin: Self.account, service: Keychain.voice)
+        VoiceSession.shared.stop()
         hasKey = true
+        UserDefaults.standard.removeObject(forKey: "voice.elevenlabs.resources")
     }
 
     func removeKey() throws {
         try Keychain.remove(Self.account, service: Keychain.voice)
+        VoiceSession.shared.stop()
         hasKey = false
+        UserDefaults.standard.removeObject(forKey: "voice.elevenlabs.resources")
     }
 }
 
@@ -40,7 +44,7 @@ final class VoiceSettings: ObservableObject {
 @MainActor
 final class VoiceHistory: ObservableObject {
     static let shared = VoiceHistory()
-    private static let key = "voice.history"
+    private static let key = "voice.elevenlabs.history"
     /// The newest kept; older ones fall off.
     private static let limit = 1000
 

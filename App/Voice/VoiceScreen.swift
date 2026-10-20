@@ -1,4 +1,4 @@
-// A project's voice conversation, opened from its screen: GPT-Realtime about that project's agents, pull requests and
+// A project's voice conversation, opened from its screen: ElevenLabs Agents about that project's agents, pull requests and
 // findings, and nothing else. Opened from one of its conversations, it is a hands-free line to that conversation's agent
 // alone. What both sides said scrolls as captions; the actions it ran on the server are listed under them.
 import SwiftUI
@@ -79,7 +79,7 @@ struct VoiceScreen: View {
                     .foregroundStyle(Theme.warn)
             }
             if !settings.hasKey {
-                Button("Add your OpenAI API key") { navigate(.voiceSettings) }.padding(.top, 4)
+                Button("Add your ElevenLabs API key") { navigate(.voiceSettings) }.padding(.top, 4)
             }
         }
         .padding(.top, 24)
@@ -165,7 +165,7 @@ struct VoiceScreen: View {
     @ViewBuilder private var status: some View {
         switch voice.phase {
         case _ where elsewhere: Text("Tap to end the conversation about \(voice.about ?? "another project")")
-        case .off: Text(settings.hasKey ? (conversation != nil ? "Tap to go hands-free" : "Tap to talk about \(project.title)") : "Add an OpenAI API key in Voice settings")
+        case .off: Text(settings.hasKey ? (conversation != nil ? "Tap to go hands-free" : "Tap to talk about \(project.title)") : "Add an ElevenLabs API key in Voice settings")
         case .connecting: Text("Connecting…")
         case .closing: Text("Ending…")
         case .live:
