@@ -170,6 +170,41 @@ final class SSHServerLogicTests: XCTestCase {
         XCTAssertEqual(SSHServerFormState.takesPasswords([["id": 1, "host": "h", "hasPassword": true, "hasSudoPassword": false]]),
                        [.password, .sudoPassword])
     }
+
+    func testSSHServerFoldersFollowTheSidebarsProjects() {
+        let servers: [JSON] = [
+            ["id": 1, "repo": "o/b", "label": "web", "host": "10.0.0.1", "username": "forge"],
+            ["id": 2, "repo": "o/a", "host": "db.example.com", "username": "deploy"],
+            ["id": 3, "repo": "", "host": "spare"],
+            ["id": 4, "repo": "o/b", "host": "10.0.0.2", "username": "forge"],
+            ["id": 5, "repo": "z/gone", "host": "old"],
+            ["id": 6, "repo": "m/gone", "host": "older"],
+        ]
+        let projects = [Project(repo: "o/a", label: "Alpha"), Project(repo: "o/b"), Project(repo: "o/none")]
+        let folders = sshServerFolders(servers, projects: projects)
+        XCTAssertEqual(folders.map(\.repo), ["o/a", "o/b", "m/gone", "z/gone", ""])
+        XCTAssertEqual(folders.map(\.title), ["Alpha", "o/b", "m/gone", "z/gone", nil])
+        XCTAssertEqual(folders[1].servers.map { $0["id"].int }, [1, 4])
+    }
+
+    func testSSHServerFoldersSearch() {
+        let servers: [JSON] = [
+            ["id": 1, "repo": "o/b", "label": "Web", "host": "10.0.0.1", "username": "forge"],
+            ["id": 2, "repo": "o/b", "host": "10.0.0.2", "username": "deploy"],
+            ["id": 3, "repo": "o/a", "host": "db.example.com", "username": "deploy"],
+            ["id": 4, "repo": "", "host": "spare"],
+        ]
+        let projects = [Project(repo: "o/a", label: "Alpha"), Project(repo: "o/b")]
+        func ids(_ q: String) -> [[Int?]] { sshServerFolders(servers, projects: projects, query: q).map { $0.servers.map { $0["id"].int } } }
+        XCTAssertEqual(ids("  "), [[3], [1, 2], [4]])
+        XCTAssertEqual(ids("web"), [[1]])
+        XCTAssertEqual(ids("DEPLOY"), [[3], [2]])
+        // A project's title or repository keeps all of its servers.
+        XCTAssertEqual(ids("alpha"), [[3]])
+        XCTAssertEqual(ids("o/b"), [[1, 2]])
+        XCTAssertEqual(ids("spare"), [[4]])
+        XCTAssertEqual(ids("nothing"), [])
+    }
 }
 
 private extension Result where Failure == FormProblem {

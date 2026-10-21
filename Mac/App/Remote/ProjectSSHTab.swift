@@ -58,26 +58,8 @@ struct ProjectSSHTab: View {
                     .frame(width: lw)
                     // A rule between the list and the sessions.
                     Rectangle().fill(Theme.line).frame(width: 1).padding(.leading, 8).padding(.trailing, 9)
-                    VStack(alignment: .leading, spacing: 0) {
-                        if let shown {
-                            FlowLayout(spacing: 4, lineSpacing: 4) {
-                                ForEach(sessions.sessions.filter { $0.group == repo }) { t in
-                                    RemoteSessionTab(label: t.label, active: t === shown, live: t.running,
-                                                     select: { sessions.setActive(t) }, close: { Self.close(t) })
-                                }
-                            }
-                            .padding(.bottom, 8)
-                            TerminalHost(session: shown)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .frame(minHeight: 200)
-                        } else {
-                            EmptyNote(title: "No open sessions",
-                                      detail: "Click a server on the left to open an SSH session here. It connects from this Mac straight to the server with your own OpenSSH client, so your keys, ssh-agent and ~/.ssh/config apply, and password prompts appear in the terminal.")
-                                .padding(.top, 40)
-                            Spacer(minLength: 0)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    SSHSessionsPane(sessions: sessions.sessions.filter { $0.group == repo }, shown: shown,
+                                    select: { sessions.setActive($0) })
                 }
                 .frame(minHeight: 240)
             }
@@ -87,7 +69,11 @@ struct ProjectSSHTab: View {
 
     // MARK: - Connecting
 
-    private func connect(_ row: RemoteServer) {
+    private func connect(_ row: RemoteServer) { Self.connect(row, repo: repo) }
+
+    /// Opens an SSH session to the server under the project `repo` (or returns to the one open to it).
+    @MainActor static func connect(_ row: RemoteServer, repo: String) {
+        let sessions = SSHSessions.shared
         if let open = sessions.find(row.key("ssh")) { sessions.setActive(open); return }
         if let error = sessions.open(row.target("ssh", group: repo)) {
             Dialogs.alert("Could not connect to \(row.name)", error)
@@ -105,9 +91,14 @@ struct ProjectSSHTab: View {
     /// The session on show: "SSH user@host:port · connected · <title>", its dot, Reconnect (while it is closed), Close, and
     /// ⟳ (which reads the project's SSH servers again).
     @MainActor static func header(repo: String, refresh: (() -> Void)? = nil) -> RemoteHeader {
+        header(session: SSHSessions.shared.shown(group: repo), refresh: refresh, refreshTip: "Read the project's SSH servers again")
+    }
+
+    /// The header for `session` on show, whichever page shows it; ⟳ says what it reads again with `refreshTip`.
+    @MainActor static func header(session: TerminalSession?, refresh: (() -> Void)?, refreshTip: String) -> RemoteHeader {
         var buttons: [HeaderButton] = []
         var subtitle: String?, status: String?
-        if let t = SSHSessions.shared.shown(group: repo) {
+        if let t = session {
             let title = t.title ?? ""
             subtitle = "SSH \(t.display) \u{00B7} \(t.running ? "connected" : "closed")\(title.isEmpty ? "" : " \u{00B7} \(title)")"
             status = t.running ? "idle" : "closed"
@@ -117,8 +108,39 @@ struct ProjectSSHTab: View {
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE711), tip: "Close this session") { close(t) })
         }
         if let refresh {
-            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the project's SSH servers again", action: refresh))
+            buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: refreshTip, action: refresh))
         }
         return RemoteHeader(subtitle: subtitle, status: status, buttons: buttons)
+    }
+}
+
+/// The open sessions as tabs over the terminal of the one on show, or how to open one while none is: the right of the
+/// project's SSH sessions tab and of the SSH servers page.
+struct SSHSessionsPane: View {
+    var sessions: [TerminalSession]
+    var shown: TerminalSession?
+    var select: (TerminalSession) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let shown {
+                FlowLayout(spacing: 4, lineSpacing: 4) {
+                    ForEach(sessions) { t in
+                        RemoteSessionTab(label: t.label, active: t === shown, live: t.running,
+                                         select: { select(t) }, close: { ProjectSSHTab.close(t) })
+                    }
+                }
+                .padding(.bottom, 8)
+                TerminalHost(session: shown)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minHeight: 200)
+            } else {
+                EmptyNote(title: "No open sessions",
+                          detail: "Click a server on the left to open an SSH session here. It connects from this Mac straight to the server with your own OpenSSH client, so your keys, ssh-agent and ~/.ssh/config apply, and password prompts appear in the terminal.")
+                    .padding(.top, 40)
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }

@@ -264,3 +264,36 @@ struct SSHServerFormState: Equatable, Sendable {
         return "\(user.map { "\($0)@" } ?? "")\(host):\(fieldText(row, .port)) · \(repo)"
     }
 }
+
+// MARK: - The SSH servers page
+
+/// A project's folder on the SSH servers page: the servers registered for it, in Settings' order.
+struct SSHServerFolder: Equatable, Sendable, Identifiable {
+    /// The project's repository; "" for the servers registered for no project.
+    var repo: String
+    /// The project's label, else its repository; nil for the servers registered for no project.
+    var title: String?
+    var servers: [JSON]
+    var id: String { repo }
+}
+
+/// The SSH servers page's folders: one per project that has servers, in the sidebar's order (`projects`), then projects
+/// the sidebar does not list by repository, then the servers with no project. `query` keeps the servers whose label, host
+/// or username holds it, and every server of a project whose title or repository holds it; a folder left empty goes.
+func sshServerFolders(_ servers: [JSON], projects: [Project], query: String = "") -> [SSHServerFolder] {
+    let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    func holds(_ text: String?) -> Bool { q.isEmpty || (text ?? "").range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+    var byRepo: [String: [JSON]] = [:]
+    for s in servers { byRepo[s["repo"].string ?? "", default: []].append(s) }
+    let listed = projects.map(\.repo).filter { byRepo[$0] != nil && !$0.isEmpty }
+    let unlisted = byRepo.keys.filter { !$0.isEmpty && !listed.contains($0) }
+        .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    let order = listed + unlisted + (byRepo[""] != nil ? [""] : [])
+    return order.compactMap { repo in
+        let title: String? = repo.isEmpty ? nil : projects.first { $0.repo == repo }?.title ?? repo
+        let all = byRepo[repo] ?? []
+        let kept = !repo.isEmpty && (holds(title) || holds(repo)) ? all
+            : all.filter { holds($0["label"].string) || holds($0["host"].string) || holds($0["username"].string) }
+        return kept.isEmpty ? nil : SSHServerFolder(repo: repo, title: title, servers: kept)
+    }
+}
