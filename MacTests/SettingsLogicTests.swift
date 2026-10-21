@@ -155,6 +155,22 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertEqual(r.models, "a\nb")
     }
 
+    func testProviderLoginLanded() {
+        let signedIn: JSON = ["loggedIn": true, "email": "a@b", "plan": "plus", "checkedAt": "2026-10-21T10:00:00Z"]
+        // Logged out when Log in was pressed: any login is the new one.
+        XCTAssertTrue(ProviderStatusText.loginLanded(from: ["loggedIn": false], status: ["auth": signedIn]))
+        XCTAssertTrue(ProviderStatusText.loginLanded(from: .null, status: ["auth": signedIn]))
+        XCTAssertFalse(ProviderStatusText.loginLanded(from: ["loggedIn": false], status: ["auth": ["loggedIn": false]]))
+        // Logged in already: the same login read again keeps the code up, another account is the new login.
+        var reread = signedIn
+        reread["checkedAt"] = "2026-10-21T10:00:10Z"
+        XCTAssertFalse(ProviderStatusText.loginLanded(from: signedIn, status: ["auth": reread]))
+        var other = signedIn
+        other["email"] = "c@d"
+        XCTAssertTrue(ProviderStatusText.loginLanded(from: signedIn, status: ["auth": other]))
+        XCTAssertFalse(ProviderStatusText.loginLanded(from: signedIn, status: ["auth": ["loggedIn": false]]))
+    }
+
     func testProviderQuota() {
         let payload: JSON = ["providers": [
             ["id": "claude", "label": "Claude", "available": true, "auth": ["loggedIn": true],

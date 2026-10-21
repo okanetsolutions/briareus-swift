@@ -457,6 +457,16 @@ enum ProviderStatusText {
         if logged.is(false) { return (detail.map { "Not connected: \($0)" } ?? "Not connected", dot) }
         return ("Connection not checked yet", dot)
     }
+    /// A device login started when the status's `auth` was `from` has landed: the status says logged in, and either it
+    /// did not then or the login it names changed. An entry logged in already reads as logged in before the new one lands.
+    static func loginLanded(from: JSON, status: JSON) -> Bool {
+        guard status["auth"]["loggedIn"].is(true) else { return false }
+        guard from["loggedIn"].is(true) else { return true }
+        var was = from, now = status["auth"]
+        // When it was read says nothing about whose login it is.
+        was.remove("checkedAt"); now.remove("checkedAt")
+        return was != now
+    }
     /// When a time falls: the clock today, the weekday and the clock on another day, as the Windows client prints resets.
     static func when(_ iso: String?, now: Date = Date(), timeZone: TimeZone = .current) -> String? {
         guard let date = boardDateParse(iso) else { return nil }

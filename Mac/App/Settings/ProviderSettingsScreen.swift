@@ -21,8 +21,9 @@ final class ProviderFormModel: ObservableObject {
     @Published var testResult: String?
     @Published var testFailed = false
     @Published var testing = false
-    /// codex's code to type on its confirm page.
+    /// codex's code to type on its confirm page, kept until the status shows a login other than `loginFrom`, its `auth` at Log in.
     @Published var deviceCode: String?
+    private var loginFrom: JSON = .null
     /// A claude login waits for the code its authorization page shows.
     @Published var codeWanted = false
     @Published var loginCode = ""
@@ -113,7 +114,7 @@ final class ProviderFormModel: ObservableObject {
                 self.status = r["status"]
                 self.statusError = nil
                 // A login that landed shows in the sidebar's own login tag.
-                if self.status["auth"]["loggedIn"].is(true) && self.deviceCode != nil {
+                if self.deviceCode != nil && ProviderStatusText.loginLanded(from: self.loginFrom, status: self.status) {
                     self.deviceCode = nil
                     post(.settingsProvidersChanged, ["openFirst": false])
                 }
@@ -130,8 +131,7 @@ final class ProviderFormModel: ObservableObject {
         let claude = state.binary == "claude"
         let op = claude ? "provider_login_start" : "provider_login"
         guard Store.shared.supports(op) else { return }
-        deviceCode = nil; codeWanted = false
-        loggingIn = true
+        deviceCode = nil; codeWanted = false; loggingIn = true; loginFrom = status["auth"]
         Task {
             defer { loggingIn = false }
             do {
