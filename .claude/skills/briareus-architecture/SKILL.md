@@ -83,7 +83,7 @@ Next: the pull request screens still read the `pr` JSON directly (`model.pr["...
 
 ## Oversized files
 
-The ratchet blocks growth above 300 lines. The largest at the time of writing: `Mac/App/Board/ProjectFilesTab.swift` (1114), `Mac/App/Board/PullScreen.swift` (1013), `Mac/App/Conversation/SharedBrowserScreen.swift` (989), `Mac/App/Findings/FindingsScreen.swift` (891), `Mac/App/Conversation/ConversationScreen.swift` (811), `App/Board/IssueScreen.swift` (798), `App/Conversations/SharedBrowserScreen.swift` (780), `App/Board/PullScreen.swift` (778). Run `find App Mac/App -name '*.swift' | xargs wc -l | sort -n | tail -30` for the current list.
+The ratchet blocks growth above 300 lines. The largest at the time of writing: `Mac/App/Board/ProjectFilesTab.swift` (1114), `Mac/App/Conversation/SharedBrowserScreen.swift` (989), `Mac/App/Board/PullScreen.swift` (956), `Mac/App/Findings/FindingsScreen.swift` (891), `Mac/App/Conversation/ConversationScreen.swift` (811), `App/Board/IssueScreen.swift` (798), `App/Conversations/SharedBrowserScreen.swift` (780), `App/Board/PullScreen.swift` (778). Run `find App Mac/App -name '*.swift' | xargs wc -l | sort -n | tail -30` for the current list.
 
 ## Recipe: splitting an oversized screen
 
