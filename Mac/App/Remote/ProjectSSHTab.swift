@@ -110,19 +110,23 @@ struct ProjectSSHTab: View {
 struct SSHSessionsPane: View {
     var sessions: [TerminalSession]
     var shown: TerminalSession?
+    /// The tabs' labels, one per session; nil for each session's own.
+    var labels: [String]? = nil
+    /// The tabs hold every project's sessions, so Ctrl+Tab steps through them all rather than the shown one's project's.
+    var everyProject = false
     var select: (TerminalSession) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let shown {
                 FlowLayout(spacing: 4, lineSpacing: 4) {
-                    ForEach(sessions) { t in
-                        RemoteSessionTab(label: t.label, active: t === shown, live: t.running,
+                    ForEach(Array(sessions.enumerated()), id: \.element.id) { i, t in
+                        RemoteSessionTab(label: labels?[i] ?? t.label, active: t === shown, live: t.running,
                                          select: { select(t) }, close: { ProjectSSHTab.close(t) })
                     }
                 }
                 .padding(.bottom, 8)
-                TerminalHost(session: shown)
+                TerminalHost(session: shown, everyProject: everyProject)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .frame(minHeight: 200)
             } else {

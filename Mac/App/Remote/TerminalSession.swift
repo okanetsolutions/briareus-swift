@@ -195,14 +195,13 @@ final class SSHSessions: ObservableObject {
         return sessions.first { $0.group == group }
     }
 
-    /// Ctrl+Tab: the next (or previous) session of the same project.
-    func step(from s: TerminalSession, backward: Bool) {
-        guard let i = sessions.firstIndex(where: { $0 === s }) else { return }
-        let n = sessions.count
-        for step in 1..<max(n, 1) {
-            let next = sessions[(i + (backward ? n - step : step)) % n]
-            if next.group == s.group { setActive(next); return }
-        }
+    /// Ctrl+Tab: the next (or previous) session of the same project, or of any project on a page showing them all
+    /// (Core's terminalStep).
+    func step(from s: TerminalSession, backward: Bool, everyProject: Bool) {
+        guard let i = sessions.firstIndex(where: { $0 === s }),
+              let next = terminalStep(groups: sessions.map(\.group), from: i, backward: backward, everyProject: everyProject)
+        else { return }
+        setActive(sessions[next])
     }
 
     /// Ends every session, as the app quits.

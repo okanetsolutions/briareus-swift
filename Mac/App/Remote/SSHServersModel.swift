@@ -23,9 +23,13 @@ final class SSHServersModel: ObservableObject {
     private var signOut: AnyCancellable?
 
     private init() {
-        // The servers changed in Settings: the page reads them again once it has read them.
+        // The servers changed in Settings: the page reads them again once it has read them or is reading them (a read
+        // under way may answer with the list from before the change, so it is dropped for a new one).
         serversWatch = NotificationCenter.default.addObserver(forName: .sshServersChanged, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { if SSHServersModel.shared.loaded { SSHServersModel.shared.revisit() } }
+            MainActor.assumeIsolated {
+                let model = SSHServersModel.shared
+                if model.loaded || model.task != nil { model.refresh() }
+            }
         }
         // Signing out (or a revoked token): the servers read from that server go with it.
         signOut = Store.shared.$client.map { $0 != nil }.removeDuplicates().dropFirst().sink { connected in
@@ -56,13 +60,11 @@ final class SSHServersModel: ObservableObject {
         read()
     }
 
-    /// Whether a project's folder shows its servers: unless folded shut, and always while searching.
-    func isOpen(_ repo: String) -> Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty || !folded.contains(repo) }
+    /// Whether a project's folder shows its servers (Core's sshServerFolderOpen).
+    func isOpen(_ repo: String) -> Bool { sshServerFolderOpen(repo, folded: folded, query: query) }
 
-    /// Folds a project's folder shut, or opens it.
-    func toggle(_ repo: String) {
-        if folded.contains(repo) { folded.remove(repo) } else { folded.insert(repo) }
-    }
+    /// Folds a project's folder shut, or opens it; nothing while searching (Core's sshServerFolderToggled).
+    func toggle(_ repo: String) { folded = sshServerFolderToggled(repo, folded: folded, query: query) }
 
     /// A click on a server: an SSH session to it under its project, or the one open to it on show.
     func connect(_ server: RemoteServer, repo: String) { SSHSessions.shared.connect(server, group: repo) }

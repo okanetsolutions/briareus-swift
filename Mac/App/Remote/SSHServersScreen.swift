@@ -34,7 +34,11 @@ struct SSHServersScreen: View {
                     .frame(width: min(ProjectSSHTab.listWidth, geo.size.width / 3))
                 // A rule between the list and the sessions.
                 Rectangle().fill(Theme.line).frame(width: 1).padding(.leading, 8).padding(.trailing, 9)
-                SSHSessionsPane(sessions: sessions.sessions, shown: sessions.active, select: { sessions.setActive($0) })
+                // Every project's sessions in one row: a label two projects share says whose it is, and Ctrl+Tab steps
+                // through them all.
+                SSHSessionsPane(sessions: sessions.sessions, shown: sessions.active,
+                                labels: sshSessionTabLabels(sessions.sessions.map(\.target), projects: projects.projects),
+                                everyProject: true, select: { sessions.setActive($0) })
             }
             .frame(minHeight: 240)
         }

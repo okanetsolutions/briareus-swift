@@ -80,7 +80,8 @@ private struct SSHServerFolderLine: View {
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
-        .accessibilityLabel(title)
+        // The count and the dot are read out with the name, as the line shows them.
+        .accessibilityLabel("\(title), \(servers == 1 ? "1 server" : "\(servers) servers")\(live ? ", connected" : "")")
         .accessibilityValue(open ? "Expanded" : "Collapsed")
     }
 }
