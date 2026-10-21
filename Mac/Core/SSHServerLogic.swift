@@ -264,3 +264,64 @@ struct SSHServerFormState: Equatable, Sendable {
         return "\(user.map { "\($0)@" } ?? "")\(host):\(fieldText(row, .port)) · \(repo)"
     }
 }
+
+// MARK: - The SSH servers page
+
+/// A project's folder on the SSH servers page: the servers registered for it, in Settings' order.
+struct SSHServerFolder: Equatable, Sendable, Identifiable {
+    /// The project's repository; "" for the servers registered for no project.
+    var repo: String
+    /// The project's label, else its repository; nil for the servers registered for no project.
+    var title: String?
+    var servers: [JSON]
+    var id: String { repo }
+}
+
+/// The SSH servers page's folders: one per project that has servers, in the sidebar's order (`projects`), then projects
+/// the sidebar does not list by repository, then the servers with no project. `query` keeps the servers whose label, host
+/// or username holds it, and every server of a project whose title or repository holds it; a folder left empty goes.
+func sshServerFolders(_ servers: [JSON], projects: [Project], query: String = "") -> [SSHServerFolder] {
+    let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    func holds(_ text: String?) -> Bool { q.isEmpty || (text ?? "").range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+    var byRepo: [String: [JSON]] = [:]
+    for s in servers { byRepo[s["repo"].string ?? "", default: []].append(s) }
+    let listed = projects.map(\.repo).filter { byRepo[$0] != nil && !$0.isEmpty }
+    let unlisted = byRepo.keys.filter { !$0.isEmpty && !listed.contains($0) }
+        .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    let order = listed + unlisted + (byRepo[""] != nil ? [""] : [])
+    return order.compactMap { repo in
+        let title: String? = repo.isEmpty ? nil : projects.first { $0.repo == repo }?.title ?? repo
+        let all = byRepo[repo] ?? []
+        let kept = !repo.isEmpty && (holds(title) || holds(repo)) ? all
+            : all.filter { holds($0["label"].string) || holds($0["host"].string) || holds($0["username"].string) }
+        return kept.isEmpty ? nil : SSHServerFolder(repo: repo, title: title, servers: kept)
+    }
+}
+
+/// Whether the SSH servers page's search holds anything.
+func sshServerSearching(_ query: String) -> Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+/// Whether a project's folder shows its servers: unless it is folded shut (`folded`, by repository), and always while
+/// searching, so a match is never hidden.
+func sshServerFolderOpen(_ repo: String, folded: Set<String>, query: String) -> Bool {
+    sshServerSearching(query) || !folded.contains(repo)
+}
+
+/// The folded folders after a click on a project's folder line: it folds shut or opens. While searching every folder
+/// shows open, so a click changes nothing rather than one that shows only once the search is cleared.
+func sshServerFolderToggled(_ repo: String, folded: Set<String>, query: String) -> Set<String> {
+    if sshServerSearching(query) { return folded }
+    var next = folded
+    if next.contains(repo) { next.remove(repo) } else { next.insert(repo) }
+    return next
+}
+
+/// The tab labels on the SSH servers page, which shows every project's sessions in one row: each session's own label
+/// (`TermTarget.tabLabel`), with its project's title after it when a session of another project has the same label.
+func sshSessionTabLabels(_ targets: [TermTarget], projects: [Project]) -> [String] {
+    targets.map { t in
+        let clash = targets.contains { $0.tabLabel == t.tabLabel && $0.group != t.group }
+        guard clash, !t.group.isEmpty else { return t.tabLabel }
+        return "\(t.tabLabel) \u{00B7} \(projects.first { $0.repo == t.group }?.title ?? t.group)"
+    }
+}

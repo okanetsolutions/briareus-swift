@@ -42,6 +42,12 @@ enum SidebarCommon {
     /// The foot's ⚙: Settings take the sidebar's place, as the Windows client's settings page has a sidebar of its own.
     static func openSettings() { Navigator.main.sidebarMode = .settings }
 
+    /// The foot's ❯: every SSH server in a folder per project, to connect to; nil for a token that may not read them.
+    static var sshServers: (() -> Void)? {
+        guard RemoteRegistry.offered else { return nil }
+        return { Navigator.main.show(.sshServers) }
+    }
+
     static func signOut() {
         guard Dialogs.confirm("Sign out of this server?",
                               "The device token and the saved conversations are removed from this computer. Revoke the token itself in web Settings.",
@@ -63,7 +69,8 @@ private struct SidebarScreenFrame<Content: View>: View {
                 .padding(.horizontal, Theme.sidebarMargin)
                 .padding(.top, 10).padding(.bottom, 14)
             SidebarScroll { content() }
-            SidebarFooter(sessions: sessions, settings: SidebarCommon.openSettings, signOut: SidebarCommon.signOut)
+            SidebarFooter(sessions: sessions, settings: SidebarCommon.openSettings, sshServers: SidebarCommon.sshServers,
+                          signOut: SidebarCommon.signOut)
         }
     }
 }

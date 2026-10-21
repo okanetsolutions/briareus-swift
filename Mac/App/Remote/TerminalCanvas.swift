@@ -7,6 +7,8 @@ import SwiftUI
 final class TerminalCanvas: NSView, NSTextInputClient, NSMenuItemValidation {
     static let pad: CGFloat = 6
     private weak var session: TerminalSession?
+    /// Shown among every project's sessions, so Ctrl+Tab steps through them all (set by TerminalHost).
+    var stepsEveryProject = false
     private let scroller = NSScroller()
     private var fonts: [NSFont] = []          // regular, bold, italic, bold italic
     private(set) var cellWidth: CGFloat = 8
@@ -352,8 +354,8 @@ final class TerminalCanvas: NSView, NSTextInputClient, NSMenuItemValidation {
             case .copy: copySelection()
             case .copyAndClearSelection: copySelection(); s.view.clearSelection(); needsDisplay = true
             case .paste: pasteClipboard()
-            case .nextTab: SSHSessions.shared.step(from: s, backward: false)
-            case .previousTab: SSHSessions.shared.step(from: s, backward: true)
+            case .nextTab: SSHSessions.shared.step(from: s, backward: false, everyProject: stepsEveryProject)
+            case .previousTab: SSHSessions.shared.step(from: s, backward: true, everyProject: stepsEveryProject)
             case .pageUp: scrollView(to: s.view.offset + (s.vt.rows - 1))
             case .pageDown: scrollView(to: s.view.offset - (s.vt.rows - 1))
             }
@@ -485,43 +487,6 @@ final class TerminalCanvas: NSView, NSTextInputClient, NSMenuItemValidation {
                 return
             }
             if !s.vt.altScreen { scrollView(to: s.view.offset + notches * 3) }
-        }
-    }
-}
-
-/// The terminal of a session, in SwiftUI: the session's own view, moved into whichever screen shows it.
-struct TerminalHost: NSViewRepresentable {
-    var session: TerminalSession
-
-    final class Container: NSView {
-        weak var attached: TerminalCanvas?
-        override var isFlipped: Bool { true }
-    }
-
-    func makeNSView(context: Context) -> Container {
-        let c = Container()
-        attach(session, to: c)
-        return c
-    }
-    func updateNSView(_ c: Container, context: Context) {
-        if c.attached !== session.canvas { attach(session, to: c) }
-    }
-    static func dismantleNSView(_ c: Container, coordinator: ()) {
-        if let canvas = c.attached, canvas.superview === c { canvas.removeFromSuperview() }
-    }
-
-    private func attach(_ s: TerminalSession, to c: Container) {
-        if let old = c.attached, old.superview === c { old.removeFromSuperview() }
-        let canvas = s.canvas
-        canvas.removeFromSuperview()
-        canvas.frame = c.bounds
-        canvas.autoresizingMask = [.width, .height]
-        c.addSubview(canvas)
-        c.attached = canvas
-        // A session just opened or switched to takes the keyboard.
-        DispatchQueue.main.async { [weak canvas] in
-            guard let canvas, let window = canvas.window else { return }
-            window.makeFirstResponder(canvas)
         }
     }
 }

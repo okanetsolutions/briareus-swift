@@ -295,6 +295,21 @@ final class VTTests: XCTestCase {
         t.port = 0; XCTAssertEqual(t.problem, "The port 0 is not from 1 to 65535.")
     }
 
+    func testCtrlTabStepsThroughTheProjectsSessionsOrEveryProjects() {
+        let groups = ["a", "b", "a", "c", "a"]
+        XCTAssertEqual(terminalStep(groups: groups, from: 0, backward: false, everyProject: false), 2)
+        XCTAssertEqual(terminalStep(groups: groups, from: 4, backward: false, everyProject: false), 0)
+        XCTAssertEqual(terminalStep(groups: groups, from: 0, backward: true, everyProject: false), 4)
+        XCTAssertNil(terminalStep(groups: groups, from: 1, backward: false, everyProject: false))
+        XCTAssertEqual(terminalStep(groups: groups, from: 0, backward: false, everyProject: true), 1)
+        XCTAssertEqual(terminalStep(groups: groups, from: 4, backward: false, everyProject: true), 0)
+        XCTAssertEqual(terminalStep(groups: groups, from: 0, backward: true, everyProject: true), 4)
+        XCTAssertEqual(terminalStep(groups: groups, from: 1, backward: true, everyProject: true), 0)
+        XCTAssertNil(terminalStep(groups: ["a"], from: 0, backward: false, everyProject: true))
+        XCTAssertNil(terminalStep(groups: [], from: 0, backward: false, everyProject: true))
+        XCTAssertNil(terminalStep(groups: groups, from: 9, backward: false, everyProject: true))
+    }
+
     func testSelectionFollowsItsTextAndCopies() {
         let vt = VTerminal(cols: 10, rows: 2, scrollback: 100)
         vt.feed("hello world\r\nnext")

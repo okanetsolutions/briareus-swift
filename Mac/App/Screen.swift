@@ -53,6 +53,8 @@ enum Screen: Hashable, Identifiable {
     case sessionStats(session: JSON)
     /// The Server dashboard: the machine, the Briareus process, its disks and the open sessions.
     case serverStats
+    /// Every registered SSH server in a folder per project, and the open SSH sessions.
+    case sshServers
 
     var id: String {
         switch self {
@@ -84,6 +86,7 @@ enum Screen: Hashable, Identifiable {
         case .mailWake(let session): return "mail-wake:\(session["id"].string ?? "")"
         case .sessionStats(let session): return "session-stats:\(session["id"].string ?? "")"
         case .serverStats: return "server-stats"
+        case .sshServers: return "ssh-servers"
         }
     }
     static func == (a: Screen, b: Screen) -> Bool { a.id == b.id }

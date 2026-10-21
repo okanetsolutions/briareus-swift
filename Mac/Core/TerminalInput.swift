@@ -45,6 +45,19 @@ struct TermTarget: Equatable, Sendable {
     var sftpArguments: [String] { ["-P", String(port), "-o", "User=\(user)", "-o", "ServerAliveInterval=30", "--", host] }
 }
 
+/// Ctrl+Tab (or Ctrl+Shift+Tab, `backward`): the tab after the one at `index`, wrapping round, among the open sessions
+/// whose projects are `groups` in tab order. A project's tab steps through that project's sessions; a page showing every
+/// project's (`everyProject`) through all of them. Nil when no other session is in reach.
+func terminalStep(groups: [String], from index: Int, backward: Bool, everyProject: Bool) -> Int? {
+    let n = groups.count
+    guard groups.indices.contains(index) else { return nil }
+    for step in 1..<max(n, 1) {
+        let next = (index + (backward ? n - step : step)) % n
+        if everyProject || groups[next] == groups[index] { return next }
+    }
+    return nil
+}
+
 // MARK: - Keys
 
 /// The keys that are sent as escape sequences rather than as the text they type.
