@@ -160,6 +160,15 @@ final class SSHSessions: ObservableObject {
         return nil
     }
 
+    /// A click on a server: the session open to it on show, else a new one under the project `group`; an alert says why
+    /// it could not start.
+    func connect(_ row: RemoteServer, group: String) {
+        if let open = find(row.key("ssh")) { setActive(open); return }
+        if let error = open(row.target("ssh", group: group)) {
+            Dialogs.alert("Could not connect to \(row.name)", error)
+        }
+    }
+
     /// Ends the session's program and drops it.
     func close(_ s: TerminalSession) {
         guard let i = sessions.firstIndex(where: { $0 === s }) else { return }

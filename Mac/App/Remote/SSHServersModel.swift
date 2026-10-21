@@ -1,6 +1,7 @@
 // The SSH servers page's state: every SSH server registered in Settings (read through settings_ssh_servers), the search
 // over them and the project folders folded shut. Kept while the app runs, so going back to the page keeps what it showed
 // while the servers are read again.
+import Combine
 import Foundation
 
 @MainActor
@@ -19,12 +20,28 @@ final class SSHServersModel: ObservableObject {
     /// Which read is the latest: an older one's answer, arriving after ⟳ started another, is dropped.
     private var generation = 0
     private var serversWatch: NSObjectProtocol?
+    private var signOut: AnyCancellable?
 
     private init() {
         // The servers changed in Settings: the page reads them again once it has read them.
         serversWatch = NotificationCenter.default.addObserver(forName: .sshServersChanged, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { if SSHServersModel.shared.loaded { SSHServersModel.shared.revisit() } }
         }
+        // Signing out (or a revoked token): the servers read from that server go with it.
+        signOut = Store.shared.$client.map { $0 != nil }.removeDuplicates().dropFirst().sink { connected in
+            guard !connected else { return }
+            MainActor.assumeIsolated { SSHServersModel.shared.reset() }
+        }
+    }
+
+    private func reset() {
+        generation += 1
+        task?.cancel(); task = nil
+        rows = []
+        loaded = false
+        error = nil
+        query = ""
+        folded = []
     }
 
     /// The folders to show, in the sidebar's project order, kept to the search.
@@ -48,7 +65,7 @@ final class SSHServersModel: ObservableObject {
     }
 
     /// A click on a server: an SSH session to it under its project, or the one open to it on show.
-    func connect(_ server: RemoteServer, repo: String) { ProjectSSHTab.connect(server, repo: repo) }
+    func connect(_ server: RemoteServer, repo: String) { SSHSessions.shared.connect(server, group: repo) }
 
     private func read() {
         guard RemoteRegistry.offered else { loaded = true; return }

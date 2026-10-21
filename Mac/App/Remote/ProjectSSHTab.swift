@@ -69,16 +69,7 @@ struct ProjectSSHTab: View {
 
     // MARK: - Connecting
 
-    private func connect(_ row: RemoteServer) { Self.connect(row, repo: repo) }
-
-    /// Opens an SSH session to the server under the project `repo` (or returns to the one open to it).
-    @MainActor static func connect(_ row: RemoteServer, repo: String) {
-        let sessions = SSHSessions.shared
-        if let open = sessions.find(row.key("ssh")) { sessions.setActive(open); return }
-        if let error = sessions.open(row.target("ssh", group: repo)) {
-            Dialogs.alert("Could not connect to \(row.name)", error)
-        }
-    }
+    private func connect(_ row: RemoteServer) { sessions.connect(row, group: repo) }
 
     @MainActor static func close(_ t: TerminalSession) {
         if t.running && !Dialogs.confirm("Disconnect from \(t.label)?", "The session ends and anything running in it on the server is stopped with it.",

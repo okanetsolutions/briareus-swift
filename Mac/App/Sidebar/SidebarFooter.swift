@@ -105,7 +105,8 @@ struct SidebarFooter: View {
                     FootText(text: "⚙", font: Theme.footnote, color: Theme.muted, action: settings).help("Settings")
                     Color.clear.frame(width: 12)
                     if let sshServers {
-                        FootText(text: "\u{276F}", font: Theme.footnote, color: Theme.muted, action: sshServers).help("SSH servers")
+                        FootText(text: "\u{276F}", font: Theme.footnote, color: Theme.muted, action: sshServers)
+                            .help("SSH servers").accessibilityLabel("SSH servers")
                         Color.clear.frame(width: 12)
                     }
                     SelectToggle(sessions: sessions)
