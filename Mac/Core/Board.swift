@@ -460,7 +460,7 @@ struct BoardAction: Equatable, Sendable {
     private static let dropped: Set<String> = ["qa"]
 
     /// The errands worth offering on one pull request. `catalog` is what the server's `actions` lists; null or empty before it
-    /// is known, when every errand this app knows is offered. `failedChecks` is the Checks tab's count of failed checks.
+    /// is known, when every errand this app knows is offered. `failedChecks` is the pull request's count of failed checks.
     static func offered(catalog: JSON, pull: PullSummary?, failedChecks: Int) -> [BoardAction] {
         // What the server lists, by id, in its order; a later entry for one id replaces the earlier one in its place.
         var served: [BoardAction] = []

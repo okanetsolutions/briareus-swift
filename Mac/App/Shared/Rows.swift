@@ -13,15 +13,6 @@ func severityColor(_ severity: String?) -> Color {
     }
 }
 func reviewGlyph(_ status: ReviewStatus) -> (symbol: String?, color: Color) { (status.symbol, Theme.color(status.tone)) }
-/// The glyph for a check conclusion.
-func checkGlyph(_ result: String?) -> (symbol: String, color: Color) {
-    switch result?.lowercased() {
-    case "success", "passed", "neutral", "skipped": return (Glyph.symbol(0xE930), Theme.ok)
-    case "failure", "failed", "timed_out", "action_required", "error": return (Glyph.symbol(0xEA39), Theme.danger)
-    case "cancelled", "stale": return (Glyph.symbol(0xE738), Theme.muted)
-    default: return (Glyph.symbol(0xE823), Theme.warn)
-    }
-}
 /// The glyph a tool event shows, from its name.
 func toolGlyph(kind: String?, name: String?, isError: Bool) -> String {
     if isError { return Glyph.symbol(0xE7BA) }

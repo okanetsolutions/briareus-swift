@@ -43,7 +43,7 @@ Search here before writing a component.
 
 **Mac primitives** (`Mac/App/Components.swift`): `DashButtonStyle` with `ButtonKind` (prominent, bordered, plain, destructive), `IconButtonStyle`, `GlyphButton`, `StatusDot`, `Badge`, `Chip`, `Monogram`, `Notice`, `NoticeBox`, `LoadingNote`, `EmptyNote`, `SectionTitle`, `LabeledRow`, `Card`, `Segments`, `TabNav`/`TabNavItem`, `FieldStyle`, `FlowLayout`, `Clipboard`, `openWebURL`.
 
-**Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `severityColor`, `reviewGlyph`, `checkGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
+**Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `severityColor`, `reviewGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
 
 **Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `ErrandLabel`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`, `actionIcon`.
 
@@ -83,7 +83,7 @@ Next: the pull request screens still read the `pr` JSON directly (`model.pr["...
 
 ## Oversized files
 
-The ratchet blocks growth above 300 lines. The largest at the time of writing: `Mac/App/Board/ProjectFilesTab.swift` (1114), `Mac/App/Board/PullScreen.swift` (1013), `Mac/App/Conversation/SharedBrowserScreen.swift` (989), `Mac/App/Findings/FindingsScreen.swift` (891), `Mac/App/Conversation/ConversationScreen.swift` (811), `App/Board/IssueScreen.swift` (798), `App/Conversations/SharedBrowserScreen.swift` (780), `App/Board/PullScreen.swift` (778). Run `find App Mac/App -name '*.swift' | xargs wc -l | sort -n | tail -30` for the current list.
+The ratchet blocks growth above 300 lines. The largest at the time of writing: `Mac/App/Board/ProjectFilesTab.swift` (1114), `Mac/App/Conversation/SharedBrowserScreen.swift` (989), `Mac/App/Board/PullScreen.swift` (956), `Mac/App/Findings/FindingsScreen.swift` (891), `Mac/App/Conversation/ConversationScreen.swift` (811), `App/Board/IssueScreen.swift` (798), `App/Conversations/SharedBrowserScreen.swift` (780), `App/Board/PullScreen.swift` (778). Run `find App Mac/App -name '*.swift' | xargs wc -l | sort -n | tail -30` for the current list.
 
 ## Recipe: splitting an oversized screen
 

@@ -350,7 +350,7 @@ private struct StackRow: View {
 
 // MARK: - Tabs
 
-/// `tabnav`: Sessions, PR Body, Conversation, Files changed, Commits, Checks and Findings with their counts, the Run tab,
+/// `tabnav`: Sessions, PR Body, Conversation, Files changed and Findings with their counts, the Run tab,
 /// and the diffstat at the right.
 private struct PullTabs: View {
     @ObservedObject var model: PullModel
@@ -371,8 +371,6 @@ private struct PullTabs: View {
                     else if let url = model.pr["url"].string, safeWebURL(url) {
                         TabNavItem(glyph: Glyph.symbol(0xE8A5), title: "Files changed", count: files, active: false) { openWebURL(url + "/files") }
                     }
-                    if model.pr["commitList"].count > 0 { tab(0xE8EE, "Commits", "\(model.commitCount)", .commits) }
-                    if !model.pr.isNull { tab(0xE9D5, "Checks", "\(model.pr["checks"]["runs"].count)", .checks) }
                     if store.supports("findings") { tab(0xE7C1, "Findings", "\(model.findings.count)", .findings) }
                     if store.supports("serve_pull") || model.runURL != nil { runTab }
                 }
@@ -487,8 +485,6 @@ private struct PullMain: View {
             } else {
                 switch model.tab {
                 case .conversation: ConversationTab(model: model)
-                case .commits: CommitsTab(model: model)
-                case .checks: ChecksTab(model: model)
                 case .findings: FindingsTab(model: model)
                 case .sessions: RunsList(model: model)
                 default: Description(model: model)
@@ -645,7 +641,7 @@ private struct ThreadBox: View {
     }
 }
 
-// MARK: Checks, commits, findings
+// MARK: Findings
 
 /// A column box: 12px in, the rows split by rules.
 private struct ColumnBox<Content: View>: View {
@@ -654,56 +650,6 @@ private struct ColumnBox<Content: View>: View {
 }
 private struct RowGap: View {
     var body: some View { BoardRule().padding(.vertical, 6) }
-}
-
-private struct ChecksTab: View {
-    @ObservedObject var model: PullModel
-    var body: some View {
-        let checks = model.pr["checks"]
-        ColumnBox {
-            CheckCounts(passed: checks["passed"].int32 ?? 0, pending: checks["pending"].int32 ?? 0, failed: checks["failed"].int32 ?? 0)
-            ForEach(Array(checks["runs"].items.enumerated()), id: \.offset) { _, check in
-                RowGap()
-                let result = check["conclusion"].string ?? check["status"].string ?? "Pending"
-                let g = checkGlyph(result)
-                let url = check["url"].string
-                HStack(spacing: 4) {
-                    Image(systemName: g.symbol).font(.system(size: 12)).foregroundStyle(g.color).frame(width: 18)
-                    Text(check["name"].string ?? "Check").font(Theme.callout).foregroundStyle(safeWebURL(url) ? Theme.accent : Theme.ink).lineLimit(1).truncationMode(.tail)
-                    Spacer(minLength: 8)
-                    Text(result.replacingOccurrences(of: "_", with: " ").asciiCapitalized).font(Theme.callout).foregroundStyle(Theme.muted).lineLimit(1)
-                }
-                .frame(height: 22)
-                .contentShape(Rectangle())
-                .onTapGesture { if safeWebURL(url) { openWebURL(url) } }
-            }
-            if checks["runs"].count == 0 {
-                RowGap()
-                Text("No checks reported").font(Theme.callout).foregroundStyle(Theme.muted)
-            }
-        }
-    }
-}
-
-private struct CommitsTab: View {
-    @ObservedObject var model: PullModel
-    var body: some View {
-        let commits = model.pr["commitList"].items
-        ColumnBox {
-            ForEach(Array(commits.enumerated()), id: \.offset) { i, cm in
-                if i > 0 { RowGap() }
-                let sha = cm["sha"].string ?? ""
-                let url = cm["url"].string
-                HStack(alignment: .top, spacing: 12) {
-                    GlyphLabel(glyph: 0xE8EE, text: cm["message"].string ?? "", color: Theme.ink)
-                        .onTapGesture { if safeWebURL(url) { openWebURL(url) } }
-                    Spacer(minLength: 0)
-                    Text(String(sha.prefix(7))).font(Theme.monoSmall).foregroundStyle(Theme.muted).textSelection(.enabled)
-                }
-            }
-            if commits.isEmpty { Text("No commits reported").font(Theme.callout).foregroundStyle(Theme.muted) }
-        }
-    }
 }
 
 private struct FindingsTab: View {
@@ -870,16 +816,13 @@ private struct PullSidebar: View {
         }
     }
 
-    /// The checks as counts only; the row opens the Checks tab for the individual runs.
+    /// The checks as counts only.
     private var checks: some View {
         let checks = model.pr["checks"]
         return section("Checks") {
             if checks["runs"].count == 0 { Text("No checks reported").font(Theme.caption).foregroundStyle(Theme.muted) }
             else {
                 CheckCounts(passed: checks["passed"].int32 ?? 0, pending: checks["pending"].int32 ?? 0, failed: checks["failed"].int32 ?? 0)
-                    .contentShape(Rectangle())
-                    .onTapGesture { if model.tab != .checks { model.select(.checks) } }
-                    .handCursor(model.tab != .checks)
             }
         }
     }
