@@ -43,7 +43,7 @@ Search here before writing a component.
 
 **Mac primitives** (`Mac/App/Components.swift`): `DashButtonStyle` with `ButtonKind` (prominent, bordered, plain, destructive), `IconButtonStyle`, `GlyphButton`, `StatusDot`, `Badge`, `Chip`, `Monogram`, `Notice`, `NoticeBox`, `LoadingNote`, `EmptyNote`, `SectionTitle`, `LabeledRow`, `Card`, `Segments`, `TabNav`/`TabNavItem`, `FieldStyle`, `FlowLayout`, `Clipboard`, `openWebURL`.
 
-**Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `severityColor`, `reviewGlyph`, `checkGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
+**Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `severityColor`, `reviewGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
 
 **Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `ErrandLabel`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`, `actionIcon`.
 

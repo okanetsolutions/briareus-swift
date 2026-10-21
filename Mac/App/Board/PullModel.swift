@@ -1,9 +1,9 @@
-// One pull request in full (screen_pulls.c pull_detail_screen_*): what it is, its conversation, files, commits, checks and
-// findings, the conversations already run on it, its errands, the merge, and the Run tab that serves it in a browser.
+// One pull request in full (screen_pulls.c pull_detail_screen_*): what it is, its conversation, files and findings,
+// the conversations already run on it, its errands, the merge, and the Run tab that serves it in a browser.
 import Combine
 import SwiftUI
 
-enum PullTab: Int { case body, conversation, sessions, files, commits, checks, findings, run }
+enum PullTab: Int { case body, conversation, sessions, files, findings, run }
 
 @MainActor
 final class PullModel: ObservableObject {
