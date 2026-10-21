@@ -316,7 +316,7 @@ final class PullModel: ObservableObject {
     func act(_ action: BoardAction) {
         afterThisEvent { [self] in
             dialogOpen = true
-            let answer = actionPrompt(action, number: number)
+            let answer = actionPrompt(action, repo: repo, number: number)
             dialogOpen = false
             if let input = answer { startAction(action, input: input) }
         }

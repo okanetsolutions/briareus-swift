@@ -8,17 +8,17 @@ import CarPlay
 extension CarAssistant {
     // MARK: Building blocks
 
-    private func item(_ text: String, _ detail: String? = nil, symbol: String? = nil, more: Bool = false, action: @escaping () -> Void) -> CPListItem {
+    func item(_ text: String, _ detail: String? = nil, symbol: String? = nil, more: Bool = false, action: @escaping () -> Void) -> CPListItem {
         let item = CPListItem(text: text, detailText: detail, image: symbol.map { Self.symbol($0, size: 22) },
                               accessoryImage: nil, accessoryType: more ? .disclosureIndicator : .none)
         item.handler = { _, done in action(); done() }
         return item
     }
-    private func section(_ header: String? = nil, _ items: [CPListItem]) -> CPListSection? {
+    func section(_ header: String? = nil, _ items: [CPListItem]) -> CPListSection? {
         items.isEmpty ? nil : CPListSection(items: items, header: header, sectionIndexTitle: nil)
     }
     /// No more rows and sections than the car shows, which is fewer while it moves.
-    private static func fit(_ sections: [CPListSection?]) -> [CPListSection] {
+    static func fit(_ sections: [CPListSection?]) -> [CPListSection] {
         var left = CPListTemplate.maximumItemCount
         return sections.compactMap { $0 }.prefix(CPListTemplate.maximumSectionCount).compactMap { section in
             let items = Array(section.items.prefix(left))
@@ -52,7 +52,7 @@ extension CarAssistant {
         }
     }
     /// One screen further, from a list that is itself one away.
-    private func third(_ template: CPTemplate) {
+    func third(_ template: CPTemplate) {
         guard controller.templates.count == 2 else { return }
         controller.pushTemplate(template, animated: true) { _, _ in }
     }
@@ -422,7 +422,7 @@ extension CarAssistant {
         }
         let errands = offered.map { action in
             item(action.label, action.isSuggested(for: row) ? "Suggested" : action.input != nil ? "Dictated" : nil, symbol: action.isSuggested(for: row) ? "sparkle" : "bolt") { [weak self] in
-                if action.input != nil { self?.dictate(.feedback(action)); return }
+                if action.input != nil { self?.feedback(action); return }
                 self?.ask(["Start a paid \(action.label) session on #\(number)? \(action.hint).", "Start \(action.label)?"], yes: "Start",
                           destructive: action.isDestructive) { self?.run(action) }
             }

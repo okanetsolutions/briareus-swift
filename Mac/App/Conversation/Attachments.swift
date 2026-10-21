@@ -216,28 +216,28 @@ struct AttachButton: View {
 @MainActor
 final class SavedPrompts {
     static let shared = SavedPrompts()
-    private var byRepo: [String: [JSON]] = [:]
+    private var byRepo: [String: [SavedPrompt]] = [:]
 
     static var offered: Bool { Store.shared.supports("prompts") }
 
-    func list(_ repo: String?) async -> [JSON] {
+    func list(_ repo: String?) async -> [SavedPrompt] {
         let key = repo ?? ""
         if let l = byRepo[key] { return l }
         var args: JSON = [:]
         if let repo { args["repo"] = .string(repo) }
         guard let v = await boardCall("prompts", args).value else { return [] }
-        let l = v["prompts"].items.filter { $0["title"].nonEmpty != nil && $0["body"].string != nil }
-            .sorted { ($0["sortOrder"].number ?? .infinity, $0["title"].string ?? "") < ($1["sortOrder"].number ?? .infinity, $1["title"].string ?? "") }
+        let l = SavedPrompt.list(v)
         byRepo[key] = l
         return l
     }
     func forget() { byRepo = [:] }
 
     /// 📚's menu: the prompts to put in the composer, then Save the text as a prompt, Edit a prompt and Delete a prompt.
-    func pick(repo: String?, text: String, insert: @escaping (String) -> Void) {
-        Task {
+    func pick(repo: String?, text: String, insert: @escaping (SavedPrompt) -> Void) {
+        Task { [owner = NSApp.modalWindow] in
             let prompts = await list(repo)
-            var rows = prompts.map { p in MenuRow(title: (p["repo"].nonEmpty == nil ? "🌐 " : "") + (p["title"].string ?? "")) }
+            guard owner == nil || (NSApp.modalWindow === owner && owner?.isVisible == true) else { return }
+            var rows = prompts.map { p in MenuRow(title: (p.everywhere ? "🌐 " : "") + p.title) }
             if prompts.isEmpty { rows.append(MenuRow(title: "No saved prompts yet", enabled: false)) }
             rows.append(.divider)
             let canSave = Store.shared.supports("create_prompt") && !text.cTrimmed.isEmpty
@@ -247,7 +247,7 @@ final class SavedPrompts {
             let canDelete = Store.shared.supports("delete_prompt") && !prompts.isEmpty
             rows.append(MenuRow(title: "Delete a prompt…", enabled: canDelete))
             guard let i = popUpMenu(rows) else { return }
-            if i < prompts.count { insert(prompts[i]["body"].string ?? ""); return }
+            if i < prompts.count { insert(prompts[i]); return }
             let actions = rows.count - 3
             if i == actions { save(repo: repo, text: text) }
             else if i == actions + 1 { edit(from: prompts) }
@@ -271,13 +271,13 @@ final class SavedPrompts {
         }
     }
     /// Its title, then its text; where it is offered stays as it was.
-    private func edit(from prompts: [JSON]) {
-        guard let i = popUpMenu(prompts.map { MenuRow(title: $0["title"].string ?? "") }), let id = prompts[i]["id"].truncatedInt else { return }
+    private func edit(from prompts: [SavedPrompt]) {
+        guard let i = popUpMenu(prompts.map { MenuRow(title: $0.title) }), let id = prompts[i].serverID else { return }
         let p = prompts[i]
         guard let title = Dialogs.text("Edit the prompt", label: "Its title, as the 📚 menu lists it.", okLabel: "Next",
-                                       current: p["title"].string ?? "")?.cTrimmed, !title.isEmpty,
+                                       current: p.title)?.cTrimmed, !title.isEmpty,
               let body = Dialogs.text("Edit the prompt", label: "What it puts in the message box.", okLabel: "Save",
-                                      current: p["body"].string ?? "", multiline: true),
+                                      current: p.body, multiline: true),
               !body.cTrimmed.isEmpty else { return }
         Task {
             let r = await boardCall("update_prompt", ["id": JSON(id), "title": .string(title), "body": .string(body)])
@@ -285,9 +285,9 @@ final class SavedPrompts {
             forget()
         }
     }
-    private func delete(from prompts: [JSON]) {
-        guard let i = popUpMenu(prompts.map { MenuRow(title: $0["title"].string ?? "") }), let id = prompts[i]["id"].truncatedInt,
-              Dialogs.confirm("Delete the prompt \(prompts[i]["title"].string ?? "")?", continueLabel: "Delete", destructive: true) else { return }
+    private func delete(from prompts: [SavedPrompt]) {
+        guard let i = popUpMenu(prompts.map { MenuRow(title: $0.title) }), let id = prompts[i].serverID,
+              Dialogs.confirm("Delete the prompt \(prompts[i].title)?", continueLabel: "Delete", destructive: true) else { return }
         Task {
             let r = await boardCall("delete_prompt", ["id": JSON(id)])
             if let e = r.error { Dialogs.alert("The prompt was not deleted", e.description) }
@@ -300,7 +300,7 @@ final class SavedPrompts {
 struct PromptsButton: View {
     var repo: String?
     var text: String
-    var insert: (String) -> Void
+    var insert: (SavedPrompt) -> Void
     var body: some View {
         Button { SavedPrompts.shared.pick(repo: repo, text: text, insert: insert) } label: {
             Text("\u{1F4DA}").font(.system(size: 14))

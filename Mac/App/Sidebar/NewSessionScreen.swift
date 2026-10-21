@@ -312,8 +312,8 @@ private struct NewSessionFooter: View {
                         AttachButton(enabled: !model.busy && files.count < attachmentsMax) { if !model.busy { files.pick() } }
                     }
                     if SavedPrompts.offered {
-                        PromptsButton(repo: model.project?.repo, text: composer.text) { body in
-                            composer.text = composer.text.cTrimmed.isEmpty ? body : composer.text + "\n\n" + body
+                        PromptsButton(repo: model.project?.repo, text: composer.text) { prompt in
+                            composer.text = prompt.inserted(into: composer.text)
                             composer.focusNow()
                         }
                     }

@@ -22,6 +22,10 @@ jobs:
           git diff --exit-code -- Briareus.xcodeproj
       - name: Test networking and transcript core
         run: swift test
+      - name: Check saved prompt loading and connection changes
+        run: |
+          swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/Shared/SavedPrompts.swift scripts/check_saved_prompts.swift -o "$RUNNER_TEMP/check-saved-prompts"
+          "$RUNNER_TEMP/check-saved-prompts"
   structure:
     name: Structure guardrails
     runs-on: ubuntu-latest

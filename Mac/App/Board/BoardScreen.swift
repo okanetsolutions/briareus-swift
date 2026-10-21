@@ -215,7 +215,7 @@ final class BoardModel: ObservableObject {
         if action.id == "run" { openRun(pull); return }
         afterThisEvent { [self] in
             dialogOpen = true
-            let answer = actionPrompt(action, number: pull.number)
+            let answer = actionPrompt(action, repo: repo, number: pull.number)
             dialogOpen = false
             if let input = answer { start(pull, action, input: input) }
         }
