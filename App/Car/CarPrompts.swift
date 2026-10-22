@@ -27,7 +27,7 @@ extension CarAssistant {
     private func loadFeedback(_ action: BoardAction, template: CPListTemplate, repo: String, number: Int, client: APIClient) {
         Task { [weak self] in
             guard let self else { return }
-            func current() -> Bool {
+            @MainActor func current() -> Bool {
                 guard case .pull(let activeNumber) = self.focus else { return false }
                 return activeNumber == number && self.project?.repo == repo && self.store.client === client
                     && self.controller.topTemplate === template
