@@ -171,13 +171,9 @@ final class AttachmentFilesTests: XCTestCase {
             if events.isEmpty { overlap.fulfill() }
             events.append("next file loads")
         }
-        FileHandle.standardError.write(Data("photo test: queued\n".utf8))
         await fulfillment(of: [encoding], timeout: 5)
-        FileHandle.standardError.write(Data("photo test: encoding\n".utf8))
         first.cancel()
-        FileHandle.standardError.write(Data("photo test: cancelled\n".utf8))
         await fulfillment(of: [overlap], timeout: 0.1)
-        FileHandle.standardError.write(Data("photo test: no overlap\n".utf8))
         finishConversion.signal()
         await first.value
         await second.value
