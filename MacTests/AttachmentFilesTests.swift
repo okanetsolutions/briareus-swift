@@ -155,8 +155,8 @@ final class AttachmentFilesTests: XCTestCase {
     func testRemovedPhotoFinishesItsCurrentConversionBeforeTheNextFileLoads() async {
         let queue = AttachmentUploadQueue()
         let encoding = expectation(description: "Photo is inside a synchronous conversion")
-        let nextFile = expectation(description: "Next file starts after conversion stops")
-        nextFile.isInverted = true
+        let overlap = expectation(description: "Next file must not start during conversion")
+        overlap.isInverted = true
         let finishConversion = DispatchSemaphore(value: 0)
         var events: [String] = []
         let first = queue.enqueue(releaseOnCancel: false) {
@@ -168,13 +168,16 @@ final class AttachmentFilesTests: XCTestCase {
             events.append("conversion stopped")
         }
         let second = queue.enqueue {
+            if events.isEmpty { overlap.fulfill() }
             events.append("next file loads")
-            nextFile.fulfill()
         }
+        FileHandle.standardError.write(Data("photo test: queued\n".utf8))
         await fulfillment(of: [encoding], timeout: 5)
+        FileHandle.standardError.write(Data("photo test: encoding\n".utf8))
         first.cancel()
-        await fulfillment(of: [nextFile], timeout: 0.1)
-        nextFile.isInverted = false
+        FileHandle.standardError.write(Data("photo test: cancelled\n".utf8))
+        await fulfillment(of: [overlap], timeout: 0.1)
+        FileHandle.standardError.write(Data("photo test: no overlap\n".utf8))
         finishConversion.signal()
         await first.value
         await second.value
