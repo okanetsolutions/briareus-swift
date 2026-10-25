@@ -40,10 +40,13 @@ final class ComposerFiles: ObservableObject {
 
     /// Files picked in the Files app: security-scoped, so each is opened for the read.
     func take(_ urls: [URL]) {
-        let batch = prepareAttachmentFiles(urls, attached: items.count)
-        notice = joinedAttachmentErrors([notice, batch.error])
-        for file in batch.files {
-            enqueue(name: file.url.lastPathComponent, size: file.size) { await loadAttachmentFile(file) }
+        Task {
+            let checked = await Task.detached(priority: .userInitiated) { checkAttachmentFiles(urls) }.value
+            let batch = limitAttachmentFiles(checked, attached: items.count)
+            notice = joinedAttachmentErrors([notice, batch.error])
+            for file in batch.files {
+                enqueue(name: file.url.lastPathComponent, size: file.size) { await loadAttachmentFile(file) }
+            }
         }
     }
 

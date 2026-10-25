@@ -11,10 +11,9 @@ func joinedAttachmentErrors(_ errors: [String?]) -> String? {
     return lines.isEmpty ? nil : lines.joined(separator: "\n")
 }
 
-/// Invalid files never take a slot, and a selection reports the limit only once.
-func prepareAttachmentFiles(_ urls: [URL], attached: Int) -> (files: [AttachmentFile], error: String?) {
+/// Inspect metadata off the main actor before reserving any chips.
+func checkAttachmentFiles(_ urls: [URL]) -> (files: [AttachmentFile], error: String?) {
     var files: [AttachmentFile] = [], errors: [String] = []
-    var overLimit = false
     for url in urls {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -32,11 +31,16 @@ func prepareAttachmentFiles(_ urls: [URL], attached: Int) -> (files: [Attachment
         guard FileManager.default.isReadableFile(atPath: url.path) else {
             errors.append(attachmentRefusal(name, "could not be opened")); continue
         }
-        guard attached + files.count < attachmentsMax else { overLimit = true; continue }
         files.append(AttachmentFile(url: url, size: size))
     }
-    if overLimit { errors.append("At most \(attachmentsMax) files go with one message.") }
     return (files, joinedAttachmentErrors(errors))
+}
+
+/// Apply the current chip count after metadata checks, which may have suspended the caller.
+func limitAttachmentFiles(_ batch: (files: [AttachmentFile], error: String?), attached: Int) -> (files: [AttachmentFile], error: String?) {
+    let files = Array(batch.files.prefix(max(0, attachmentsMax - attached)))
+    let limitError = files.count < batch.files.count ? "At most \(attachmentsMax) files go with one message." : nil
+    return (files, joinedAttachmentErrors([batch.error, limitError]))
 }
 
 /// The security scope and handle stay open until the read worker has stopped.
@@ -46,9 +50,7 @@ func readAttachmentFile(_ file: AttachmentFile) async throws -> Data {
     defer { if scoped { file.url.stopAccessingSecurityScopedResource() } }
     let handle = try FileHandle(forReadingFrom: file.url)
     defer { try? handle.close() }
-    let data = try await readAttachmentBytes { try handle.read(upToCount: 1024 * 1024) }
-    if let size = file.size, data.count != size { throw CocoaError(.fileReadUnknown) }
-    return data
+    return try await readAttachmentBytes { try handle.read(upToCount: 1024 * 1024) }
 }
 
 /// Cancellation reaches the detached worker, which stops between chunks instead of reading the whole removed file.

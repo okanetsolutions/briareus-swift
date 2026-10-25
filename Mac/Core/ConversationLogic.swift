@@ -282,12 +282,19 @@ final class AttachmentUploadQueue {
 
     func enqueue(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         let previous = tail
+        let (finished, continuation) = AsyncStream<Void>.makeStream()
         let task = Task {
             await previous?.value
+            defer { continuation.finish() }
             guard !Task.isCancelled else { return }
-            await operation()
+            await withTaskCancellationHandler {
+                await operation()
+            } onCancel: {
+                // A stalled OS read may ignore cancellation; it must not hold the next chip.
+                continuation.finish()
+            }
         }
-        tail = task
+        tail = Task { for await _ in finished {} }
         return task
     }
 }

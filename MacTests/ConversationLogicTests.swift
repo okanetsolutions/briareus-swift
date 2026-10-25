@@ -47,12 +47,37 @@ final class ConversationLogicTests: XCTestCase {
             events.append("read last")
         }
         await fulfillment(of: [reading], timeout: 5)
-        first.cancel()
         removed.cancel()
         XCTAssertEqual(events, ["read first"])
         finishRead?.resume()
         await last.value
         XCTAssertEqual(events, ["read first", "finished first", "read last"])
+    }
+
+    @MainActor
+    func testCancellingASuspendedReadLetsTheNextFileStartBeforeItReturns() async {
+        let queue = AttachmentUploadQueue()
+        let reading = expectation(description: "Read is suspended in an API that ignores cancellation")
+        let nextFile = expectation(description: "Next file starts without waiting for the removed read")
+        var finishRead: CheckedContinuation<Void, Never>?
+        var events: [String] = []
+        let first = queue.enqueue {
+            await withCheckedContinuation { finishRead = $0; reading.fulfill() }
+            XCTAssertTrue(Task.isCancelled)
+            events.append("removed read returned")
+        }
+        let second = queue.enqueue {
+            events.append("read next")
+            nextFile.fulfill()
+        }
+        await fulfillment(of: [reading], timeout: 5)
+        first.cancel()
+        await fulfillment(of: [nextFile], timeout: 5)
+        XCTAssertEqual(events, ["read next"])
+        finishRead?.resume()
+        await first.value
+        await second.value
+        XCTAssertEqual(events, ["read next", "removed read returned"])
     }
 
     // MARK: Header

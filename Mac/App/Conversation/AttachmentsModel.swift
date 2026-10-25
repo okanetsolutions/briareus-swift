@@ -83,16 +83,13 @@ final class Attachments: ObservableObject {
     }
 
     private func read(_ urls: [URL]) {
-        let batch = prepareAttachmentFiles(urls, attached: items.count)
-        var errors: [String?] = [batch.error]
-        let tasks = batch.files.compactMap { file in
-            enqueue(name: file.url.lastPathComponent, size: file.size, report: { errors.append($0) }) {
-                await loadAttachmentFile(file)
-            }
-        }
         Task {
-            for task in tasks { await task.value }
-            if let error = joinedAttachmentErrors(errors) { Dialogs.alert("Attachments", error) }
+            let checked = await Task.detached(priority: .userInitiated) { checkAttachmentFiles(urls) }.value
+            let batch = limitAttachmentFiles(checked, attached: items.count)
+            for file in batch.files {
+                enqueue(name: file.url.lastPathComponent, size: file.size) { await loadAttachmentFile(file) }
+            }
+            if let error = batch.error { Dialogs.alert("Attachments", error) }
         }
     }
 

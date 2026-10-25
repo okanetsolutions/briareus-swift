@@ -23,7 +23,7 @@ final class AttachmentFilesTests: XCTestCase {
         let second = folder.appendingPathComponent("second")
         try Data([1, 2, 3]).write(to: first)
         try Data([4, 5]).write(to: second)
-        let batch = prepareAttachmentFiles([folder, empty, large, folder.appendingPathComponent("missing"), first, second], attached: 8)
+        let batch = limitAttachmentFiles(checkAttachmentFiles([folder, empty, large, folder.appendingPathComponent("missing"), first, second]), attached: 8)
         XCTAssertEqual(batch.files.map(\.url), [first, second])
         XCTAssertEqual(batch.files.map(\.size), [3, 2])
         XCTAssertEqual(batch.error?.split(separator: "\n").count, 4)
@@ -36,10 +36,10 @@ final class AttachmentFilesTests: XCTestCase {
             try Data([1]).write(to: url)
             return url
         }
-        let batch = prepareAttachmentFiles(urls, attached: 0)
+        let batch = limitAttachmentFiles(checkAttachmentFiles(urls), attached: 0)
         XCTAssertEqual(batch.files.map(\.url), Array(urls.prefix(10)))
         XCTAssertEqual(batch.error?.split(separator: "\n").count, 1)
-        XCTAssertEqual(prepareAttachmentFiles(urls, attached: 10).files.count, 0)
+        XCTAssertEqual(limitAttachmentFiles(checkAttachmentFiles(urls), attached: 10).files.count, 0)
     }
 
     func testErrorsAccumulateWithoutDiscardingEarlierRefusals() {
@@ -67,6 +67,31 @@ final class AttachmentFilesTests: XCTestCase {
         XCTAssertNotNil(failed.error)
     }
 
+    func testAFileChangedWhileQueuedUploadsItsCurrentBytes() async throws {
+        let url = try temporaryDirectory().appendingPathComponent("file")
+        try Data([1, 2]).write(to: url)
+        let file = try XCTUnwrap(checkAttachmentFiles([url]).files.first)
+        for bytes in [Data([2, 3, 4]), Data([5])] {
+            try bytes.write(to: url)
+            let result = await loadAttachmentFile(file)
+            XCTAssertEqual(result.files.first?.1, bytes)
+            XCTAssertNil(result.error)
+        }
+    }
+
+    func testSlotsAreRecheckedAfterMetadataWasLoaded() throws {
+        let folder = try temporaryDirectory()
+        let urls = try (0..<3).map { n in
+            let url = folder.appendingPathComponent("file-\(n)")
+            try Data([1]).write(to: url)
+            return url
+        }
+        let checked = checkAttachmentFiles([folder] + urls)
+        let batch = limitAttachmentFiles(checked, attached: 9)
+        XCTAssertEqual(batch.files.map(\.url), [urls[0]])
+        XCTAssertEqual(batch.error?.split(separator: "\n").count, 2)
+    }
+
     @MainActor
     func testRemovingAFileDuringReadStopsTheWorkerAndUnblocksTheNextFile() async {
         let queue = AttachmentUploadQueue()
@@ -89,8 +114,9 @@ final class AttachmentFilesTests: XCTestCase {
         let second = queue.enqueue { nextFile.fulfill() }
         await fulfillment(of: [reading], timeout: 5)
         first.cancel()
+        await fulfillment(of: [nextFile], timeout: 2)
         finishChunk.signal()
-        await fulfillment(of: [nextFile], timeout: 5)
+        await first.value
         await second.value
     }
 }
