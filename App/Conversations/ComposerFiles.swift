@@ -1,5 +1,5 @@
 // The files for a composer's next message or first prompt, as the Mac's Attachments (attach.c, attach_list.c): photos
-// from the library or files from the Files app, each read off the main thread, uploaded at once, and shown as a chip with
+// from the library or files from the Files app, each read off the main thread and uploaded in turn, and shown as a chip with
 // ✕ above the text until it is sent.
 import PhotosUI
 import SwiftUI
@@ -20,6 +20,7 @@ final class ComposerFiles: ObservableObject {
     @Published var notice: String?
     /// What the files go with: `message` or `start_session`.
     let call: String
+    private let queue = AttachmentUploadQueue()
     private var uploads: [UUID: Task<Void, Never>] = [:]
 
     init(call: String) { self.call = call }
@@ -39,31 +40,29 @@ final class ComposerFiles: ObservableObject {
 
     /// Files picked in the Files app: security-scoped, so each is opened for the read.
     func take(_ urls: [URL]) {
-        guard !urls.isEmpty else { return }
-        Task {
-            let result = await Task.detached(priority: .userInitiated) { ComposerFiles.readFiles(urls) }.value
-            arrived(result.files, error: result.error)
+        for url in urls {
+            enqueue(name: url.lastPathComponent) {
+                await Task.detached(priority: .userInitiated) { ComposerFiles.readFiles([url]) }.value
+            }
         }
     }
-    /// Photos and videos from the library. A photo goes as JPEG unless it already is a PNG, JPEG or GIF: the agent reads
-    /// those, and not every one reads HEIC.
+    /// Photos and videos are loaded only when their upload's turn comes. A photo goes as JPEG unless it is PNG, JPEG or GIF.
     func take(_ picked: [PhotosPickerItem]) {
-        guard !picked.isEmpty else { return }
-        Task {
-            var files: [(String, Data)] = [], errors: [String] = []
-            let stamp = ComposerFiles.stamp()
-            for (n, item) in picked.enumerated() {
+        let stamp = ComposerFiles.stamp()
+        for (n, item) in picked.enumerated() {
+            let base = picked.count == 1 ? stamp : "\(stamp)-\(n + 1)"
+            enqueue(name: "A photo") {
                 let type = item.supportedContentTypes.first
-                let base = picked.count == 1 ? stamp : "\(stamp)-\(n + 1)"
                 guard let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty else {
-                    errors.append(attachmentRefusal("A photo", "could not be read")); continue
+                    return ([], attachmentRefusal("A photo", "could not be read"))
                 }
                 let encoded = await Task.detached(priority: .userInitiated) { ComposerFiles.encode(data, type: type, base: base) }.value
-                guard let encoded else { errors.append(attachmentRefusal("A photo", "could not be encoded")); continue }
-                if encoded.1.count > APIClient.uploadLimit { errors.append(attachmentRefusal(encoded.0, "is larger than 500 MiB, the most a message takes")); continue }
-                files.append(encoded)
+                guard let encoded else { return ([], attachmentRefusal("A photo", "could not be encoded")) }
+                if encoded.1.count > APIClient.uploadLimit {
+                    return ([], attachmentRefusal(encoded.0, "is larger than 500 MiB, the most a message takes"))
+                }
+                return ([encoded], nil)
             }
-            arrived(files, error: errors.isEmpty ? nil : errors.joined(separator: "\n"))
         }
     }
 
@@ -106,28 +105,33 @@ final class ComposerFiles: ObservableObject {
 
     // MARK: Uploading
 
-    /// The files read: each goes to the server at once, and the call carries their ids.
-    private func arrived(_ files: [(String, Data)], error: String?) {
-        var refused: [String] = error.map { [$0] } ?? []
-        for (name, bytes) in files {
-            if items.count >= attachmentsMax { refused.append("At most \(attachmentsMax) files go with one message."); break }
-            let item = Item(name: name, size: bytes.count)
-            items.append(item)
-            let id = item.id
-            uploads[id] = Task {
-                do {
-                    let fileID = try await Store.shared.upload(name: name, bytes: bytes)
-                    guard let i = items.firstIndex(where: { $0.id == id }) else { return }
-                    items[i].fileID = fileID
-                } catch {
-                    guard !error.isCancellation, items.contains(where: { $0.id == id }) else { return }
-                    remove(id)
-                    notice = "\(name) could not be attached: \(errorText(error))"
-                }
-                uploads[id] = nil
+    /// Reserve a chip before reading, so queued files count towards the limit and can be removed without being read.
+    private func enqueue(name: String, read: @escaping @MainActor () async -> (files: [(String, Data)], error: String?)) {
+        guard items.count < attachmentsMax else { notice = "At most \(attachmentsMax) files go with one message."; return }
+        let item = Item(name: name, size: 0)
+        items.append(item)
+        let id = item.id
+        uploads[id] = queue.enqueue {
+            defer { self.uploads[id] = nil }
+            let result = await read()
+            guard !Task.isCancelled, let i = self.items.firstIndex(where: { $0.id == id }) else { return }
+            guard let (name, bytes) = result.files.first else {
+                self.remove(id)
+                self.notice = result.error
+                return
+            }
+            self.items[i].name = name
+            self.items[i].size = bytes.count
+            do {
+                let fileID = try await Store.shared.upload(name: name, bytes: bytes)
+                guard let i = self.items.firstIndex(where: { $0.id == id }) else { return }
+                self.items[i].fileID = fileID
+            } catch {
+                guard !error.isCancellation, self.items.contains(where: { $0.id == id }) else { return }
+                self.remove(id)
+                self.notice = "\(name) could not be attached: \(errorText(error))"
             }
         }
-        if !refused.isEmpty { notice = refused.joined(separator: "\n") }
     }
 
     /// Takes a file off the message, cancelling its upload.

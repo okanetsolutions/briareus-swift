@@ -7,6 +7,54 @@ final class ConversationLogicTests: XCTestCase {
     private func session(_ j: JSON) -> Session { Session(j)! }
     private func event(_ j: JSON) -> Event { Event(j)! }
 
+    @MainActor
+    func testAttachmentQueueWaitsForUploadBeforeReadingTheNextFile() async {
+        let queue = AttachmentUploadQueue()
+        let uploading = expectation(description: "First file is uploading")
+        var finishUpload: CheckedContinuation<Void, Never>?
+        var events: [String] = []
+        let first = queue.enqueue {
+            events.append("read first")
+            await withCheckedContinuation { finishUpload = $0; uploading.fulfill() }
+            events.append("uploaded first")
+        }
+        let second = queue.enqueue {
+            events.append("read second")
+            events.append("uploaded second")
+        }
+        await fulfillment(of: [uploading], timeout: 5)
+        XCTAssertEqual(events, ["read first"])
+        finishUpload?.resume()
+        await first.value
+        await second.value
+        XCTAssertEqual(events, ["read first", "uploaded first", "read second", "uploaded second"])
+    }
+
+    @MainActor
+    func testAttachmentQueueSkipsCancelledFilesWithoutOvertakingAnActiveRead() async {
+        let queue = AttachmentUploadQueue()
+        let reading = expectation(description: "First file is being read")
+        var finishRead: CheckedContinuation<Void, Never>?
+        var events: [String] = []
+        let first = queue.enqueue {
+            events.append("read first")
+            await withCheckedContinuation { finishRead = $0; reading.fulfill() }
+            events.append("finished first")
+        }
+        let removed = queue.enqueue { XCTFail("A removed file must never be read") }
+        let last = queue.enqueue {
+            XCTAssertFalse(Task.isCancelled)
+            events.append("read last")
+        }
+        await fulfillment(of: [reading], timeout: 5)
+        first.cancel()
+        removed.cancel()
+        XCTAssertEqual(events, ["read first"])
+        finishRead?.resume()
+        await last.value
+        XCTAssertEqual(events, ["read first", "finished first", "read last"])
+    }
+
     // MARK: Header
 
     func testStatusLineListsRuntimeStateAndSession() {

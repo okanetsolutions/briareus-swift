@@ -275,6 +275,23 @@ let attachmentsMax = 10
 /// Why a file could not be attached: "name why." lines.
 func attachmentRefusal(_ name: String, _ why: String) -> String { "\(name) \(why)." }
 
+/// A composer's files are read and uploaded one at a time, keeping only the current file's bytes in memory.
+@MainActor
+final class AttachmentUploadQueue {
+    private var tail: Task<Void, Never>?
+
+    func enqueue(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let previous = tail
+        let task = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await operation()
+        }
+        tail = task
+        return task
+    }
+}
+
 // MARK: - Panel
 
 /// "Findings (3 · all fixed)", "Findings (3 · 1 fixed)", "Findings (3)" or "Findings".
