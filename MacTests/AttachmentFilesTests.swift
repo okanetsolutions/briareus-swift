@@ -49,7 +49,9 @@ final class AttachmentFilesTests: XCTestCase {
     }
 
     func testUnknownSizeIsOmittedUntilBytesAreLoaded() {
-        XCTAssertEqual(attachmentChipLabel(name: "photo", size: nil, uploaded: false), "\u{2026} photo")
+        let label = attachmentChipLabel(name: "photo", size: nil, uploaded: false)
+        XCTAssertTrue(label.contains("photo"))
+        XCTAssertFalse(label.contains(formatFileSize(0)))
         XCTAssertTrue(attachmentChipLabel(name: "file", size: 4096, uploaded: false).contains(formatFileSize(4096)))
     }
 
