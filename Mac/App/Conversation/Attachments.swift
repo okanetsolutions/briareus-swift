@@ -100,7 +100,7 @@ final class Attachments: ObservableObject {
                 errors.append(attachmentRefusal(name, "could not be read")); continue
             }
             if size == 0 { errors.append(attachmentRefusal(name, "is empty")); continue }
-            if size > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 25 MB, the most a message takes")); continue }
+            if size > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 500 MiB, the most a message takes")); continue }
             guard FileManager.default.isReadableFile(atPath: url.path) else { errors.append(attachmentRefusal(name, "could not be opened")); continue }
             guard let data = try? Data(contentsOf: url), data.count == size else { errors.append(attachmentRefusal(name, "could not be read")); continue }
             files.append((name, data))

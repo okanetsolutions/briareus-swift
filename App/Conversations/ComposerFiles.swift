@@ -60,7 +60,7 @@ final class ComposerFiles: ObservableObject {
                 }
                 let encoded = await Task.detached(priority: .userInitiated) { ComposerFiles.encode(data, type: type, base: base) }.value
                 guard let encoded else { errors.append(attachmentRefusal("A photo", "could not be encoded")); continue }
-                if encoded.1.count > APIClient.uploadLimit { errors.append(attachmentRefusal(encoded.0, "is larger than 25 MB, the most a message takes")); continue }
+                if encoded.1.count > APIClient.uploadLimit { errors.append(attachmentRefusal(encoded.0, "is larger than 500 MiB, the most a message takes")); continue }
                 files.append(encoded)
             }
             arrived(files, error: errors.isEmpty ? nil : errors.joined(separator: "\n"))
@@ -95,10 +95,10 @@ final class ComposerFiles: ObservableObject {
             if directory.boolValue { errors.append(attachmentRefusal(name, "is a folder; attach its files")); continue }
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? nil
             if size == 0 { errors.append(attachmentRefusal(name, "is empty")); continue }
-            if let size, size > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 25 MB, the most a message takes")); continue }
+            if let size, size > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 500 MiB, the most a message takes")); continue }
             guard let data = try? Data(contentsOf: url) else { errors.append(attachmentRefusal(name, "could not be read")); continue }
             if data.isEmpty { errors.append(attachmentRefusal(name, "is empty")); continue }
-            if data.count > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 25 MB, the most a message takes")); continue }
+            if data.count > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 500 MiB, the most a message takes")); continue }
             files.append((name, data))
         }
         return (files, errors.isEmpty ? nil : errors.joined(separator: "\n"))
