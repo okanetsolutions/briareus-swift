@@ -160,10 +160,11 @@ final class AttachmentFilesTests: XCTestCase {
         let finishConversion = DispatchSemaphore(value: 0)
         var events: [String] = []
         let first = queue.enqueue(releaseOnCancel: false) {
-            await Task.detached {
+            let worker = Task.detached { () -> Void in
                 encoding.fulfill()
                 XCTAssertEqual(finishConversion.wait(timeout: .now() + 5), .success)
-            }.value
+            }
+            await worker.value
             events.append("conversion stopped")
         }
         let second = queue.enqueue {
