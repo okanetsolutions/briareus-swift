@@ -55,12 +55,13 @@ final class ComposerFiles: ObservableObject {
         let stamp = ComposerFiles.stamp()
         for (n, item) in picked.enumerated() {
             let base = picked.count == 1 ? stamp : "\(stamp)-\(n + 1)"
-            enqueue(name: "A photo") {
+            enqueue(name: "A photo", releaseOnCancel: false) {
                 let type = item.supportedContentTypes.first
-                guard let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty else {
+                guard let data = try? await loadAttachmentData({ item.loadTransferable(type: Data.self, completionHandler: $0) }), !Task.isCancelled, !data.isEmpty else {
                     return ([], attachmentRefusal("A photo", "could not be read"))
                 }
-                let encoded = await Task.detached(priority: .userInitiated) { ComposerFiles.encode(data, type: type, base: base) }.value
+                let worker = Task.detached(priority: .userInitiated) { ComposerFiles.encode(data, type: type, base: base) }
+                let encoded = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
                 guard let encoded else { return ([], attachmentRefusal("A photo", "could not be encoded")) }
                 if encoded.1.count > APIClient.uploadLimit {
                     return ([], attachmentRefusal(encoded.0, "is larger than 500 MiB, the most a message takes"))
@@ -77,25 +78,28 @@ final class ComposerFiles: ObservableObject {
         return f.string(from: Date())
     }
     nonisolated private static func encode(_ data: Data, type: UTType?, base: String) -> (String, Data)? {
+        guard !Task.isCancelled else { return nil }
         guard let type, type.conforms(to: .image) else {
             return ("media-\(base).\(type?.preferredFilenameExtension ?? "bin")", data)
         }
         if type.conforms(to: .png) { return ("photo-\(base).png", data) }
         if type.conforms(to: .jpeg) { return ("photo-\(base).jpg", data) }
         if type.conforms(to: .gif) { return ("photo-\(base).gif", data) }
-        guard let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.85) else { return nil }
+        guard let image = UIImage(data: data), !Task.isCancelled,
+              let jpeg = image.jpegData(compressionQuality: 0.85) else { return nil }
         return ("photo-\(base).jpg", jpeg)
     }
 
     // MARK: Uploading
 
     /// Reserve a chip before reading, so queued files count towards the limit and can be removed without being read.
-    private func enqueue(name: String, size: Int? = nil, read: @escaping @MainActor () async -> (files: [(String, Data)], error: String?)) {
+    private func enqueue(name: String, size: Int? = nil, releaseOnCancel: Bool = true,
+                         read: @escaping @MainActor () async -> (files: [(String, Data)], error: String?)) {
         guard items.count < attachmentsMax else { notice = joinedAttachmentErrors([notice, "At most \(attachmentsMax) files go with one message."]); return }
         let item = Item(name: name, size: size)
         items.append(item)
         let id = item.id
-        uploads[id] = queue.enqueue {
+        uploads[id] = queue.enqueue(releaseOnCancel: releaseOnCancel) {
             defer { self.uploads[id] = nil }
             let result = await read()
             guard !Task.isCancelled, let i = self.items.firstIndex(where: { $0.id == id }) else { return }

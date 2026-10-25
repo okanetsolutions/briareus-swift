@@ -93,6 +93,94 @@ final class AttachmentFilesTests: XCTestCase {
     }
 
     @MainActor
+    func testProviderLoadReturnsBytesAndForwardsFailures() async throws {
+        let bytes = Data([1, 2, 3])
+        let data = try await loadAttachmentData { completion in
+            completion(.success(bytes))
+            return Progress(totalUnitCount: 1)
+        }
+        XCTAssertEqual(data, bytes)
+        do {
+            _ = try await loadAttachmentData { completion in
+                completion(.failure(CocoaError(.fileReadUnknown)))
+                return Progress(totalUnitCount: 1)
+            }
+            XCTFail("The provider failure must reach the caller")
+        } catch { XCTAssertEqual((error as? CocoaError)?.code, .fileReadUnknown) }
+    }
+
+    @MainActor
+    func testRemovingAPhotoCancelsItsProviderAndNeverEncodesLateBytes() async {
+        let queue = AttachmentUploadQueue()
+        let loading = expectation(description: "Provider is loading")
+        let cancelled = expectation(description: "Provider receives cancellation")
+        let provider = Progress(totalUnitCount: 1)
+        provider.cancellationHandler = { cancelled.fulfill() }
+        var finishLoad: (@Sendable (Result<Data?, Error>) -> Void)?
+        let first = queue.enqueue(releaseOnCancel: false) {
+            do {
+                _ = try await loadAttachmentData { completion in
+                    finishLoad = completion
+                    loading.fulfill()
+                    return provider
+                }
+                XCTFail("A removed photo must not proceed to encoding")
+            } catch { XCTAssertTrue(error is CancellationError) }
+        }
+        await fulfillment(of: [loading], timeout: 5)
+        first.cancel()
+        await fulfillment(of: [cancelled], timeout: 5)
+        finishLoad?(.success(Data([1])))
+        await first.value
+    }
+
+    @MainActor
+    func testCancellationBeforeProviderRegistrationStillCancelsTheLoad() async {
+        let provider = Progress(totalUnitCount: 1)
+        let task = Task {
+            try await loadAttachmentData { completion in
+                provider.cancellationHandler = { completion(.success(Data([1]))) }
+                withUnsafeCurrentTask { $0?.cancel() }
+                return provider
+            }
+        }
+        do {
+            _ = try await task.value
+            XCTFail("Cancelled loads must discard their bytes")
+        } catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertTrue(provider.isCancelled)
+    }
+
+    @MainActor
+    func testRemovedPhotoFinishesItsCurrentConversionBeforeTheNextFileLoads() async {
+        let queue = AttachmentUploadQueue()
+        let encoding = expectation(description: "Photo is inside a synchronous conversion")
+        let nextFile = expectation(description: "Next file starts after conversion stops")
+        nextFile.isInverted = true
+        let finishConversion = DispatchSemaphore(value: 0)
+        var events: [String] = []
+        let first = queue.enqueue(releaseOnCancel: false) {
+            await Task.detached {
+                encoding.fulfill()
+                XCTAssertEqual(finishConversion.wait(timeout: .now() + 5), .success)
+            }.value
+            events.append("conversion stopped")
+        }
+        let second = queue.enqueue {
+            events.append("next file loads")
+            nextFile.fulfill()
+        }
+        await fulfillment(of: [encoding], timeout: 5)
+        first.cancel()
+        await fulfillment(of: [nextFile], timeout: 0.1)
+        nextFile.isInverted = false
+        finishConversion.signal()
+        await first.value
+        await second.value
+        XCTAssertEqual(events, ["conversion stopped", "next file loads"])
+    }
+
+    @MainActor
     func testRemovingAFileDuringReadStopsTheWorkerAndUnblocksTheNextFile() async {
         let queue = AttachmentUploadQueue()
         let reading = expectation(description: "Worker is reading the first chunk")

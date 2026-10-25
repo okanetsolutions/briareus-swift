@@ -80,3 +80,20 @@ func loadAttachmentFile(_ file: AttachmentFile) async -> (files: [(String, Data)
     do { return ([(name, try await readAttachmentFile(file))], nil) }
     catch { return ([], attachmentRefusal(name, "could not be read")) }
 }
+
+/// Cancel the provider's load, and discard late bytes before the caller can start encoding them.
+@MainActor
+func loadAttachmentData(_ start: (@escaping @Sendable (Result<Data?, Error>) -> Void) -> Progress) async throws -> Data? {
+    let progress = Progress(totalUnitCount: 1)
+    let data: Data? = try await withTaskCancellationHandler {
+        try Task.checkCancellation()
+        return try await withCheckedThrowingContinuation { continuation in
+            let child = start { continuation.resume(with: $0) }
+            progress.addChild(child, withPendingUnitCount: 1)
+        }
+    } onCancel: {
+        progress.cancel()
+    }
+    try Task.checkCancellation()
+    return data
+}

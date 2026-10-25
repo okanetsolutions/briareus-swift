@@ -280,7 +280,7 @@ func attachmentRefusal(_ name: String, _ why: String) -> String { "\(name) \(why
 final class AttachmentUploadQueue {
     private var tail: Task<Void, Never>?
 
-    func enqueue(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+    func enqueue(releaseOnCancel: Bool = true, _ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         let previous = tail
         let (finished, continuation) = AsyncStream<Void>.makeStream()
         let task = Task {
@@ -290,8 +290,8 @@ final class AttachmentUploadQueue {
             await withTaskCancellationHandler {
                 await operation()
             } onCancel: {
-                // A stalled OS read may ignore cancellation; it must not hold the next chip.
-                continuation.finish()
+                // Photos retain their turn until a conversion already in progress has stopped.
+                if releaseOnCancel { continuation.finish() }
             }
         }
         tail = Task { for await _ in finished {} }
