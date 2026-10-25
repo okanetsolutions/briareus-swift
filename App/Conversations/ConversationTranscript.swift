@@ -7,6 +7,7 @@ import SwiftUI
 /// The transcript's column. Its inputs are compared, so typing in the composer or a poll that changed nothing does not
 /// lay it out again.
 struct ConversationTranscript: View, Equatable {
+    @Binding var atBottom: Bool
     var blocks: [TranscriptBlock]
     var session: Session
     var expanded: Set<Int>
@@ -68,6 +69,9 @@ struct ConversationTranscript: View, Equatable {
                 QueuedBubble(text: item["text"].string ?? "Message", removable: removable) { dropQueued(index) }
             }
             if session.isActive { WorkingIndicator(status: session.status, background: session.backgroundTasks, answered: transcriptAnswered(blocks)) }
+            // Keep the target in the lazy stack so jumping to it also lays out the latest messages.
+            Color.clear.frame(height: 1).id("bottom")
+                .onAppear { atBottom = true }.onDisappear { atBottom = false }
         }
     }
 
