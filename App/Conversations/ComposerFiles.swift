@@ -11,7 +11,7 @@ final class ComposerFiles: ObservableObject {
     struct Item: Identifiable {
         let id = UUID()
         var name: String
-        var size: Int
+        var size: Int?
         var fileID: String?
     }
 
@@ -40,12 +40,13 @@ final class ComposerFiles: ObservableObject {
 
     /// Files picked in the Files app: security-scoped, so each is opened for the read.
     func take(_ urls: [URL]) {
-        for url in urls {
-            enqueue(name: url.lastPathComponent) {
-                await Task.detached(priority: .userInitiated) { ComposerFiles.readFiles([url]) }.value
-            }
+        let batch = prepareAttachmentFiles(urls, attached: items.count)
+        notice = joinedAttachmentErrors([notice, batch.error])
+        for file in batch.files {
+            enqueue(name: file.url.lastPathComponent, size: file.size) { await loadAttachmentFile(file) }
         }
     }
+
     /// Photos and videos are loaded only when their upload's turn comes. A photo goes as JPEG unless it is PNG, JPEG or GIF.
     func take(_ picked: [PhotosPickerItem]) {
         let stamp = ComposerFiles.stamp()
@@ -83,32 +84,12 @@ final class ComposerFiles: ObservableObject {
         return ("photo-\(base).jpg", jpeg)
     }
 
-    nonisolated private static func readFiles(_ urls: [URL]) -> (files: [(String, Data)], error: String?) {
-        var files: [(String, Data)] = [], errors: [String] = []
-        for url in urls {
-            let name = url.lastPathComponent
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            var directory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &directory) else { errors.append(attachmentRefusal(name, "could not be read")); continue }
-            if directory.boolValue { errors.append(attachmentRefusal(name, "is a folder; attach its files")); continue }
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? nil
-            if size == 0 { errors.append(attachmentRefusal(name, "is empty")); continue }
-            if let size, size > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 500 MiB, the most a message takes")); continue }
-            guard let data = try? Data(contentsOf: url) else { errors.append(attachmentRefusal(name, "could not be read")); continue }
-            if data.isEmpty { errors.append(attachmentRefusal(name, "is empty")); continue }
-            if data.count > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 500 MiB, the most a message takes")); continue }
-            files.append((name, data))
-        }
-        return (files, errors.isEmpty ? nil : errors.joined(separator: "\n"))
-    }
-
     // MARK: Uploading
 
     /// Reserve a chip before reading, so queued files count towards the limit and can be removed without being read.
-    private func enqueue(name: String, read: @escaping @MainActor () async -> (files: [(String, Data)], error: String?)) {
-        guard items.count < attachmentsMax else { notice = "At most \(attachmentsMax) files go with one message."; return }
-        let item = Item(name: name, size: 0)
+    private func enqueue(name: String, size: Int? = nil, read: @escaping @MainActor () async -> (files: [(String, Data)], error: String?)) {
+        guard items.count < attachmentsMax else { notice = joinedAttachmentErrors([notice, "At most \(attachmentsMax) files go with one message."]); return }
+        let item = Item(name: name, size: size)
         items.append(item)
         let id = item.id
         uploads[id] = queue.enqueue {
@@ -117,7 +98,7 @@ final class ComposerFiles: ObservableObject {
             guard !Task.isCancelled, let i = self.items.firstIndex(where: { $0.id == id }) else { return }
             guard let (name, bytes) = result.files.first else {
                 self.remove(id)
-                self.notice = result.error
+                self.notice = joinedAttachmentErrors([self.notice, result.error])
                 return
             }
             self.items[i].name = name
@@ -129,7 +110,7 @@ final class ComposerFiles: ObservableObject {
             } catch {
                 guard !error.isCancellation, self.items.contains(where: { $0.id == id }) else { return }
                 self.remove(id)
-                self.notice = "\(name) could not be attached: \(errorText(error))"
+                self.notice = joinedAttachmentErrors([self.notice, "\(name) could not be attached: \(errorText(error))"])
             }
         }
     }
@@ -163,7 +144,7 @@ struct AttachmentChipRow: View {
                             if item.fileID == nil { ProgressView().controlSize(.mini) }
                             else { Image(systemName: "paperclip").font(.caption2).foregroundStyle(.secondary) }
                             Text(item.name).font(.caption).lineLimit(1).truncationMode(.middle).frame(maxWidth: 160, alignment: .leading)
-                            Text(formatFileSize(item.size)).font(.caption2).foregroundStyle(.secondary)
+                            if let size = item.size { Text(formatFileSize(size)).font(.caption2).foregroundStyle(.secondary) }
                             Button { files.remove(item.id) } label: {
                                 Image(systemName: "xmark.circle.fill").font(.footnote).foregroundStyle(.secondary)
                                     .frame(width: 24, height: 24).contentShape(Rectangle())

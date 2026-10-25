@@ -267,8 +267,8 @@ func conversationComposerNote(active: Bool, liveInput: Bool, uploading: Bool, fi
 }
 
 /// An attachment's chip: 📎 (… while uploading), its name and its size.
-func attachmentChipLabel(name: String, size: Int, uploaded: Bool) -> String {
-    "\(uploaded ? "\u{1F4CE}" : "\u{2026}") \(name) \u{00B7} \(formatFileSize(size))"
+func attachmentChipLabel(name: String, size: Int?, uploaded: Bool) -> String {
+    "\(uploaded ? "\u{1F4CE}" : "\u{2026}") \(name)" + (size.map { " \u{00B7} \(formatFileSize($0))" } ?? "")
 }
 /// The most files one message takes, as the Windows client's "At most 10 files per message".
 let attachmentsMax = 10

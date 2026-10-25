@@ -11,7 +11,7 @@ final class Attachments: ObservableObject {
     struct Item: Identifiable {
         let id = UUID()
         var name: String
-        var size: Int
+        var size: Int?
         var fileID: String?
     }
 
@@ -83,30 +83,17 @@ final class Attachments: ObservableObject {
     }
 
     private func read(_ urls: [URL]) {
-        for url in urls {
-            enqueue(name: url.lastPathComponent) {
-                await Task.detached(priority: .userInitiated) { Attachments.readFiles([url]) }.value
+        let batch = prepareAttachmentFiles(urls, attached: items.count)
+        var errors: [String?] = [batch.error]
+        let tasks = batch.files.compactMap { file in
+            enqueue(name: file.url.lastPathComponent, size: file.size, report: { errors.append($0) }) {
+                await loadAttachmentFile(file)
             }
         }
-    }
-
-    nonisolated private static func readFiles(_ urls: [URL]) -> (files: [(String, Data)], error: String?) {
-        var files: [(String, Data)] = [], errors: [String] = []
-        for url in urls {
-            let name = url.lastPathComponent
-            var directory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &directory) else { errors.append(attachmentRefusal(name, "could not be read")); continue }
-            if directory.boolValue { errors.append(attachmentRefusal(name, "is a folder; attach its files")); continue }
-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path), let size = (attrs[.size] as? NSNumber)?.intValue else {
-                errors.append(attachmentRefusal(name, "could not be read")); continue
-            }
-            if size == 0 { errors.append(attachmentRefusal(name, "is empty")); continue }
-            if size > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 500 MiB, the most a message takes")); continue }
-            guard FileManager.default.isReadableFile(atPath: url.path) else { errors.append(attachmentRefusal(name, "could not be opened")); continue }
-            guard let data = try? Data(contentsOf: url), data.count == size else { errors.append(attachmentRefusal(name, "could not be read")); continue }
-            files.append((name, data))
+        Task {
+            for task in tasks { await task.value }
+            if let error = joinedAttachmentErrors(errors) { Dialogs.alert("Attachments", error) }
         }
-        return (files, errors.isEmpty ? nil : errors.joined(separator: "\n"))
     }
 
     /// The browser's pasted image is "image.png"; the Windows client names it by the moment, and so does this.
@@ -124,9 +111,12 @@ final class Attachments: ObservableObject {
     // MARK: Uploading
 
     /// Reserve a chip before reading, so queued files count towards the limit and can be removed without being read.
-    private func enqueue(name: String, read: @escaping @MainActor () async -> (files: [(String, Data)], error: String?)) {
-        guard items.count < attachmentsMax else { Dialogs.alert("Attachments", "At most \(attachmentsMax) files go with one message."); return }
-        let item = Item(name: name, size: 0)
+    @discardableResult
+    private func enqueue(name: String, size: Int? = nil,
+                         report: @escaping @MainActor (String) -> Void = { Dialogs.alert("Attachments", $0) },
+                         read: @escaping @MainActor () async -> (files: [(String, Data)], error: String?)) -> Task<Void, Never>? {
+        guard items.count < attachmentsMax else { report("At most \(attachmentsMax) files go with one message."); return nil }
+        let item = Item(name: name, size: size)
         items.append(item)
         let id = item.id
         uploads[id] = queue.enqueue {
@@ -135,7 +125,7 @@ final class Attachments: ObservableObject {
             guard !Task.isCancelled, let i = self.items.firstIndex(where: { $0.id == id }) else { return }
             guard let (name, bytes) = result.files.first else {
                 self.remove(id)
-                if let error = result.error { Dialogs.alert("Attachments", error) }
+                if let error = result.error { report(error) }
                 return
             }
             self.items[i].name = name
@@ -150,6 +140,7 @@ final class Attachments: ObservableObject {
                 Dialogs.alert("Attachment", "\(name) could not be attached: \(errorText(error))")
             }
         }
+        return uploads[id]
     }
 
     /// Takes a file off the message, cancelling its upload.
