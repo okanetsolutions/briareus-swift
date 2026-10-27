@@ -1,4 +1,5 @@
-// The open pull requests from every accessible project, using the board's rows and pull detail navigation.
+// The board across every accessible project, opened from the All entry as a project's row opens its board: the pull
+// requests, issues and Review List tabs, using the board's rows and detail navigation.
 import SwiftUI
 
 struct GlobalPullsScreen: View {
@@ -10,10 +11,8 @@ struct GlobalPullsScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PaneHeader(title: "Pull requests", subtitle: model.state.subtitle, buttons: [
-                HeaderButton(glyph: "arrow.clockwise", label: "Refresh", enabled: !model.state.loading,
-                             action: { Task { await model.load(fresh: true) } })
-            ])
+            PaneHeader(title: "All projects", subtitle: model.state.subtitle, buttons: headerButtons)
+            GlobalBoardTabs(model: model)
             GlobalPullsFilters(model: model)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
@@ -21,11 +20,9 @@ struct GlobalPullsScreen: View {
                     ForEach(model.state.projects, id: \.project.repo) { entry in
                         if let error = entry.error { Notice(message: "\(entry.project.repo): \(error.description)") }
                     }
-                    ForEach(model.rows) { row in
-                        GlobalPullsRow(row: row) { model.open(row) }
-                    }
+                    GlobalBoardList(model: model)
                     if model.state.loading && !model.state.loaded { LoadingNote(text: "Loading pull requests…") }
-                    else if model.state.loaded && model.rows.isEmpty { EmptyNote(title: model.emptyTitle) }
+                    else if model.state.loaded && model.shownCount == 0 { EmptyNote(title: model.emptyTitle) }
                 }
                 .padding(18)
             }
@@ -35,6 +32,61 @@ struct GlobalPullsScreen: View {
         .task { await poll(every: 60) { await model.load() } }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await model.load(fresh: true) } }
         .onDisappear { BoardModels.release("global-pulls") }
+    }
+
+    private var headerButtons: [HeaderButton] {
+        var buttons: [HeaderButton] = []
+        if model.tab == .review {
+            buttons.append(HeaderButton(glyph: "person.crop.circle", label: BoardEdits.login.map { "Reviewing as \($0)" } ?? "Set my GitHub login…",
+                                        action: { model.setLogin() }))
+        }
+        buttons.append(HeaderButton(glyph: "arrow.clockwise", label: "Refresh", enabled: !model.state.loading,
+                                    action: { Task { await model.load(fresh: true) } }))
+        return buttons
+    }
+}
+
+/// The project board's list tabs, across every project.
+private struct GlobalBoardTabs: View {
+    @ObservedObject var model: GlobalPullsModel
+
+    var body: some View {
+        let labels: [(GlobalBoardTab, String)] = [
+            (.pulls, "⇅ Pull requests"), (.issues, "⊙ Issues"),
+            (.review, model.state.loaded ? "✓ Review List \(model.reviewRows.count)" : "✓ Review List")
+        ]
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                ForEach(labels, id: \.0) { tab, label in BoardTabButton(label: label, active: model.tab == tab) { model.tab = tab } }
+                Spacer(minLength: 0)
+            }
+            BoardRule()
+        }
+        .padding(.horizontal, 18)
+    }
+}
+
+/// The rows of the tab on show.
+private struct GlobalBoardList: View {
+    @ObservedObject var model: GlobalPullsModel
+
+    var body: some View {
+        switch model.tab {
+        case .pulls, .review:
+            ForEach(model.tab == .pulls ? model.rows : model.reviewRows) { row in
+                GlobalPullsRow(row: row) { model.open(row) }
+            }
+        case .issues:
+            ForEach(model.state.issueRefusals, id: \.project.repo) { refused in
+                Notice(message: "\(refused.project.repo): GitHub would not read this repository’s issues. \(refused.message)")
+            }
+            ForEach(model.issueRows) { row in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(row.project.repo).font(Theme.caption).foregroundStyle(Theme.accent).lineLimit(1)
+                    IssueRowView(issue: row.issue, repo: row.project.repo) { model.open(row) }
+                }
+            }
+        }
     }
 }
 
@@ -50,8 +102,8 @@ private struct GlobalPullsFilters: View {
     }
 
     private var search: some View {
-        TextField("Search all pull requests", text: $model.filter.query)
-            .dashField().accessibilityLabel("Search all pull requests")
+        TextField(model.tab == .issues ? "Search all issues" : "Search all pull requests", text: $model.filter.query)
+            .dashField().accessibilityLabel(model.tab == .issues ? "Search all issues" : "Search all pull requests")
     }
 
     private var project: some View {

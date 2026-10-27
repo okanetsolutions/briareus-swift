@@ -1,4 +1,5 @@
-// The All entry in the project sidebar: every conversation with its project, and filters across the combined list.
+// The All entry in the project sidebar, drawn as a project's own screen: `‹ All projects`, the All row opening the board
+// across every project (its pull requests, issues and Review List tabs), then every open conversation with its project.
 import SwiftUI
 
 struct AllSessionsScreen: View {
@@ -7,8 +8,6 @@ struct AllSessionsScreen: View {
     @ObservedObject private var attention = AttentionModel.shared
     @ObservedObject private var store = Store.shared
     @ObservedObject private var sessionFeed = SessionFeed.shared
-    @State private var search = ""
-    @State private var showClosed = true
 
     var body: some View {
         let strip = SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting + attention.approvals,
@@ -17,49 +16,36 @@ struct AllSessionsScreen: View {
         }
         SidebarScreenFrame(sessions: nil, strip: strip) {
             BackRow { model.showingAllSessions = false }
-            filters
-            if let error = model.error ?? model.sessionsError { Notice(message: error).padding(8) }
-            AllSessionsRows(list: model.allSessions, search: $search, showClosed: $showClosed,
-                            selected: navigator.selectedID, loaded: model.sessionsLoaded,
+            Color.clear.frame(height: 2)
+            ProjectRow(name: "All", count: model.sessionsLoaded ? model.allSessions.count : nil,
+                       selected: navigator.selectedID == Screen.globalPulls.id, chevron: false, height: 35) {
+                navigator.show(.globalPulls)
+            }
+            Color.clear.frame(height: 4)
+            if let error = model.error ?? model.sessionsError { Notice(message: error).padding(.horizontal, 8) }
+            AllSessionsRows(list: model.allSessions, selected: navigator.selectedID, loaded: model.sessionsLoaded,
                             failed: model.sessionsError != nil || model.error != nil)
         }
         .task(id: sessionFeed.live) { await poll(every: sessionFeed.live ? 60 : 7) { await model.load() } }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await model.load() } }
     }
-
-    private var filters: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("All sessions").font(Theme.headline).foregroundStyle(Theme.ink)
-            TextField("Find a session or project", text: $search).textFieldStyle(.roundedBorder)
-                .accessibilityLabel("Find a session or project")
-            Toggle("Show closed", isOn: $showClosed).font(Theme.caption).toggleStyle(.checkbox)
-        }.padding(8)
-    }
 }
 
 private struct AllSessionsRows: View {
     let list: AllSessions
-    @Binding var search: String
-    @Binding var showClosed: Bool
     let selected: String?
     let loaded: Bool
     let failed: Bool
 
     var body: some View {
-        let rows = list.shown(search: search, showClosed: showClosed)
+        let rows = list.shown
         ForEach(rows, id: \.id) { session in
             SidebarSessionRow(session: session, lit: selected == "conversation:\(session.id)",
                               selectMode: false, picked: false, projectTitle: list.projectTitle(for: session)) {
                 Navigator.main.show(.conversation(id: session.id, session: session.raw))
             }
         }
-        if loaded && rows.isEmpty {
-            EmptyNote(title: list.emptyState.title)
-            if list.emptyState == .noMatches {
-                Button("Clear filters") { search = ""; showClosed = true }
-                    .buttonStyle(.plain).font(Theme.caption).foregroundStyle(Theme.accent).padding(8)
-            }
-        }
+        if loaded && rows.isEmpty { EmptyNote(title: list.emptyState.title) }
         if !loaded && !failed { LoadingNote() }
     }
 }

@@ -22,7 +22,7 @@ struct ProjectsList: View {
             Section {
                 if !model.projects.isEmpty {
                     DestinationLink(destination: .allSessions) {
-                        ProjectRowLabel(title: "All", sessions: model.allSessions.sessions, loaded: model.sessionsLoaded)
+                        ProjectRowLabel(title: "All", sessions: model.allSessions.shown, loaded: model.sessionsLoaded)
                     }
                 }
                 ForEach(model.projects, id: \.repo) { project in

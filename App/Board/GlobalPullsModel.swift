@@ -1,4 +1,5 @@
-// The global pull list's state and intents; project feeds keep its reads and cooldowns shared with each board.
+// The board across every project: its pull requests, issues and Review List tabs, their state and intents; project feeds
+// keep its reads and cooldowns shared with each board.
 import Combine
 import Foundation
 
@@ -8,19 +9,42 @@ final class GlobalPullsModel: ObservableObject {
         didSet { filter = filter.reconciled(in: state) }
     }
     @Published var filter = GlobalPullsFilter() {
-        didSet { rows = filter.rows(in: state) }
+        didSet { refilter() }
     }
+    @Published var tab = GlobalBoardTab.pulls
     @Published private(set) var rows: [GlobalPullRow]
+    @Published private(set) var issueRows: [GlobalIssueRow]
+    /// The pull requests waiting on the saved GitHub login's review, or on each project's author's without one.
+    @Published private(set) var reviewRows: [GlobalPullRow] = []
     private let reader: GlobalPullsReader
 
     init() {
         reader = GlobalPullsReader(saved: { Store.shared.cache.value($0) })
         state = reader.state
         rows = reader.state.rows
+        issueRows = reader.state.issueRows
+        reviewRows = reader.state.reviewRows(me: GitHubLogin.current)
     }
 
-    var emptyTitle: String { state.emptyTitle(filtered: filter.isOn) }
+    var emptyTitle: String { state.emptyTitle(tab, filtered: filter.isOn) }
+    /// How many rows the tab on show lists.
+    var shownCount: Int {
+        switch tab {
+        case .pulls: return rows.count
+        case .issues: return issueRows.count
+        case .review: return reviewRows.count
+        }
+    }
     func clearFilters() { filter = GlobalPullsFilter() }
+
+    /// Keeps the GitHub login whose review the Review List waits on.
+    func saveLogin(_ typed: String) { if GitHubLogin.save(typed) { refilter() } }
+
+    private func refilter() {
+        rows = filter.rows(in: state)
+        issueRows = filter.issueRows(in: state)
+        reviewRows = filter.reviewRows(in: state, me: GitHubLogin.current)
+    }
 
     @discardableResult
     func load(fresh: Bool = false) async -> APIError? {
