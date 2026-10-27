@@ -11,6 +11,7 @@ struct SidebarStrip: View {
     var waiting: Int
     /// The ◉ badge: conversations waiting for an answer or a decision.
     var needsYou: Int
+    /// Whether this device's catalog offers the new-session action.
     var canStartSession = true
     var action: (StripAction) -> Void
 

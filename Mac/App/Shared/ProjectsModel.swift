@@ -26,11 +26,14 @@ final class ProjectsModel: ObservableObject {
     @Published private(set) var error: String?
     /// The project screen pushed inside the sidebar (sessions_screen_new), nil on the projects list.
     @Published var openProject: SidebarSessions?
+    /// Whether the sidebar is showing conversations across all projects.
     @Published var showingAllSessions = false
 
     /// All cached project sessions, kept current by polling and the live stream.
     @Published private(set) var allSessions = AllSessions(sessions: [], projects: [])
+    /// Every project's sessions have been read, from valid saved lists or the server.
     @Published private(set) var sessionsLoaded = false
+    /// Why the last cross-project sessions read failed, including an unavailable route.
     @Published private(set) var sessionsError: String?
 
     private var generation = 0
@@ -54,6 +57,7 @@ final class ProjectsModel: ObservableObject {
             let repo = note.userInfo?["repo"] as? String
             MainActor.assumeIsolated {
                 let model = ProjectsModel.shared
+                if model.showingAllSessions { Task { await model.load() } }
                 if let open = model.openProject, repo == nil || repo == open.project.repo { Task { await open.load() } }
                 model.recount()
             }
@@ -96,11 +100,8 @@ final class ProjectsModel: ObservableObject {
         if waiting != findingsWaiting { findingsWaiting = waiting }
         let list = AllSessions(sessions: all, projects: projects)
         if list != allSessions { allSessions = list }
-        if list.cacheIsLoaded(projectsLoaded: loaded, hasCachedSessions: projects.contains {
-            Store.shared.cache.value("sessions:\($0.repo)") != nil
-        }) {
-            sessionsLoaded = true
-        }
+        sessionsLoaded = list.cacheIsLoaded(projectsLoaded: Project.parseList(raw) != nil,
+                                            cachedRepos: Set(counts.keys))
         let overview = SessionOverview(all)
         if overview != self.overview { self.overview = overview }
     }

@@ -10,12 +10,30 @@ final class AllSessionsTests: XCTestCase {
 
     func testCachedReadinessIncludesEmptyResponsesButWaitsForProjects() {
         let list = AllSessions(sessions: [], projects: [Project(repo: "org/api")])
-        XCTAssertFalse(list.cacheIsLoaded(projectsLoaded: false, hasCachedSessions: true))
-        XCTAssertFalse(list.cacheIsLoaded(projectsLoaded: true, hasCachedSessions: false))
-        XCTAssertTrue(list.cacheIsLoaded(projectsLoaded: true, hasCachedSessions: true))
+        XCTAssertFalse(list.cacheIsLoaded(projectsLoaded: false, cachedRepos: ["org/api"]))
+        XCTAssertFalse(list.cacheIsLoaded(projectsLoaded: true, cachedRepos: []))
+        XCTAssertTrue(list.cacheIsLoaded(projectsLoaded: true, cachedRepos: ["org/api"]))
         let noProjects = AllSessions(sessions: [], projects: [])
-        XCTAssertTrue(noProjects.cacheIsLoaded(projectsLoaded: true, hasCachedSessions: false))
-        XCTAssertFalse(noProjects.cacheIsLoaded(projectsLoaded: false, hasCachedSessions: false))
+        XCTAssertTrue(noProjects.cacheIsLoaded(projectsLoaded: true, cachedRepos: []))
+        XCTAssertFalse(noProjects.cacheIsLoaded(projectsLoaded: false, cachedRepos: []))
+    }
+
+    func testPartialCachesDoNotCountAsLoaded() {
+        var list = AllSessions(sessions: [session("a", repo: "org/api")],
+                               projects: [Project(repo: "org/api"), Project(repo: "org/web")])
+        XCTAssertFalse(list.cacheIsLoaded(projectsLoaded: true, cachedRepos: ["org/api"]))
+        XCTAssertFalse(list.cacheIsLoaded(projectsLoaded: true, cachedRepos: ["org/api", "org/other"]))
+        XCTAssertTrue(list.cacheIsLoaded(projectsLoaded: true, cachedRepos: ["org/api", "org/web"]))
+        list.projects.append(Project(repo: "org/new"))
+        XCTAssertFalse(list.cacheIsLoaded(projectsLoaded: true, cachedRepos: ["org/api", "org/web"]))
+    }
+
+    func testFailedFirstProjectsReadDoesNotBecomeAnEmptySuccess() {
+        let list = AllSessions(sessions: [], projects: [])
+        let failedAnswer: JSON = .null
+        XCTAssertFalse(list.cacheIsLoaded(projectsLoaded: Project.parseList(failedAnswer) != nil, cachedRepos: []))
+        let emptyAnswer: JSON = ["projects": []]
+        XCTAssertTrue(list.cacheIsLoaded(projectsLoaded: Project.parseList(emptyAnswer) != nil, cachedRepos: []))
     }
 
     func testEmptyStateDistinguishesNoSessionsFromFilteredResults() {

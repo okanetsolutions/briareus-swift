@@ -23,11 +23,12 @@ struct AllSessions: Equatable, Sendable {
     /// Why a filtered list has no rows: nothing exists, or the current filters hid it.
     var emptyState: EmptyState { sessions.isEmpty ? .noSessions : .noMatches }
 
-    /// Cached rows can be shown before the server answers, including a cached empty list.
-    func cacheIsLoaded(projectsLoaded: Bool, hasCachedSessions: Bool) -> Bool {
-        projectsLoaded && (projects.isEmpty || hasCachedSessions)
+    /// Counts are complete after a successful projects read and a valid session cache for every project, including empty lists.
+    func cacheIsLoaded(projectsLoaded: Bool, cachedRepos: Set<String>) -> Bool {
+        projectsLoaded && projects.allSatisfy { cachedRepos.contains($0.repo) }
     }
 
+    /// The project's display name, falling back to the repository when it is absent from the project list.
     func projectTitle(for session: Session) -> String {
         projects.first { $0.repo == session.repo }?.title ?? session.repo ?? ""
     }

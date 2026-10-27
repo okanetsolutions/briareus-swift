@@ -8,13 +8,13 @@ struct AllSessionsScreen: View {
 
     var body: some View {
         List {
-            if let error = model.sessionsError ?? model.error {
+            if let error = model.error ?? model.sessionsError {
                 Section { ErrorNotice(message: error) }.listRowBackground(Theme.row)
             }
             Section {
                 Toggle("Show closed", isOn: $showClosed)
             }.listRowBackground(Theme.row)
-            AllSessionsRows(list: model.allSessions, search: search, showClosed: showClosed,
+            AllSessionsRows(list: model.allSessions, search: $search, showClosed: $showClosed,
                             loaded: model.sessionsLoaded, failed: model.sessionsError != nil || model.error != nil)
         }
         .listStyle(.insetGrouped)
@@ -22,14 +22,14 @@ struct AllSessionsScreen: View {
         .navigationTitle("All sessions").navigationBarTitleDisplayMode(.inline)
         .searchable(text: $search, prompt: "Find a session or project")
         .refreshable { _ = await reading { try await model.load() } }
-        .task { await poll(every: ProjectFeed.sessionsEvery) { await reading { try await model.load() } } }
+        .task { await poll(every: SessionFeed.shared.live ? 60 : ProjectFeed.sessionsEvery) { await reading { try await model.load() } } }
     }
 }
 
 private struct AllSessionsRows: View {
     let list: AllSessions
-    let search: String
-    let showClosed: Bool
+    @Binding var search: String
+    @Binding var showClosed: Bool
     let loaded: Bool
     let failed: Bool
 
@@ -46,8 +46,13 @@ private struct AllSessionsRows: View {
                 }
             }
             if loaded && rows.isEmpty {
-                ContentUnavailableView(list.emptyState.title,
-                                       systemImage: "bubble.left.and.text.bubble.right")
+                ContentUnavailableView {
+                    Label(list.emptyState.title, systemImage: "bubble.left.and.text.bubble.right")
+                } actions: {
+                    if list.emptyState == .noMatches {
+                        Button("Clear filters") { search = ""; showClosed = true }
+                    }
+                }
             }
             if !loaded && !failed { ProgressView().frame(maxWidth: .infinity) }
         }.listRowBackground(Theme.row)

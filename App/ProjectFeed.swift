@@ -141,7 +141,9 @@ final class ProjectsModel: ObservableObject {
 
     /// All cached project sessions, kept current by polling and the live stream.
     @Published private(set) var allSessions = AllSessions(sessions: [], projects: [])
+    /// Every project's sessions have been read, from valid saved lists or the server.
     @Published private(set) var sessionsLoaded = false
+    /// Why the last cross-project sessions read failed, including an unavailable route.
     @Published private(set) var sessionsError: String?
 
     private var generation = 0
@@ -174,17 +176,15 @@ final class ProjectsModel: ObservableObject {
     /// The overview from what is saved of each project's conversations.
     func recount() {
         var all: [Session] = []
+        var cachedRepos: Set<String> = []
         for p in projects {
             guard let list = Store.shared.cache.value("sessions:\(p.repo)").flatMap(Session.parseList) else { continue }
+            cachedRepos.insert(p.repo)
             all += list
         }
         let list = AllSessions(sessions: all, projects: projects)
         if list != allSessions { allSessions = list }
-        if list.cacheIsLoaded(projectsLoaded: loaded, hasCachedSessions: projects.contains {
-            Store.shared.cache.value("sessions:\($0.repo)") != nil
-        }) {
-            sessionsLoaded = true
-        }
+        sessionsLoaded = list.cacheIsLoaded(projectsLoaded: Project.parseList(raw) != nil, cachedRepos: cachedRepos)
         let overview = SessionOverview(all)
         if overview != self.overview { self.overview = overview }
     }

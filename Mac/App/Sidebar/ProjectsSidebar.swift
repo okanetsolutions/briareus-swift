@@ -166,8 +166,10 @@ private struct SidebarProjectsScreen: View {
                 Notice(message: error).padding(.horizontal, 8)
                 Color.clear.frame(height: 8)
             }
-            ProjectRow(name: "All", count: model.allSessions.count, busy: model.allSessions.busy) {
-                model.showingAllSessions = true
+            if !model.projects.isEmpty {
+                ProjectRow(name: "All", count: model.sessionsLoaded ? model.allSessions.count : nil, busy: model.allSessions.busy) {
+                    model.showingAllSessions = true
+                }
             }
             ForEach(model.projects, id: \.repo) { p in
                 ProjectRow(name: p.title, count: model.counts[p.repo] ?? 0, busy: model.busy[p.repo] ?? false, height: 39) {

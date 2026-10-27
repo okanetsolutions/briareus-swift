@@ -6,6 +6,7 @@ struct AllSessionsScreen: View {
     @ObservedObject private var navigator = Navigator.main
     @ObservedObject private var attention = AttentionModel.shared
     @ObservedObject private var store = Store.shared
+    @ObservedObject private var sessionFeed = SessionFeed.shared
     @State private var search = ""
     @State private var showClosed = true
 
@@ -17,12 +18,12 @@ struct AllSessionsScreen: View {
         SidebarScreenFrame(sessions: nil, strip: strip) {
             BackRow { model.showingAllSessions = false }
             filters
-            if let error = model.sessionsError ?? model.error { Notice(message: error).padding(8) }
-            AllSessionsRows(list: model.allSessions, search: search, showClosed: showClosed,
+            if let error = model.error ?? model.sessionsError { Notice(message: error).padding(8) }
+            AllSessionsRows(list: model.allSessions, search: $search, showClosed: $showClosed,
                             selected: navigator.selectedID, loaded: model.sessionsLoaded,
                             failed: model.sessionsError != nil || model.error != nil)
         }
-        .task { await poll(every: SessionFeed.shared.live ? 60 : 7) { await model.load() } }
+        .task(id: sessionFeed.live) { await poll(every: sessionFeed.live ? 60 : 7) { await model.load() } }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await model.load() } }
     }
 
@@ -38,8 +39,8 @@ struct AllSessionsScreen: View {
 
 private struct AllSessionsRows: View {
     let list: AllSessions
-    let search: String
-    let showClosed: Bool
+    @Binding var search: String
+    @Binding var showClosed: Bool
     let selected: String?
     let loaded: Bool
     let failed: Bool
@@ -54,6 +55,10 @@ private struct AllSessionsRows: View {
         }
         if loaded && rows.isEmpty {
             EmptyNote(title: list.emptyState.title)
+            if list.emptyState == .noMatches {
+                Button("Clear filters") { search = ""; showClosed = true }
+                    .buttonStyle(.plain).font(Theme.caption).foregroundStyle(Theme.accent).padding(8)
+            }
         }
         if !loaded && !failed { LoadingNote() }
     }
