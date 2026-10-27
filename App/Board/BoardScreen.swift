@@ -8,7 +8,7 @@ import SwiftUI
 
 struct BoardScreen: View {
     let repo: String
-    private enum Tab: Hashable { case pulls, issues, review }
+    private typealias Tab = GlobalBoardTab
 
     @EnvironmentObject private var store: Store
     @ObservedObject private var feed: ProjectFeed
@@ -69,8 +69,8 @@ struct BoardScreen: View {
                 }
                 .listRowBackground(Color.clear)
             }
-            if !loaded || feed.boardReading {
-                ProgressView("Loading pull requests…").frame(maxWidth: .infinity).padding(.vertical, 24).listRowBackground(Color.clear)
+            if boardShowsLoading(loaded: loaded, refreshing: feed.boardRefreshing) {
+                ProgressView(tab.loadingText).frame(maxWidth: .infinity).padding(.vertical, 24).listRowBackground(Color.clear)
             }
             if tab == .pulls || tab == .review { pullRows(pulls, review: tab == .review) } else if tab == .issues { issueRows(issues) }
         }
@@ -80,7 +80,7 @@ struct BoardScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if feed.boardReading {
-                    ProgressView().accessibilityLabel("Refreshing pull requests")
+                    ProgressView().accessibilityLabel(tab.loadingText)
                 }
                 if tab != .review {
                     BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label],
@@ -124,7 +124,8 @@ struct BoardScreen: View {
 
     private func load(fresh: Bool = false, ifStale: Bool = false) async throws {
         do {
-            if ifStale { guard try await feed.refreshBoardIfStale() else { return } }
+            if fresh { try await feed.refreshBoard() }
+            else if ifStale { guard try await feed.refreshBoardIfStale() else { return } }
             else { try await feed.loadBoard(fresh: fresh) }
             filters.opened(board, answered: true)
             error = nil

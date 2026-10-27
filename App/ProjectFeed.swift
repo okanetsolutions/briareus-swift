@@ -23,6 +23,9 @@ final class ProjectFeed: ObservableObject {
     /// True while the pull request list is being read, including a refresh with cached rows still on screen.
     @Published private(set) var boardReading = false
     private var boardReadCount = 0
+    /// Only a refresh started on the board shows progress above its cached rows.
+    @Published private(set) var boardRefreshing = false
+    private var boardRefreshCount = 0
     /// The board's pull requests and issues, each issue with what the server sent for it.
     private(set) var pulls: [PullSummary] = []
     private(set) var issues: [(summary: IssueSummary, raw: JSON)] = []
@@ -92,6 +95,16 @@ final class ProjectFeed: ObservableObject {
     /// Other lists reading through this feed respect the same repository cooldown.
     static func boardDeadline(_ repo: String) -> Date? { cooldown.deadline(repo) }
     static func boardCooldownError(_ repo: String) -> APIError? { cooldown.error(repo) }
+
+    func refreshBoard() async throws {
+        boardRefreshCount += 1
+        boardRefreshing = true
+        defer {
+            boardRefreshCount -= 1
+            boardRefreshing = boardRefreshCount > 0
+        }
+        try await loadBoard(fresh: true)
+    }
 
     /// `fresh` also has the server ask GitHub again instead of answering from its own short cache.
     func loadBoard(fresh: Bool = false) async throws {

@@ -33,6 +33,8 @@ final class BoardModel: ObservableObject {
     /// The pull request being merged from its row: read for its head first, then merged.
     @Published var mergingNumber = 0
     @Published private(set) var reading = false
+    /// A user refresh shows in-list progress; automatic reads keep cached rows in place.
+    @Published private(set) var refreshing = false
     var dialogOpen = false
     /// The Board tab's own state (ProjectBoardTab.swift).
     lazy var projectBoard = ProjectBoardModel(repo: repo)
@@ -172,9 +174,14 @@ final class BoardModel: ObservableObject {
         case .board: projectBoard.refresh()
         case .files: files.refresh()
         default:
+            guard !refreshing else { return }
             uncertain = false; writeError = nil
             issueStatus.reset()
-            Task { await load(fresh: true) }
+            refreshing = true
+            Task {
+                defer { refreshing = false }
+                await load(fresh: true)
+            }
         }
     }
 
@@ -524,7 +531,7 @@ struct BoardScreen: View {
 
     @ViewBuilder private var lists: some View {
         BoardListFeedback(error: model.error, writeError: model.writeError, uncertain: model.uncertain,
-                          loading: !model.loaded || model.reading)
+                          loading: boardShowsLoading(loaded: model.loaded, refreshing: model.refreshing), loadingText: model.loadingText)
         if model.tab == .review { reviewList } else { filteredLists }
     }
 

@@ -2,6 +2,8 @@
 import Foundation
 
 extension BoardModel {
+    var loadingText: String { (tab == .issues ? GlobalBoardTab.issues : .pulls).loadingText }
+
     /// Before the first read, use the saved response's sync time rather than treating every opening as stale.
     private var savedBoard: JSON {
         board.isObject ? board : Store.shared.cache.value("pulls:\(repo)") ?? .null

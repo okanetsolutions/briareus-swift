@@ -1,4 +1,4 @@
-// The project board's read and write notices, with progress above its rows throughout a load or reload.
+// The project board's read and write notices, with progress for initial loads and user refreshes.
 import SwiftUI
 
 struct BoardListFeedback: View {
@@ -6,6 +6,7 @@ struct BoardListFeedback: View {
     let writeError: String?
     let uncertain: Bool
     let loading: Bool
+    let loadingText: String
 
     var body: some View {
         if let error { Notice(message: error); Spacer().frame(height: 10) }
@@ -17,6 +18,6 @@ struct BoardListFeedback: View {
             }
             Spacer().frame(height: 10)
         }
-        if loading { LoadingNote(text: "Loading pull requests…").padding(.horizontal, -8) }
+        if loading { LoadingNote(text: loadingText).padding(.horizontal, -8) }
     }
 }

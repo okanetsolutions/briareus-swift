@@ -20,8 +20,8 @@ struct GlobalPullsScreen: View {
                     ForEach(model.state.projects, id: \.project.repo) { entry in
                         if let error = entry.error { Notice(message: "\(entry.project.repo): \(error.description)") }
                     }
-                    if model.state.loading { LoadingNote(text: model.tab.loadingText) }
-                    else if model.state.loaded && model.shown.count(model.tab) == 0 { EmptyNote(title: model.emptyTitle) }
+                    if model.state.showsLoading { LoadingNote(text: model.tab.loadingText) }
+                    else if !model.state.loading && model.state.loaded && model.shown.count(model.tab) == 0 { EmptyNote(title: model.emptyTitle) }
                     GlobalBoardList(model: model)
                 }
                 .padding(18)
