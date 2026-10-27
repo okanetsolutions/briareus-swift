@@ -1,5 +1,5 @@
 // The files for a composer's next message or first prompt, as the Mac's Attachments (attach.c, attach_list.c): photos
-// from the library or files from the Files app, each read off the main thread, uploaded at once, and shown as a chip with
+// from the library or files from the Files app, each read off the main thread and uploaded in turn, and shown as a chip with
 // ✕ above the text until it is sent.
 import PhotosUI
 import SwiftUI
@@ -11,7 +11,7 @@ final class ComposerFiles: ObservableObject {
     struct Item: Identifiable {
         let id = UUID()
         var name: String
-        var size: Int
+        var size: Int?
         var fileID: String?
     }
 
@@ -20,6 +20,7 @@ final class ComposerFiles: ObservableObject {
     @Published var notice: String?
     /// What the files go with: `message` or `start_session`.
     let call: String
+    private let queue = AttachmentUploadQueue()
     private var uploads: [UUID: Task<Void, Never>] = [:]
 
     init(call: String) { self.call = call }
@@ -39,31 +40,34 @@ final class ComposerFiles: ObservableObject {
 
     /// Files picked in the Files app: security-scoped, so each is opened for the read.
     func take(_ urls: [URL]) {
-        guard !urls.isEmpty else { return }
         Task {
-            let result = await Task.detached(priority: .userInitiated) { ComposerFiles.readFiles(urls) }.value
-            arrived(result.files, error: result.error)
+            let checked = await Task.detached(priority: .userInitiated) { checkAttachmentFiles(urls) }.value
+            let batch = limitAttachmentFiles(checked, attached: items.count)
+            notice = joinedAttachmentErrors([notice, batch.error])
+            for file in batch.files {
+                enqueue(name: file.url.lastPathComponent, size: file.size) { await loadAttachmentFile(file) }
+            }
         }
     }
-    /// Photos and videos from the library. A photo goes as JPEG unless it already is a PNG, JPEG or GIF: the agent reads
-    /// those, and not every one reads HEIC.
+
+    /// Photos and videos are loaded only when their upload's turn comes. A photo goes as JPEG unless it is PNG, JPEG or GIF.
     func take(_ picked: [PhotosPickerItem]) {
-        guard !picked.isEmpty else { return }
-        Task {
-            var files: [(String, Data)] = [], errors: [String] = []
-            let stamp = ComposerFiles.stamp()
-            for (n, item) in picked.enumerated() {
+        let stamp = ComposerFiles.stamp()
+        for (n, item) in picked.enumerated() {
+            let base = picked.count == 1 ? stamp : "\(stamp)-\(n + 1)"
+            enqueue(name: "A photo", releaseOnCancel: false) {
                 let type = item.supportedContentTypes.first
-                let base = picked.count == 1 ? stamp : "\(stamp)-\(n + 1)"
-                guard let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty else {
-                    errors.append(attachmentRefusal("A photo", "could not be read")); continue
+                guard let data = try? await loadAttachmentData({ item.loadTransferable(type: Data.self, completionHandler: $0) }), !Task.isCancelled, !data.isEmpty else {
+                    return ([], attachmentRefusal("A photo", "could not be read"))
                 }
-                let encoded = await Task.detached(priority: .userInitiated) { ComposerFiles.encode(data, type: type, base: base) }.value
-                guard let encoded else { errors.append(attachmentRefusal("A photo", "could not be encoded")); continue }
-                if encoded.1.count > APIClient.uploadLimit { errors.append(attachmentRefusal(encoded.0, "is larger than 25 MB, the most a message takes")); continue }
-                files.append(encoded)
+                let worker = Task.detached(priority: .userInitiated) { ComposerFiles.encode(data, type: type, base: base) }
+                let encoded = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+                guard let encoded else { return ([], attachmentRefusal("A photo", "could not be encoded")) }
+                if encoded.1.count > APIClient.uploadLimit {
+                    return ([], attachmentRefusal(encoded.0, "is larger than 500 MiB, the most a message takes"))
+                }
+                return ([encoded], nil)
             }
-            arrived(files, error: errors.isEmpty ? nil : errors.joined(separator: "\n"))
         }
     }
 
@@ -74,60 +78,48 @@ final class ComposerFiles: ObservableObject {
         return f.string(from: Date())
     }
     nonisolated private static func encode(_ data: Data, type: UTType?, base: String) -> (String, Data)? {
+        guard !Task.isCancelled else { return nil }
         guard let type, type.conforms(to: .image) else {
             return ("media-\(base).\(type?.preferredFilenameExtension ?? "bin")", data)
         }
         if type.conforms(to: .png) { return ("photo-\(base).png", data) }
         if type.conforms(to: .jpeg) { return ("photo-\(base).jpg", data) }
         if type.conforms(to: .gif) { return ("photo-\(base).gif", data) }
-        guard let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.85) else { return nil }
+        guard let image = UIImage(data: data), !Task.isCancelled,
+              let jpeg = image.jpegData(compressionQuality: 0.85) else { return nil }
         return ("photo-\(base).jpg", jpeg)
-    }
-
-    nonisolated private static func readFiles(_ urls: [URL]) -> (files: [(String, Data)], error: String?) {
-        var files: [(String, Data)] = [], errors: [String] = []
-        for url in urls {
-            let name = url.lastPathComponent
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            var directory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &directory) else { errors.append(attachmentRefusal(name, "could not be read")); continue }
-            if directory.boolValue { errors.append(attachmentRefusal(name, "is a folder; attach its files")); continue }
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? nil
-            if size == 0 { errors.append(attachmentRefusal(name, "is empty")); continue }
-            if let size, size > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 25 MB, the most a message takes")); continue }
-            guard let data = try? Data(contentsOf: url) else { errors.append(attachmentRefusal(name, "could not be read")); continue }
-            if data.isEmpty { errors.append(attachmentRefusal(name, "is empty")); continue }
-            if data.count > APIClient.uploadLimit { errors.append(attachmentRefusal(name, "is larger than 25 MB, the most a message takes")); continue }
-            files.append((name, data))
-        }
-        return (files, errors.isEmpty ? nil : errors.joined(separator: "\n"))
     }
 
     // MARK: Uploading
 
-    /// The files read: each goes to the server at once, and the call carries their ids.
-    private func arrived(_ files: [(String, Data)], error: String?) {
-        var refused: [String] = error.map { [$0] } ?? []
-        for (name, bytes) in files {
-            if items.count >= attachmentsMax { refused.append("At most \(attachmentsMax) files go with one message."); break }
-            let item = Item(name: name, size: bytes.count)
-            items.append(item)
-            let id = item.id
-            uploads[id] = Task {
-                do {
-                    let fileID = try await Store.shared.upload(name: name, bytes: bytes)
-                    guard let i = items.firstIndex(where: { $0.id == id }) else { return }
-                    items[i].fileID = fileID
-                } catch {
-                    guard !error.isCancellation, items.contains(where: { $0.id == id }) else { return }
-                    remove(id)
-                    notice = "\(name) could not be attached: \(errorText(error))"
-                }
-                uploads[id] = nil
+    /// Reserve a chip before reading, so queued files count towards the limit and can be removed without being read.
+    private func enqueue(name: String, size: Int? = nil, releaseOnCancel: Bool = true,
+                         read: @escaping @MainActor () async -> (files: [(String, Data)], error: String?)) {
+        guard items.count < attachmentsMax else { notice = joinedAttachmentErrors([notice, "At most \(attachmentsMax) files go with one message."]); return }
+        let item = Item(name: name, size: size)
+        items.append(item)
+        let id = item.id
+        uploads[id] = queue.enqueue(releaseOnCancel: releaseOnCancel) {
+            defer { self.uploads[id] = nil }
+            let result = await read()
+            guard !Task.isCancelled, let i = self.items.firstIndex(where: { $0.id == id }) else { return }
+            guard let (name, bytes) = result.files.first else {
+                self.remove(id)
+                self.notice = joinedAttachmentErrors([self.notice, result.error])
+                return
+            }
+            self.items[i].name = name
+            self.items[i].size = bytes.count
+            do {
+                let fileID = try await Store.shared.upload(name: name, bytes: bytes)
+                guard let i = self.items.firstIndex(where: { $0.id == id }) else { return }
+                self.items[i].fileID = fileID
+            } catch {
+                guard !error.isCancellation, self.items.contains(where: { $0.id == id }) else { return }
+                self.remove(id)
+                self.notice = joinedAttachmentErrors([self.notice, "\(name) could not be attached: \(errorText(error))"])
             }
         }
-        if !refused.isEmpty { notice = refused.joined(separator: "\n") }
     }
 
     /// Takes a file off the message, cancelling its upload.
@@ -159,7 +151,7 @@ struct AttachmentChipRow: View {
                             if item.fileID == nil { ProgressView().controlSize(.mini) }
                             else { Image(systemName: "paperclip").font(.caption2).foregroundStyle(.secondary) }
                             Text(item.name).font(.caption).lineLimit(1).truncationMode(.middle).frame(maxWidth: 160, alignment: .leading)
-                            Text(formatFileSize(item.size)).font(.caption2).foregroundStyle(.secondary)
+                            if let size = item.size { Text(formatFileSize(size)).font(.caption2).foregroundStyle(.secondary) }
                             Button { files.remove(item.id) } label: {
                                 Image(systemName: "xmark.circle.fill").font(.footnote).foregroundStyle(.secondary)
                                     .frame(width: 24, height: 24).contentShape(Rectangle())
