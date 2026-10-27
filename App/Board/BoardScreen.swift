@@ -25,9 +25,7 @@ struct BoardScreen: View {
     @State private var mergeAsked: PullSummary?
     @State private var mergingNumber = 0
     @State private var mergeNote: String?
-    /// The Review List's login alert, what is typed in it, and a count that redraws the list once a login is saved.
-    @State private var loginAsked = false
-    @State private var loginText = ""
+    /// A count that redraws the Review List once a login is saved.
     @State private var loginRevision = 0
 
     init(repo: String) {
@@ -62,11 +60,7 @@ struct BoardScreen: View {
             .pickerStyle(.segmented)
             .listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             if tab == .review {
-                Button { loginText = GitHubLogin.current ?? ""; loginAsked = true } label: {
-                    Label(GitHubLogin.current.map { "Reviewing as \($0)" } ?? "Set my GitHub login…", systemImage: "person.crop.circle")
-                        .font(.footnote)
-                }
-                .buttonStyle(.borderless).listRowBackground(Color.clear)
+                ReviewLoginButton { loginRevision += 1 }.listRowBackground(Color.clear)
             } else if filter.wrappedValue.isOn {
                 HStack {
                     Text("Showing \(rows.filter { filter.wrappedValue.passes($0) }.count) of \(rows.count)").font(.footnote).foregroundStyle(.secondary)
@@ -119,13 +113,6 @@ struct BoardScreen: View {
         }
         .onChange(of: issues.isEmpty) { _, empty in if empty && tab == .issues && !board["issuesError"].isSet && feed.boardLoaded { self.tab = .pulls } }
         .errandPrompts(errands)
-        .alert("Your GitHub login", isPresented: $loginAsked) {
-            TextField("Login", text: $loginText).textInputAutocapitalization(.never).autocorrectionDisabled()
-            Button("Save") { if GitHubLogin.save(loginText) { loginRevision += 1 } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The Review List shows the pull requests waiting on this GitHub user's review.")
-        }
         .alert(mergeAsked.map { "Merge #\($0.number)?" } ?? "",
                isPresented: Binding(get: { mergeAsked != nil }, set: { if !$0 { mergeAsked = nil } }), presenting: mergeAsked) { pull in
             Button("Merge") { merge(pull) }

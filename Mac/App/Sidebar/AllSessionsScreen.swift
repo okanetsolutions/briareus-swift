@@ -16,12 +16,15 @@ struct AllSessionsScreen: View {
         }
         SidebarScreenFrame(sessions: nil, strip: strip) {
             BackRow { model.showingAllSessions = false }
-            Color.clear.frame(height: 2)
-            ProjectRow(name: "All", count: model.sessionsLoaded ? model.allSessions.count : nil,
-                       selected: navigator.selectedID == Screen.globalPulls.id, chevron: false, height: 35) {
-                navigator.show(.globalPulls)
+            Text("All sessions").font(Theme.headline).foregroundStyle(Theme.ink).padding(8)
+            // The All row opens the board across every project, as a project's row opens its board.
+            if store.supports("projects") && store.supports("pulls") {
+                ProjectRow(name: "All", count: model.sessionsLoaded ? model.allSessions.count : nil,
+                           selected: navigator.selectedID == Screen.globalPulls.id, chevron: false, height: 35) {
+                    navigator.show(.globalPulls)
+                }
+                Color.clear.frame(height: 4)
             }
-            Color.clear.frame(height: 4)
             if let error = model.error ?? model.sessionsError { Notice(message: error).padding(.horizontal, 8) }
             AllSessionsRows(list: model.allSessions, selected: navigator.selectedID, loaded: model.sessionsLoaded,
                             failed: model.sessionsError != nil || model.error != nil)

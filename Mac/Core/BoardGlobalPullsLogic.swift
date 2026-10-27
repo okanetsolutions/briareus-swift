@@ -3,7 +3,39 @@
 import Foundation
 
 /// The tabs the board across every project offers: a project board's lists that make sense without one repository.
-enum GlobalBoardTab: Hashable, CaseIterable, Sendable { case pulls, issues, review }
+enum GlobalBoardTab: Hashable, CaseIterable, Sendable {
+    case pulls, issues, review
+
+    var searchPrompt: String { self == .issues ? "Search all issues" : "Search all pull requests" }
+    var loadingText: String { self == .issues ? "Loading issues…" : "Loading pull requests…" }
+    /// The symbol an empty tab shows, the one the project board's rows use.
+    var symbol: String { self == .issues ? "smallcircle.filled.circle" : "arrow.triangle.pull" }
+}
+
+/// The Review List tab's label on the Mac's boards, its count once the board is read.
+func boardReviewTabLabel(count: Int?) -> String { count.map { "✓ Review List \($0)" } ?? "✓ Review List" }
+
+/// The rows each tab of the board across every project lists.
+struct GlobalBoardRows: Equatable, Sendable {
+    var pulls: [GlobalPullRow] = []
+    var issues: [GlobalIssueRow] = []
+    var review: [GlobalPullRow] = []
+
+    func count(_ tab: GlobalBoardTab) -> Int {
+        switch tab {
+        case .pulls: return pulls.count
+        case .issues: return issues.count
+        case .review: return review.count
+        }
+    }
+}
+
+/// A project whose issues GitHub would not list, and the notice that says so.
+struct GlobalIssueRefusal: Equatable, Sendable {
+    let project: Project
+    let message: String
+    var notice: String { "\(project.repo): GitHub would not read this repository’s issues. \(message)" }
+}
 
 struct GlobalPullRow: Identifiable, Equatable, Sendable {
     let project: Project
@@ -111,11 +143,9 @@ struct GlobalPullsState: Equatable, Sendable {
     }
 
     /// The projects whose issues GitHub would not list, with what it said.
-    var issueRefusals: [(project: Project, message: String)] {
-        projects.compactMap { entry in entry.issuesError.map { (entry.project, $0) } }
+    var issueRefusals: [GlobalIssueRefusal] {
+        projects.compactMap { entry in entry.issuesError.map { GlobalIssueRefusal(project: entry.project, message: $0) } }
     }
-
-    func emptyTitle(filtered: Bool) -> String { emptyTitle(.pulls, filtered: filtered) }
 
     func emptyTitle(_ tab: GlobalBoardTab, filtered: Bool) -> String {
         switch tab {
@@ -168,6 +198,11 @@ struct GlobalPullsFilter: Equatable, Sendable {
 
     func reviewRows(in state: GlobalPullsState, me: String?) -> [GlobalPullRow] {
         state.reviewRows(me: me).filter { passes($0.repoKey, $0.searchText) }
+    }
+
+    /// Every tab's rows under this filter; the default filter gives the totals the tabs are labelled with.
+    func board(in state: GlobalPullsState, me: String?) -> GlobalBoardRows {
+        GlobalBoardRows(pulls: rows(in: state), issues: issueRows(in: state), review: reviewRows(in: state, me: me))
     }
 
     private func passes(_ rowRepo: String, _ searchText: String) -> Bool {

@@ -12,38 +12,27 @@ final class GlobalPullsModel: ObservableObject {
         didSet { refilter() }
     }
     @Published var tab = GlobalBoardTab.pulls
-    @Published private(set) var rows: [GlobalPullRow]
-    @Published private(set) var issueRows: [GlobalIssueRow]
-    /// The pull requests waiting on the saved GitHub login's review, or on each project's author's without one.
-    @Published private(set) var reviewRows: [GlobalPullRow] = []
+    /// Each tab's rows under the filters, and without them for the tabs' labels. The Review List waits on the saved
+    /// GitHub login's review, or on each project's author's without one.
+    @Published private(set) var shown = GlobalBoardRows()
+    @Published private(set) var totals = GlobalBoardRows()
     private let reader: GlobalPullsReader
 
     init() {
         reader = GlobalPullsReader(saved: { Store.shared.cache.value($0) })
         state = reader.state
-        rows = reader.state.rows
-        issueRows = reader.state.issueRows
-        reviewRows = reader.state.reviewRows(me: GitHubLogin.current)
+        refilter()
     }
 
     var emptyTitle: String { state.emptyTitle(tab, filtered: filter.isOn) }
-    /// How many rows the tab on show lists.
-    var shownCount: Int {
-        switch tab {
-        case .pulls: return rows.count
-        case .issues: return issueRows.count
-        case .review: return reviewRows.count
-        }
-    }
     func clearFilters() { filter = GlobalPullsFilter() }
 
-    /// Keeps the GitHub login whose review the Review List waits on.
-    func saveLogin(_ typed: String) { if GitHubLogin.save(typed) { refilter() } }
+    /// The saved GitHub login changed, and with it the Review List.
+    func loginChanged() { refilter() }
 
     private func refilter() {
-        rows = filter.rows(in: state)
-        issueRows = filter.issueRows(in: state)
-        reviewRows = filter.reviewRows(in: state, me: GitHubLogin.current)
+        shown = filter.board(in: state, me: GitHubLogin.current)
+        totals = GlobalPullsFilter().board(in: state, me: GitHubLogin.current)
     }
 
     @discardableResult

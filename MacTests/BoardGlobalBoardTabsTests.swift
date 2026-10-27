@@ -67,6 +67,19 @@ final class BoardGlobalBoardTabsTests: XCTestCase {
         let empty = GlobalPullsState()
         XCTAssertNotEqual(empty.emptyTitle(.pulls, filtered: false), empty.emptyTitle(.issues, filtered: false))
         XCTAssertNotEqual(empty.emptyTitle(.issues, filtered: false), empty.emptyTitle(.issues, filtered: true))
-        XCTAssertEqual(empty.emptyTitle(filtered: true), empty.emptyTitle(.pulls, filtered: true))
+    }
+
+    func testBoardRowsCountEachTabAndTheDefaultFilterGivesTotals() {
+        let totals = GlobalPullsFilter().board(in: state(), me: "me")
+        XCTAssertEqual(GlobalBoardTab.allCases.map { totals.count($0) }, [4, 2, 2])
+        let filtered = GlobalPullsFilter(repo: "o/b").board(in: state(), me: "me")
+        XCTAssertEqual(filtered.pulls.map(\.id), ["o/b#1"])
+        XCTAssertEqual(filtered.issues.map(\.id), ["o/b#9"])
+        XCTAssertEqual(filtered.count(.review), 0)
+    }
+
+    func testReviewTabLabelAddsTheCountOnceRead() {
+        XCTAssertNotEqual(boardReviewTabLabel(count: nil), boardReviewTabLabel(count: 3))
+        XCTAssertTrue(boardReviewTabLabel(count: 3).contains("3"))
     }
 }
