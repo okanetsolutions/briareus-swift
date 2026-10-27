@@ -19,6 +19,9 @@ struct GlobalPullsScreen: View {
                     if let error = model.state.error { Notice(message: error.description) }
                     ForEach(model.state.projects, id: \.project.repo) { entry in
                         if let error = entry.error { Notice(message: "\(entry.project.repo): \(error.description)") }
+                        if let board = model.boards[entry.project.repo] {
+                            BoardPullWriteNotice(model: board, repo: entry.project.repo)
+                        }
                     }
                     GlobalBoardList(model: model)
                     if model.state.loading && !model.state.loaded { LoadingNote(text: model.tab.loadingText) }
@@ -66,7 +69,9 @@ private struct GlobalBoardList: View {
         switch model.tab {
         case .pulls, .review:
             ForEach(model.tab == .pulls ? model.shown.pulls : model.shown.review) { row in
-                GlobalPullsRow(row: row) { model.open(row) }
+                if let board = model.boards[row.project.repo] {
+                    BoardPullListRow(model: board, pull: row.pull, stack: row.stack) { model.open(row) }
+                }
             }
         case .issues:
             ForEach(model.shown.issueRefusals, id: \.project.repo) { Notice(message: $0.notice) }
@@ -109,18 +114,6 @@ private struct GlobalPullsFilters: View {
             }
             .labelsHidden().accessibilityLabel("Project")
             if model.filter.isOn { Button("Clear filters") { model.clearFilters() }.dashButton(.bordered) }
-        }
-    }
-}
-
-private struct GlobalPullsRow: View {
-    let row: GlobalPullRow
-    var open: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(row.project.repo).font(Theme.caption).foregroundStyle(Theme.accent).lineLimit(1)
-            PullRow(pull: row.pull, stack: row.stack, repo: row.project.repo, action: open)
         }
     }
 }

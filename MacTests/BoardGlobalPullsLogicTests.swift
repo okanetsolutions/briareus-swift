@@ -80,6 +80,30 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
     }
 
     @MainActor
+    func testRowActionRefreshUpdatesOnlyItsRepositoryAndEveryTab() throws {
+        let reader = GlobalPullsReader(saved: { key in key == "projects" ? self.projects : self.first })
+        let updated = j(#"{"pulls":[{"number":8,"labels":["requires-dev-review"]}],"issues":[{"number":12}],"author":"reviewer"}"#)
+        try reader.adopt(updated, repo: "O/A")
+        XCTAssertEqual(Set(reader.state.rows.map(\.id)), ["o/a#8", "o/b#7"])
+        XCTAssertEqual(reader.state.issueRows.map(\.id), ["o/a#12"])
+        XCTAssertEqual(reader.state.reviewRows(me: nil).map(\.id), ["o/a#8"])
+        try reader.adopt(jBoard([]), repo: "o/a")
+        XCTAssertEqual(reader.state.rows.map(\.id), ["o/b#7"])
+        XCTAssertTrue(reader.state.issueRows.isEmpty)
+        XCTAssertTrue(reader.state.reviewRows(me: nil).isEmpty)
+    }
+
+    @MainActor
+    func testRowActionRefreshCannotRestoreRemovedProjectsOrMalformedBoards() throws {
+        let reader = GlobalPullsReader(saved: { key in key == "projects" ? self.projects : self.first })
+        let before = reader.state
+        try reader.adopt(second, repo: "removed/project")
+        XCTAssertEqual(reader.state, before)
+        XCTAssertThrowsError(try reader.adopt(.null, repo: "o/a"))
+        XCTAssertEqual(reader.state, before)
+    }
+
+    @MainActor
     func testPartialFailureKeepsCachedRowsAndPublishesSuccessfulProjects() async {
         let reader = GlobalPullsReader(saved: { _ in nil })
         var changes: [GlobalPullsState] = []

@@ -16,6 +16,7 @@ struct GlobalPullsScreen: View {
                 if let error = entry.error {
                     Section(entry.project.repo) { ErrorNotice(message: error.description) }.listRowBackground(Theme.row)
                 }
+                if let actions = model.actions[entry.project.repo] { BoardPullNotices(model: actions) }
             }
             GlobalBoardList(model: model)
             if model.state.loading && !model.state.loaded {
@@ -28,6 +29,11 @@ struct GlobalPullsScreen: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden).background(Theme.canvas)
         .navigationTitle("All projects")
+        .background {
+            ForEach(model.state.projects, id: \.project.repo) { entry in
+                if let actions = model.actions[entry.project.repo] { Color.clear.boardPullPrompts(actions) }
+            }
+        }
         .searchable(text: $model.filter.query, prompt: model.tab.searchPrompt)
         .refreshable { await model.load(fresh: true) }
         .task { await poll(every: 60) { await model.load() } }
@@ -77,9 +83,8 @@ private struct GlobalBoardList: View {
             switch model.tab {
             case .pulls, .review:
                 ForEach(model.tab == .pulls ? model.shown.pulls : model.shown.review) { row in
-                    DestinationLink(destination: .pull(repo: row.project.repo, number: row.pull.number,
-                                                       stack: row.stack?.json, summary: row.pull.raw)) {
-                        GlobalPullsRow(row: row)
+                    if let actions = model.actions[row.project.repo] {
+                        BoardPullListRow(model: actions, pull: row.pull, stack: row.stack)
                     }
                 }
             case .issues:
@@ -98,16 +103,5 @@ private struct GlobalBoardList: View {
             }
         }
         .listRowBackground(Theme.row)
-    }
-}
-
-private struct GlobalPullsRow: View {
-    let row: GlobalPullRow
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(row.project.repo).font(.caption).foregroundStyle(Theme.accent).lineLimit(1)
-            BoardPullRow(pull: row.pull, stack: row.stack, repo: row.project.repo)
-        }
     }
 }

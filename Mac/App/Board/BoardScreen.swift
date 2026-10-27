@@ -90,7 +90,7 @@ final class BoardModel: ObservableObject {
 
     // MARK: Reading
 
-    private func show(_ result: JSON, saved: Bool) {
+    func show(_ result: JSON, saved: Bool) {
         board = result
         // A poll mostly answers what is already shown; unchanged rows are left as they are.
         let parsed = PullSummary.parseList(result["pulls"])
@@ -178,8 +178,8 @@ final class BoardModel: ObservableObject {
         }
     }
 
-    func runsOn(_ number: Int) -> Int { runs.filter { $0.pullNumber == number }.count }
-    func runActiveOn(_ number: Int) -> Bool { runs.contains { $0.pullNumber == number && $0.isActive } }
+    func runsOn(_ number: Int) -> Int { BoardPullRuns(runs, number: number).total }
+    func runActiveOn(_ number: Int) -> Bool { BoardPullRuns(runs, number: number).active > 0 }
     func stack(of pull: PullSummary) -> StackPosition? { StackPosition(pull.raw["stack"], stacks: board["stacks"]) }
     /// Whose review the Review List waits on: the saved GitHub login, else the project's author.
     var reviewer: String? { BoardEdits.login ?? board["author"].nonEmpty }
@@ -221,20 +221,17 @@ final class BoardModel: ObservableObject {
 
     // MARK: Merge
 
-    /// ↳ Merge is offered on every pull request that is not a draft, to a token that may write on a server that reads and
-    /// merges one.
-    var mergeOffered: Bool { Store.shared.canManage && Store.shared.supports("pull") && Store.shared.supports("merge_pull") }
+    /// The same permission and capability rules on the project and cross-project rows.
+    func rowActions(for pull: PullSummary) -> BoardPullActions {
+        BoardPullActions(pull: pull, catalog: catalog, canManage: Store.shared.canManage, supports: { Store.shared.supports($0) })
+    }
     /// Merging from the board: the row carries no head commit, and the server merges only the head that was read, so the
     /// pull request is read first and squash-merged at the head that read returns, once confirmed. Then the list is read
     /// again.
     func merge(_ pull: PullSummary) {
         guard mergingNumber == 0, !busy else { return }
-        var message = "\u{201C}\(pull.title)\u{201D} is squash-merged into \(pull.baseBranch.isEmpty ? "its base branch" : pull.baseBranch) on GitHub."
-        if pull.conflicting { message += "\n\nThis branch has conflicts that must be resolved before it can merge." }
-        if pull.checksFailed { message += "\n\nSome checks failed." }
-        else if pull.checks == "pending" || pull.checks == "expected" { message += "\n\nSome checks are still running." }
         dialogOpen = true
-        let ok = Dialogs.confirm("Merge #\(pull.number)?", message, continueLabel: "Merge", destructive: true)
+        let ok = Dialogs.confirm("Merge #\(pull.number)?", boardPullMergeQuestion(pull), continueLabel: "Merge", destructive: true)
         dialogOpen = false
         guard ok, mergingNumber == 0 else { return }
         let number = pull.number
@@ -524,14 +521,7 @@ struct BoardScreen: View {
 
     @ViewBuilder private var lists: some View {
         if let e = model.error { Notice(message: e); Spacer().frame(height: 10) }
-        if let e = model.writeError {
-            Notice(message: e)
-            if model.uncertain {
-                Text("The request may have completed. Refresh (F5) and look for its conversation in the project before starting another agent.")
-                    .font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
-            }
-            Spacer().frame(height: 10)
-        }
+        BoardPullWriteNotice(model: model)
         if model.tab == .review { reviewList } else { filteredLists }
         if !model.loaded { LoadingNote(text: "Loading pull requests…").padding(.horizontal, -8) }
     }
@@ -556,10 +546,7 @@ struct BoardScreen: View {
     @ViewBuilder private var reviewList: some View {
         let shown = model.reviewPulls
         ForEach(shown, id: \.number) { pull in
-            PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number),
-                    issueStatus: model.issueStatus.statuses(pull), action: { model.openPull(pull) }) {
-                rowButtons(pull)
-            }
+            BoardPullListRow(model: model, pull: pull, stack: model.stack(of: pull)) { model.openPull(pull) }
             .padding(.bottom, 8)
         }
         if model.loaded && shown.isEmpty && model.error == nil {
@@ -570,44 +557,11 @@ struct BoardScreen: View {
 
     @ViewBuilder private func pullList(filter: BoardFilter, shown: Int) -> some View {
         ForEach(model.pulls.filter { filter.passes(BoardRow($0)) }, id: \.number) { pull in
-            PullRow(pull: pull, stack: model.stack(of: pull), repo: repo, running: model.runActiveOn(pull.number),
-                    issueStatus: model.issueStatus.statuses(pull), action: { model.openPull(pull) }) {
-                rowButtons(pull)
-            }
+            BoardPullListRow(model: model, pull: pull, stack: model.stack(of: pull)) { model.openPull(pull) }
             .padding(.bottom, 8)
         }
         if model.loaded && shown == 0 && model.error == nil {
             Text(model.pulls.isEmpty ? "No open pull requests." : "No pull requests match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)
-        }
-    }
-
-    /// The Windows client's buttons: the errands its state offers, the suggested one filled. Clicking the row opens the PR.
-    @ViewBuilder private func rowButtons(_ pull: PullSummary) -> some View {
-        let actions = pull.branch.isEmpty ? [] : rowActions(catalog: model.catalog, pull: pull, failedChecks: 0)
-        let runs = model.runsOn(pull.number)
-        let merge = !pull.draft && model.mergeOffered
-        if !actions.isEmpty || runs > 0 || merge {
-            FlowLayout(spacing: 6, lineSpacing: 6) {
-                ForEach(actions, id: \.id) { a in
-                    let starting = model.busy && model.startingNumber == pull.number && model.startingID == a.id
-                    Button { model.act(pull, a) } label: {
-                        if starting { Text(verbatim: "Starting…") } else { ErrandLabel(id: a.id, label: a.label) }
-                    }
-                        .dashButton(a.isSuggested(for: pull) ? .prominent : .bordered)
-                        .disabled(model.busy || model.uncertain)
-                        .help(a.hint)
-                }
-                if merge {
-                    Button(model.mergingNumber == pull.number ? "Merging…" : "↳ Merge") { model.merge(pull) }
-                        .dashButton(.bordered)
-                        .disabled(model.mergingNumber != 0 || model.busy)
-                        .help("Squash-merge this pull request on GitHub")
-                }
-                if runs > 0 {
-                    Button(String("\(runs) run\(runs == 1 ? "" : "s") ›")) { model.openRuns(pull) }.dashButton(.plain)
-                }
-            }
-            .padding(.top, 8)
         }
     }
 

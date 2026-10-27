@@ -272,6 +272,12 @@ final class GlobalPullsReader {
         }
     }
 
+    /// A row action refreshed one project's board; update every tab without waiting for the next poll.
+    func adopt(_ board: JSON, repo: String) throws {
+        guard let index = state.projects.firstIndex(where: { foldEqual($0.project.repo, repo) }) else { return }
+        try state.projects[index].adopt(board)
+    }
+
     /// A nil board means its shared cooldown is still running; retain its rows and report that updates are delayed.
     /// Fresh requests queued during one pass share a follow-up fresh pass and wait for its result.
     func load(fresh: Bool = false, projects: () async throws -> JSON, saved: (String) -> JSON?,
