@@ -85,20 +85,16 @@ struct ConversationScreen: View {
     private var content: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: 0) {
-                    ConversationTranscript(blocks: model.blocks, session: session, expanded: model.expanded, loaded: model.loaded,
-                                           error: model.error, writeError: model.writeError, uncertain: model.uncertain,
-                                           blocked: !model.can, canMessage: model.canMessage,
-                                           answer: { model.draft.text = $0; composerFocused = true },
-                                           toggle: { model.toggle($0) },
-                                           dropQueued: { model.mutate("drop_message", ["index": JSON($0)]) },
-                                           refreshOutcome: { model.refreshOutcome() })
-                        .equatable()
-                    Color.clear.frame(height: 1).id("bottom")
-                        .onAppear { atBottom = true }.onDisappear { atBottom = false }
-                }
-                .padding(.horizontal, 16).padding(.vertical, 12)
-                .frame(maxWidth: 820).frame(maxWidth: .infinity)
+                ConversationTranscript(atBottom: $atBottom, blocks: model.blocks, session: session, expanded: model.expanded, loaded: model.loaded,
+                                       error: model.error, writeError: model.writeError, uncertain: model.uncertain,
+                                       blocked: !model.can, canMessage: model.canMessage,
+                                       answer: { model.draft.text = $0; composerFocused = true },
+                                       toggle: { model.toggle($0) },
+                                       dropQueued: { model.mutate("drop_message", ["index": JSON($0)]) },
+                                       refreshOutcome: { model.refreshOutcome() })
+                    .equatable()
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .frame(maxWidth: 820).frame(maxWidth: .infinity)
             }
             .conversationStartsAtBottom()
             .scrollDismissesKeyboard(.interactively)
