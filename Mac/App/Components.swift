@@ -189,11 +189,6 @@ struct NoticeBox: View {
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.danger, lineWidth: 1))
     }
 }
-/// A progress note ("Loading…").
-struct LoadingNote: View {
-    var text = "Loading…"
-    var body: some View { Text(text).font(Theme.footnote).foregroundStyle(Theme.muted).padding(8).frame(maxWidth: .infinity, alignment: .leading) }
-}
 /// An empty-state note.
 struct EmptyNote: View {
     var title: String

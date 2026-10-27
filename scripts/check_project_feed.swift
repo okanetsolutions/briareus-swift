@@ -59,6 +59,8 @@ struct ProjectFeedChecks {
         try await cancelledTabRead(join: true)
         try await overlappingReads(failFirst: false)
         try await overlappingReads(failFirst: true)
+        try await boardRefreshProgress(fail: false)
+        try await boardRefreshProgress(fail: true)
         liveSessionsAfterCacheWipe()
         liveSessionsBeforeFirstRead()
         liveSessionDeletions()
@@ -150,6 +152,7 @@ struct ProjectFeedChecks {
         await reads.waitFor(1)
         precondition(requests == [false], "A stale local copy must try the server cache first")
         precondition(feed.boardReading && feed.board == stale)
+        precondition(!feed.boardRefreshing, "Automatic reads must not add progress above cached board rows")
         reads.pending[0].resume(returning: staleServer ? stale : board)
         if staleServer {
             await reads.waitFor(2)
@@ -210,5 +213,28 @@ struct ProjectFeedChecks {
         }
         precondition(failures == (failFirst ? 1 : 0))
         precondition(!feed.boardReading, "Spinner must stop after every read completes, including failures")
+    }
+
+    @MainActor
+    static func boardRefreshProgress(fail: Bool) async throws {
+        let reads = Reads(), feed = ProjectFeed(repo: "refresh-progress/\(fail)")
+        Store.shared.read = { _ in try await reads.read() }
+        let background = Task { try await feed.loadBoard(fresh: true) }
+        await reads.waitFor(1)
+        precondition(!feed.boardRefreshing, "A fresh read from another screen must not show board refresh progress")
+        let refresh = Task { try await feed.refreshBoard() }
+        while !feed.boardRefreshing { await Task.yield() }
+        precondition(feed.boardReading, "User refresh progress must cover waiting for an existing read")
+        reads.pending[0].resume(returning: board)
+        try await background.value
+        await reads.waitFor(2)
+        precondition(feed.boardRefreshing, "Progress must remain visible throughout the user's own read")
+        if fail { reads.pending[1].resume(throwing: APIError(.network)) }
+        else { reads.pending[1].resume(returning: board) }
+        do {
+            try await refresh.value
+            precondition(!fail)
+        } catch { precondition(fail) }
+        precondition(!feed.boardRefreshing && !feed.boardReading, "Success and failure must stop refresh progress")
     }
 }

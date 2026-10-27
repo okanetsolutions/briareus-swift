@@ -2,6 +2,9 @@
 // and partial reads shared by both apps.
 import Foundation
 
+/// Background reads keep cached board rows in place; initial loads and user refreshes show progress.
+func boardShowsLoading(loaded: Bool, refreshing: Bool) -> Bool { !loaded || refreshing }
+
 /// The tabs the board across every project offers: a project board's lists that make sense without one repository.
 enum GlobalBoardTab: Hashable, CaseIterable, Sendable {
     case pulls, issues, review
@@ -131,6 +134,8 @@ struct GlobalPullsState: Equatable, Sendable {
     var error: APIError?
     var loaded = false
     var loading = false
+    var refreshing = false
+    var showsLoading: Bool { (loading || refreshing) && boardShowsLoading(loaded: loaded, refreshing: refreshing) }
 
     /// Newest first, with a stable repository and number order when dates are missing or equal.
     private(set) var rows: [GlobalPullRow] = []
@@ -265,6 +270,7 @@ final class GlobalPullsReader {
     private var waiting: [CheckedContinuation<Void, Never>] = []
     private var freshGeneration = 0
     private var lastFreshError: APIError?
+    private var refreshCount = 0
 
     init(saved: (String) -> JSON?) {
         if let answer = saved("projects"), let projects = Project.parseList(answer) {
@@ -279,6 +285,18 @@ final class GlobalPullsReader {
               cooldownError: (String) -> APIError? = { _ in nil },
               read: (String) async throws -> JSON?, current: () -> Bool,
               changed: (GlobalPullsState) -> Void) async -> APIError? {
+        if fresh {
+            refreshCount += 1
+            state.refreshing = true
+            changed(state)
+        }
+        defer {
+            if fresh {
+                refreshCount -= 1
+                state.refreshing = refreshCount > 0
+                changed(state)
+            }
+        }
         let requestedAfter = freshGeneration
         while state.loading {
             guard fresh else { return nil }

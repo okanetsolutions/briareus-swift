@@ -13,6 +13,38 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
         return state
     }
 
+    func testBoardProgressKeepsBackgroundReadsOutOfLoadedLists() {
+        XCTAssertTrue(boardShowsLoading(loaded: false, refreshing: false))
+        XCTAssertTrue(boardShowsLoading(loaded: false, refreshing: true))
+        XCTAssertFalse(boardShowsLoading(loaded: true, refreshing: false))
+        XCTAssertTrue(boardShowsLoading(loaded: true, refreshing: true))
+    }
+
+    @MainActor
+    func testProgressDistinguishesInitialLoadPollAndUserRefresh() async {
+        for failure in [nil, APIError(.network), APIError(.cancelled)] {
+            let reader = GlobalPullsReader(saved: { key in key == "projects" ? self.projects : self.first })
+            var changes: [GlobalPullsState] = []
+            await reader.load(projects: { self.projects }, saved: { _ in self.first },
+                              read: { _ in self.first }, current: { true }, changed: { changes.append($0) })
+            XCTAssertTrue(changes.first?.showsLoading == true)
+            XCTAssertFalse(reader.state.showsLoading)
+            changes.removeAll()
+            await reader.load(projects: { self.projects }, saved: { _ in self.first },
+                              read: { _ in self.first }, current: { true }, changed: { changes.append($0) })
+            XCTAssertTrue(changes.allSatisfy { !$0.showsLoading && !$0.refreshing })
+            changes.removeAll()
+            await reader.load(fresh: true, projects: { self.projects }, saved: { _ in self.first }, read: { _ in
+                if let failure { throw failure }
+                return self.second
+            }, current: { true }, changed: { changes.append($0) })
+            XCTAssertTrue(changes.contains { $0.loading && $0.refreshing && $0.showsLoading })
+            XCTAssertTrue(changes.filter(\.refreshing).allSatisfy(\.showsLoading))
+            XCTAssertFalse(reader.state.refreshing)
+            XCTAssertFalse(reader.state.showsLoading)
+        }
+    }
+
     func testRowsKeepRepositoryIdentityAndNewestFirst() {
         let rows = state().rows
         XCTAssertEqual(rows.map(\.id), ["o/b#7", "o/a#7"])
@@ -305,6 +337,7 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
             }, current: { true }, changed: { _ in })
         }
         await fulfillment(of: [polling], timeout: 5)
+        XCTAssertFalse(reader.state.refreshing)
         let refresh = Task {
             queued.fulfill()
             let result = await reader.load(fresh: true, projects: { list }, saved: { _ in nil }, read: { _ in
@@ -316,6 +349,8 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
             return result
         }
         await fulfillment(of: [queued], timeout: 5)
+        XCTAssertTrue(reader.state.refreshing)
+        XCTAssertTrue(reader.state.showsLoading)
         XCTAssertFalse(returned)
         XCTAssertEqual(events, ["poll"])
         // A second poll does not queue another pass.
@@ -333,6 +368,8 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
         XCTAssertNil(freshError)
         XCTAssertEqual(reader.state.rows.first?.pull.title, "Database")
         XCTAssertFalse(reader.state.loading)
+        XCTAssertFalse(reader.state.refreshing)
+        XCTAssertFalse(reader.state.showsLoading)
     }
 
     @MainActor
@@ -390,6 +427,8 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
                 XCTAssertEqual(returned, 4)
                 XCTAssertEqual(reader.state.rows.first?.pull.title, failure == nil ? "Database" : "Login")
                 XCTAssertFalse(reader.state.loading)
+                XCTAssertFalse(reader.state.refreshing)
+                XCTAssertFalse(reader.state.showsLoading)
             }
         }
     }
@@ -419,6 +458,7 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
         let error = await refresh.value
         XCTAssertEqual(error?.kind, .cancelled)
         XCTAssertFalse(reader.state.loading)
+        XCTAssertFalse(reader.state.refreshing)
         XCTAssertFalse(reader.state.hasErrors)
     }
 

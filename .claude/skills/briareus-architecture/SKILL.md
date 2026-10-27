@@ -41,7 +41,7 @@ View (`App/**`, `Mac/App/**`) -> Model (`@MainActor ObservableObject`, `*Model.s
 
 Search here before writing a component.
 
-**Mac primitives** (`Mac/App/Components.swift`): `DashButtonStyle` with `ButtonKind` (prominent, bordered, plain, destructive), `IconButtonStyle`, `GlyphButton`, `StatusDot`, `Badge`, `Chip`, `Monogram`, `Notice`, `NoticeBox`, `LoadingNote`, `EmptyNote`, `SectionTitle`, `LabeledRow`, `Card`, `Segments`, `TabNav`/`TabNavItem`, `FieldStyle`, `FlowLayout`, `Clipboard`, `openWebURL`.
+**Mac primitives** (`Mac/App/Components.swift`): `DashButtonStyle` with `ButtonKind` (prominent, bordered, plain, destructive), `IconButtonStyle`, `GlyphButton`, `StatusDot`, `Badge`, `Chip`, `Monogram`, `Notice`, `NoticeBox`, `EmptyNote`, `SectionTitle`, `LabeledRow`, `Card`, `Segments`, `TabNav`/`TabNavItem`, `FieldStyle`, `FlowLayout`, `Clipboard`, `openWebURL`. Shared progress: `LoadingNote` in `Mac/App/Shared/LoadingNote.swift`.
 
 **Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `severityColor`, `reviewGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
 
