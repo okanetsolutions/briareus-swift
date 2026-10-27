@@ -75,7 +75,7 @@ private final class PendingRead {
 
 @main
 struct GlobalPullsChecks {
-    static let open: JSON = ["pulls": [["number": 7]], "issues": []]
+    static let openBoard: JSON = ["pulls": [["number": 7]], "issues": []]
     static let merged: JSON = ["pulls": [], "issues": []]
     static let projects: JSON = ["projects": [["repo": "o/a"], ["repo": "o/b"]]]
 
@@ -97,7 +97,7 @@ struct GlobalPullsChecks {
     @MainActor
     static func orderedReads(failedPoll: Bool) async throws {
         let pollRead = PendingRead(), freshRead = PendingRead(), model = BoardModel(repo: "o/a")
-        model.show(open, saved: true)
+        model.show(openBoard, saved: true)
         Store.shared.read = { _, arguments in
             try await (arguments["fresh"].is(true) ? freshRead : pollRead).read()
         }
@@ -109,7 +109,7 @@ struct GlobalPullsChecks {
         let freshResult = await refresh.value
         precondition(freshResult?.value == merged && !model.reading)
         if failedPoll { pollRead.continuation?.resume(throwing: APIError(.http, status: 503)) }
-        else { pollRead.continuation?.resume(returning: open) }
+        else { pollRead.continuation?.resume(returning: openBoard) }
         let pollResult = await poll.value
         precondition(pollResult?.value == merged && model.board == merged && model.error == nil,
                      "An older poll must return the accepted board without restoring rows or errors")
@@ -129,7 +129,7 @@ struct GlobalPullsChecks {
             switch operation {
             case "projects": return projects
             case "actions": return holdReads ? try await actions.read() : catalog
-            case "pulls": return open
+            case "pulls": return openBoard
             case "sessions": return holdReads && repo == "o/a" ? try await sessions.read() : []
             default: preconditionFailure("Unexpected operation \(operation)")
             }
