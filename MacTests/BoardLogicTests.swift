@@ -3,6 +3,52 @@ import XCTest
 @testable import BriareusMacCore
 
 final class BoardLogicTests: XCTestCase {
+    @MainActor
+    func testFreshPullsReadRetriesUnsupportedArgumentOnlyOnce() async throws {
+        var requests: [Bool] = []
+        let answer: JSON = ["pulls": []]
+        let result = await readPulls(fresh: true) { fresh in
+            requests.append(fresh)
+            return fresh ? .failure(APIError(.http, status: 400)) : .success(answer)
+        }
+        XCTAssertEqual(requests, [true, false])
+        XCTAssertEqual(try result.get(), answer)
+
+        requests = []
+        let failure = APIError(.http, status: 400)
+        let failed = await readPulls(fresh: true) { fresh in
+            requests.append(fresh)
+            return .failure(failure)
+        }
+        XCTAssertEqual(requests, [true, false])
+        XCTAssertThrowsError(try failed.get()) { XCTAssertEqual($0 as? APIError, failure) }
+    }
+
+    @MainActor
+    func testPullsReadReturnsSuccessAndOtherFailuresWithoutRetry() async throws {
+        let answer: JSON = ["pulls": []]
+        for fresh in [false, true] {
+            var requests: [Bool] = []
+            let result = await readPulls(fresh: fresh) { flag in
+                requests.append(flag)
+                return .success(answer)
+            }
+            XCTAssertEqual(requests, [fresh])
+            XCTAssertEqual(try result.get(), answer)
+            for failure in [APIError(.http, status: 400), APIError(.http, status: 401),
+                            APIError(.http, status: 429), APIError(.http, status: 502), APIError(.cancelled)] {
+                if fresh && failure.status == 400 { continue }
+                requests = []
+                let result = await readPulls(fresh: fresh) { flag in
+                    requests.append(flag)
+                    return .failure(failure)
+                }
+                XCTAssertEqual(requests, [fresh])
+                XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? APIError, failure) }
+            }
+        }
+    }
+
     func testVisibleMarkdownDropsCommentsAndRawHTMLButKeepsCode() {
         XCTAssertEqual(visibleMarkdown("Hello <!-- hidden --> world"), "Hello  world")
         XCTAssertEqual(visibleMarkdown("Keep\n<!-- open forever\nlost"), "Keep")

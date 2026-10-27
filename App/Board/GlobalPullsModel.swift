@@ -4,27 +4,32 @@ import Foundation
 
 @MainActor
 final class GlobalPullsModel: ObservableObject {
-    @Published private(set) var state: GlobalPullsState
-    @Published var filter = GlobalPullsFilter()
+    @Published private(set) var state: GlobalPullsState {
+        didSet { filter = filter.reconciled(in: state) }
+    }
+    @Published var filter = GlobalPullsFilter() {
+        didSet { rows = filter.rows(in: state) }
+    }
+    @Published private(set) var rows: [GlobalPullRow]
     private let reader: GlobalPullsReader
 
     init() {
         reader = GlobalPullsReader(saved: { Store.shared.cache.value($0) })
         state = reader.state
+        rows = reader.state.rows
     }
 
-    var rows: [GlobalPullRow] { filter.rows(in: state) }
     var emptyTitle: String { state.emptyTitle(filtered: filter.isOn) }
     func clearFilters() { filter = GlobalPullsFilter() }
 
     @discardableResult
     func load(fresh: Bool = false) async -> APIError? {
         guard let client = Store.shared.client else { return APIError(.cancelled) }
-        return await reader.load(projects: {
-            let answer = try await Store.shared.call("projects")
-            if Store.shared.client === client, Project.parseList(answer) != nil { Store.shared.cache.store(answer, "projects") }
-            return answer
-        }, saved: { Store.shared.cache.value("pulls:\($0)") }, read: { repo in
+        return await reader.load(fresh: fresh, projects: {
+            try await Store.shared.call("projects")
+        }, saved: { Store.shared.cache.value("pulls:\($0)") }, keepProjects: {
+            Store.shared.cache.store($0, "projects")
+        }, read: { repo in
             guard ProjectFeed.boardDeadline(repo) == nil else { return nil }
             let feed = Store.shared.feed(repo)
             try await feed.loadBoard(fresh: fresh)

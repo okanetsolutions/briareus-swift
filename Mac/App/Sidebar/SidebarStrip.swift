@@ -1,4 +1,4 @@
-// The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then WhatsApp, ✉, ◉ Status with
+// The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then Pull requests, WhatsApp, ✉, ◉ Status with
 // the count of conversations needing you, 📊, ⚑ with its count, as 26px squares (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
 import SwiftUI
 
@@ -6,7 +6,7 @@ enum StripAction { case newSession, whatsapp, mail, status, usage, findings, glo
 
 struct SidebarStrip: View {
     @ObservedObject private var store = Store.shared
-    /// The detail pane's root id, for the WhatsApp, ◉, 📊 and ⚑ switches' accent.
+    /// The detail pane's root id, for the Pull requests, WhatsApp, ✉, ◉, 📊 and ⚑ switches' accent.
     var selected: String?
     /// The ⚑ badge: review rounds and approvals waiting.
     var waiting: Int

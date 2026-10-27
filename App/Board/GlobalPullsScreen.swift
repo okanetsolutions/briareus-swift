@@ -23,7 +23,7 @@ struct GlobalPullsScreen: View {
                     }
                 }
             }
-            if model.state.loading {
+            if model.state.loading && !model.state.loaded {
                 ProgressView("Loading pull requests…").frame(maxWidth: .infinity).listRowBackground(Color.clear)
             } else if model.state.loaded && model.rows.isEmpty {
                 ContentUnavailableView(model.emptyTitle, systemImage: "arrow.triangle.pull")

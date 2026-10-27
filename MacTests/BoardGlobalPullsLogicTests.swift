@@ -2,7 +2,7 @@
 import XCTest
 @testable import BriareusMacCore
 
-final class GlobalPullsTests: XCTestCase {
+final class BoardGlobalPullsLogicTests: XCTestCase {
     private let projects = j(#"{"projects":[{"repo":"o/a","label":"Alpha"},{"repo":"o/b","label":"Beta"}]}"#)
     private let first = j(#"{"pulls":[{"number":7,"title":"Login","branch":"fix/login","author":"alice","draft":true,"labels":["bug"],"reviewers":[{"user":"bob"}],"updatedAt":"2026-10-25T12:00:00Z"}]}"#)
     private let second = j(#"{"pulls":[{"number":7,"title":"Database","updatedAt":"2026-10-26T12:00:00Z"}]}"#)
@@ -194,6 +194,143 @@ final class GlobalPullsTests: XCTestCase {
         XCTAssertEqual(reads, 0)
         XCTAssertTrue(reader.state.loaded)
         XCTAssertTrue(reader.state.rows.isEmpty)
+        XCTAssertFalse(reader.state.hasErrors)
+    }
+
+    func testRemovedProjectFilterResetsWithoutLosingSearchAndMatchesPickerCase() {
+        var state = state()
+        var filter = GlobalPullsFilter(query: "#7", repo: "O/A").reconciled(in: state)
+        XCTAssertEqual(filter.repo, "o/a")
+        state.replaceProjects([Project(repo: "o/b")], saved: { _ in nil })
+        filter = filter.reconciled(in: state)
+        XCTAssertEqual(filter.repo, "")
+        XCTAssertEqual(filter.query, "#7")
+        XCTAssertEqual(filter.rows(in: state).map(\.id), ["o/b#7"])
+        XCTAssertEqual(GlobalPullsFilter(repo: "o/b").reconciled(in: GlobalPullsState()).repo, "")
+    }
+
+    func testPreparedRowsUpdateAfterBoardAndProjectChanges() throws {
+        var state = state()
+        let snapshot = state
+        try state.projects[0].adopt(jBoard([9]))
+        XCTAssertEqual(state.rows.map(\.id), ["o/b#7", "o/a#9"])
+        XCTAssertTrue(GlobalPullsFilter(query: "Login").rows(in: state).isEmpty)
+        XCTAssertEqual(GlobalPullsFilter(query: "#9").rows(in: state).map(\.id), ["o/a#9"])
+        state.replaceProjects([Project(repo: "O/A", label: "Renamed")], saved: { _ in nil })
+        XCTAssertEqual(GlobalPullsFilter(query: "RENAMED", repo: "o/a").rows(in: state).map(\.id), ["o/a#9"])
+        XCTAssertTrue(GlobalPullsFilter(query: "Alpha").rows(in: state).isEmpty)
+        XCTAssertEqual(snapshot.rows.map(\.id), ["o/b#7", "o/a#7"])
+    }
+
+    @MainActor
+    func testCachedBoardsPreserveRealErrorsThroughCooldownUntilRecovery() async {
+        for status in [404, 502] {
+            let reader = GlobalPullsReader(saved: { _ in nil })
+            let failure = APIError(.http, status: status)
+            await reader.load(projects: { self.projects }, saved: { _ in self.first },
+                              read: { _ in throw failure }, current: { true }, changed: { _ in })
+            var changes: [GlobalPullsState] = []
+            await reader.load(projects: { self.projects }, saved: { _ in self.first },
+                              read: { _ in nil }, current: { true }, changed: { changes.append($0) })
+            XCTAssertTrue(changes.allSatisfy { $0.projects.allSatisfy { $0.error == failure } })
+            XCTAssertEqual(reader.state.rows.count, 2)
+            await reader.load(projects: { self.projects }, saved: { _ in self.first },
+                              read: { _ in self.second }, current: { true }, changed: { _ in })
+            XCTAssertFalse(reader.state.hasErrors)
+        }
+    }
+
+    @MainActor
+    func testOnlyCurrentParseableProjectsAreKept() async {
+        for answer in [projects, JSON.null] {
+            for connectionChanges in [false, true] {
+                let reader = GlobalPullsReader(saved: { _ in nil })
+                var current = true
+                var kept: [JSON] = []
+                await reader.load(projects: {
+                    current = !connectionChanges
+                    return answer
+                }, saved: { _ in nil }, keepProjects: { kept.append($0) },
+                                  read: { _ in self.first }, current: { current }, changed: { _ in })
+                XCTAssertEqual(kept, !connectionChanges && answer == projects ? [projects] : [])
+            }
+        }
+    }
+
+    @MainActor
+    func testFreshRefreshWaitsForPollThenForItsOwnRead() async {
+        let reader = GlobalPullsReader(saved: { _ in nil })
+        let polling = expectation(description: "Poll is reading")
+        let refreshing = expectation(description: "Fresh pass is reading")
+        let queued = expectation(description: "Refresh requested during the poll")
+        var finishPoll: CheckedContinuation<Void, Never>?
+        var finishFresh: CheckedContinuation<Void, Never>?
+        var events: [String] = []
+        var returned = false
+        let list = Project.json([Project(repo: "o/a")])
+        let poll = Task {
+            await reader.load(projects: { list }, saved: { _ in nil }, read: { _ in
+                events.append("poll")
+                await withCheckedContinuation { finishPoll = $0; polling.fulfill() }
+                return self.first
+            }, current: { true }, changed: { _ in })
+        }
+        await fulfillment(of: [polling], timeout: 5)
+        let refresh = Task {
+            queued.fulfill()
+            let result = await reader.load(fresh: true, projects: { list }, saved: { _ in nil }, read: { _ in
+                events.append("fresh")
+                await withCheckedContinuation { finishFresh = $0; refreshing.fulfill() }
+                return self.second
+            }, current: { true }, changed: { _ in })
+            returned = true
+            return result
+        }
+        await fulfillment(of: [queued], timeout: 5)
+        XCTAssertFalse(returned)
+        XCTAssertEqual(events, ["poll"])
+        // A second poll does not queue another pass.
+        await reader.load(projects: { XCTFail("Overlapping poll"); return list }, saved: { _ in nil },
+                          read: { _ in nil }, current: { true }, changed: { _ in })
+        finishPoll?.resume()
+        await fulfillment(of: [refreshing], timeout: 5)
+        XCTAssertFalse(returned)
+        XCTAssertEqual(events, ["poll", "fresh"])
+        XCTAssertTrue(reader.state.loading)
+        finishFresh?.resume()
+        let pollError = await poll.value
+        let freshError = await refresh.value
+        XCTAssertNil(pollError)
+        XCTAssertNil(freshError)
+        XCTAssertEqual(reader.state.rows.first?.pull.title, "Database")
+        XCTAssertFalse(reader.state.loading)
+    }
+
+    @MainActor
+    func testCancelledQueuedRefreshDoesNotReadAgain() async {
+        let reader = GlobalPullsReader(saved: { _ in nil })
+        let polling = expectation(description: "Poll is reading")
+        let queued = expectation(description: "Refresh requested")
+        var finishPoll: CheckedContinuation<Void, Never>?
+        let poll = Task {
+            await reader.load(projects: { self.projects }, saved: { _ in nil }, read: { _ in
+                await withCheckedContinuation { finishPoll = $0; polling.fulfill() }
+                throw CancellationError()
+            }, current: { true }, changed: { _ in })
+        }
+        await fulfillment(of: [polling], timeout: 5)
+        let refresh = Task {
+            queued.fulfill()
+            return await reader.load(fresh: true, projects: { XCTFail("Cancelled refresh"); return self.projects },
+                                     saved: { _ in nil }, read: { _ in nil }, current: { true }, changed: { _ in })
+        }
+        await fulfillment(of: [queued], timeout: 5)
+        refresh.cancel()
+        finishPoll?.resume()
+        _ = await poll.value
+        let error = await refresh.value
+        XCTAssertEqual(error?.kind, .cancelled)
+        XCTAssertFalse(reader.state.loading)
         XCTAssertFalse(reader.state.hasErrors)
     }
 

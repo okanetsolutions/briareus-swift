@@ -24,7 +24,7 @@ struct GlobalPullsScreen: View {
                     ForEach(model.rows) { row in
                         GlobalPullsRow(row: row) { model.open(row) }
                     }
-                    if model.state.loading { LoadingNote(text: "Loading pull requests…") }
+                    if model.state.loading && !model.state.loaded { LoadingNote(text: "Loading pull requests…") }
                     else if model.state.loaded && model.rows.isEmpty { EmptyNote(title: model.emptyTitle) }
                 }
                 .padding(18)

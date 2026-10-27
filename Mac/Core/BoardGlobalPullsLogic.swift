@@ -1,11 +1,21 @@
-// Open pull requests across the device's projects: repository identity, search, and partial reads shared by both apps.
+// The board's open pull requests across the device's projects: repository identity, search, and partial reads shared by both apps.
 import Foundation
 
 struct GlobalPullRow: Identifiable, Equatable, Sendable {
-    var project: Project
-    var pull: PullSummary
-    var stack: StackPosition?
-    var id: String { "\(project.repo.lowercased())#\(pull.number)" }
+    let project: Project
+    let pull: PullSummary
+    let stack: StackPosition?
+    let repoKey: String
+    let searchText: String
+    var id: String { "\(repoKey)#\(pull.number)" }
+
+    init(project: Project, pull: PullSummary, stack: StackPosition?) {
+        self.project = project; self.pull = pull; self.stack = stack
+        repoKey = project.repo.lowercased()
+        let fields = [project.repo, project.title, "#\(pull.number)", pull.title, pull.branch, pull.author ?? ""]
+            + pull.assignees + pull.reviewers.map(\.user) + pull.labels.map(\.name)
+        searchText = fields.joined(separator: " ").lowercased()
+    }
 }
 
 struct GlobalPullProject: Equatable, Sendable {
@@ -24,24 +34,24 @@ struct GlobalPullProject: Equatable, Sendable {
 }
 
 struct GlobalPullsState: Equatable, Sendable {
-    var projects: [GlobalPullProject] = []
+    var projects: [GlobalPullProject] = [] { didSet { rebuildRows() } }
     var error: APIError?
     var loaded = false
     var loading = false
 
     /// Newest first, with a stable repository and number order when dates are missing or equal.
-    var rows: [GlobalPullRow] {
-        projects.flatMap(\.rows).sorted {
+    private(set) var rows: [GlobalPullRow] = []
+
+    private mutating func rebuildRows() {
+        rows = projects.flatMap(\.rows).sorted {
             let left = $0.pull.updatedAt ?? .distantPast, right = $1.pull.updatedAt ?? .distantPast
             if left != right { return left > right }
-            if $0.project.repo.lowercased() != $1.project.repo.lowercased() {
-                return $0.project.repo.lowercased() < $1.project.repo.lowercased()
-            }
+            if $0.repoKey != $1.repoKey { return $0.repoKey < $1.repoKey }
             return $0.pull.number > $1.pull.number
         }
     }
     var hasErrors: Bool { error != nil || projects.contains { $0.error != nil } }
-    var count: Int { projects.reduce(0) { $0 + $1.rows.count } }
+    var count: Int { rows.count }
     var subtitle: String { "\(count) open pull requests · \(projects.count) projects" }
 
     func emptyTitle(filtered: Bool) -> String {
@@ -56,7 +66,9 @@ struct GlobalPullsState: Equatable, Sendable {
             var entry = projects.first { foldEqual($0.project.repo, project.repo) } ?? GlobalPullProject(project: project)
             entry.project = project
             entry.rows = entry.rows.map { GlobalPullRow(project: project, pull: $0.pull, stack: $0.stack) }
+            let error = entry.error
             if let board = saved(project.repo) { try? entry.adopt(board) }
+            entry.error = error
             return entry
         }
     }
@@ -68,15 +80,18 @@ struct GlobalPullsFilter: Equatable, Sendable {
     var repo = ""
     var isOn: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !repo.isEmpty }
 
+    /// Keep the picker's exact tag while present; a removed project returns to All projects without losing search.
+    func reconciled(in state: GlobalPullsState) -> GlobalPullsFilter {
+        var filter = self
+        filter.repo = state.projects.first { foldEqual($0.project.repo, repo) }?.project.repo ?? ""
+        return filter
+    }
+
     func rows(in state: GlobalPullsState) -> [GlobalPullRow] {
         let words = query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        let repoKey = repo.lowercased()
         return state.rows.filter { row in
-            guard repo.isEmpty || foldEqual(repo, row.project.repo) else { return false }
-            let pull = row.pull
-            let fields = [row.project.repo, row.project.title, "#\(pull.number)", pull.title, pull.branch, pull.author ?? ""]
-                + pull.assignees + pull.reviewers.map(\.user) + pull.labels.map(\.name)
-            let text = fields.joined(separator: " ").lowercased()
-            return words.allSatisfy { text.contains($0) }
+            (repoKey.isEmpty || repoKey == row.repoKey) && words.allSatisfy { row.searchText.contains($0) }
         }
     }
 }
@@ -85,6 +100,7 @@ struct GlobalPullsFilter: Equatable, Sendable {
 @MainActor
 final class GlobalPullsReader {
     private(set) var state = GlobalPullsState()
+    private var waiting: [CheckedContinuation<Void, Never>] = []
 
     init(saved: (String) -> JSON?) {
         if let answer = saved("projects"), let projects = Project.parseList(answer) {
@@ -93,18 +109,31 @@ final class GlobalPullsReader {
     }
 
     /// A nil board means its shared cooldown is still running; retain its rows and report that updates are delayed.
-    func load(projects: () async throws -> JSON, saved: (String) -> JSON?,
+    /// A fresh request waits for the active pass, then performs its own read before returning.
+    func load(fresh: Bool = false, projects: () async throws -> JSON, saved: (String) -> JSON?,
+              keepProjects: (JSON) -> Void = { _ in },
               read: (String) async throws -> JSON?, current: () -> Bool,
               changed: (GlobalPullsState) -> Void) async -> APIError? {
-        guard !state.loading else { return nil }
+        while state.loading {
+            guard fresh else { return nil }
+            await withCheckedContinuation { waiting.append($0) }
+        }
+        guard !Task.isCancelled, current() else { return APIError(.cancelled) }
         state.loading = true
         changed(state)
-        defer { state.loading = false; changed(state) }
+        defer {
+            state.loading = false
+            changed(state)
+            let ready = waiting
+            waiting.removeAll()
+            ready.forEach { $0.resume() }
+        }
         do {
             let answer = try await projects()
             try Task.checkCancellation()
             guard current() else { throw CancellationError() }
             guard let list = Project.parseList(answer) else { throw APIError(.nonJSON) }
+            keepProjects(answer)
             state.replaceProjects(list, saved: saved)
             state.error = nil
             changed(state)
