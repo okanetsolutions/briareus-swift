@@ -64,9 +64,38 @@ final class BoardGlobalBoardTabsTests: XCTestCase {
     }
 
     func testEmptyTitlesDependOnTheTab() {
-        let empty = GlobalPullsState()
-        XCTAssertNotEqual(empty.emptyTitle(.pulls, filtered: false), empty.emptyTitle(.issues, filtered: false))
-        XCTAssertNotEqual(empty.emptyTitle(.issues, filtered: false), empty.emptyTitle(.issues, filtered: true))
+        let empty = GlobalPullsState(), all = GlobalPullsFilter(), some = GlobalPullsFilter(query: "x")
+        XCTAssertNotEqual(empty.emptyTitle(.pulls, filter: all, me: "me"), empty.emptyTitle(.issues, filter: all, me: "me"))
+        XCTAssertNotEqual(empty.emptyTitle(.issues, filter: all, me: "me"), empty.emptyTitle(.issues, filter: some, me: "me"))
+    }
+
+    func testIssueRefusalsFollowTheProjectPicker() {
+        XCTAssertEqual(GlobalPullsFilter(repo: "O/B").issueRefusals(in: state()).map(\.project.repo), ["o/b"])
+        XCTAssertTrue(GlobalPullsFilter(repo: "o/a").issueRefusals(in: state()).isEmpty)
+        XCTAssertEqual(GlobalPullsFilter(query: "nothing").board(in: state(), me: nil).issueRefusals.map(\.project.repo), ["o/b"])
+        XCTAssertTrue(GlobalPullsFilter(repo: "o/a").board(in: state(), me: nil).issueRefusals.isEmpty)
+    }
+
+    func testEveryProjectRefusingIssuesIsNotAnEmptyList() {
+        var refused = GlobalPullsState()
+        refused.replaceProjects(Project.parseList(projects)!, saved: { _ in j(#"{"pulls":[],"issuesError":"No access"}"#) })
+        let plain = GlobalPullsState(), all = GlobalPullsFilter()
+        XCTAssertTrue(all.issueRows(in: refused).isEmpty)
+        XCTAssertNotEqual(refused.emptyTitle(.issues, filter: all, me: "me"), plain.emptyTitle(.issues, filter: all, me: "me"))
+        // A refusal outside the picked project leaves that project's empty list as it is.
+        XCTAssertEqual(state().emptyTitle(.issues, filter: GlobalPullsFilter(query: "zzz", repo: "o/a"), me: "me"),
+                       plain.emptyTitle(.issues, filter: GlobalPullsFilter(query: "zzz"), me: "me"))
+    }
+
+    func testReviewListWithoutAnyReviewerAsksForALogin() {
+        var anonymous = GlobalPullsState()
+        anonymous.replaceProjects(Project.parseList(projects)!, saved: { _ in j(#"{"pulls":[]}"#) })
+        let all = GlobalPullsFilter()
+        let asking = anonymous.emptyTitle(.review, filter: all, me: nil)
+        XCTAssertEqual(anonymous.emptyTitle(.review, filter: all, me: ""), asking)
+        XCTAssertNotEqual(anonymous.emptyTitle(.review, filter: all, me: "me"), asking)
+        // A project's author stands in for the login, as on its own board.
+        XCTAssertNotEqual(state().emptyTitle(.review, filter: all, me: nil), asking)
     }
 
     func testBoardRowsCountEachTabAndTheDefaultFilterGivesTotals() {

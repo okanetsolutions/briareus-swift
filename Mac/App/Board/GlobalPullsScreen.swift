@@ -69,7 +69,7 @@ private struct GlobalBoardList: View {
                 GlobalPullsRow(row: row) { model.open(row) }
             }
         case .issues:
-            ForEach(model.state.issueRefusals, id: \.project.repo) { Notice(message: $0.notice) }
+            ForEach(model.shown.issueRefusals, id: \.project.repo) { Notice(message: $0.notice) }
             ForEach(model.shown.issues) { row in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(row.project.repo).font(Theme.caption).foregroundStyle(Theme.accent).lineLimit(1)

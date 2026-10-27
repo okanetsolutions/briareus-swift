@@ -24,7 +24,7 @@ final class GlobalPullsModel: ObservableObject {
         refilter()
     }
 
-    var emptyTitle: String { state.emptyTitle(tab, filtered: filter.isOn) }
+    var emptyTitle: String { state.emptyTitle(tab, filter: filter, me: GitHubLogin.current) }
     func clearFilters() { filter = GlobalPullsFilter() }
 
     /// The saved GitHub login changed, and with it the Review List.

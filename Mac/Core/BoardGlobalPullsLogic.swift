@@ -20,6 +20,8 @@ struct GlobalBoardRows: Equatable, Sendable {
     var pulls: [GlobalPullRow] = []
     var issues: [GlobalIssueRow] = []
     var review: [GlobalPullRow] = []
+    /// The Issues tab's notices for the projects whose issues GitHub would not list.
+    var issueRefusals: [GlobalIssueRefusal] = []
 
     func count(_ tab: GlobalBoardTab) -> Int {
         switch tab {
@@ -147,16 +149,20 @@ struct GlobalPullsState: Equatable, Sendable {
         projects.compactMap { entry in entry.issuesError.map { GlobalIssueRefusal(project: entry.project, message: $0) } }
     }
 
-    func emptyTitle(_ tab: GlobalBoardTab, filtered: Bool) -> String {
+    /// What an empty tab says: a refused or failed read before the filters, and the Review List asks for a login when
+    /// neither a saved one nor any project's author decides whose review it waits on.
+    func emptyTitle(_ tab: GlobalBoardTab, filter: GlobalPullsFilter, me: String?) -> String {
+        let filtered = filter.isOn
         switch tab {
         case .pulls:
             if hasErrors { return "Pull requests could not all be loaded" }
             return filtered ? "No pull requests match the filters" : "No open pull requests"
         case .issues:
-            if hasErrors { return "Issues could not all be loaded" }
+            if hasErrors || !filter.issueRefusals(in: self).isEmpty { return "Issues could not all be loaded" }
             return filtered ? "No issues match the filters" : "No open issues"
         case .review:
             if hasErrors { return "Pull requests could not all be loaded" }
+            if (me ?? "").isEmpty && !projects.contains(where: { $0.author != nil }) { return "Set your GitHub login" }
             return filtered ? "No pull requests match the filters" : "Nothing is waiting on your review"
         }
     }
@@ -200,9 +206,15 @@ struct GlobalPullsFilter: Equatable, Sendable {
         state.reviewRows(me: me).filter { passes($0.repoKey, $0.searchText) }
     }
 
+    /// The refusals of the projects the picker shows; the search does not hide them.
+    func issueRefusals(in state: GlobalPullsState) -> [GlobalIssueRefusal] {
+        state.issueRefusals.filter { repo.isEmpty || foldEqual($0.project.repo, repo) }
+    }
+
     /// Every tab's rows under this filter; the default filter gives the totals the tabs are labelled with.
     func board(in state: GlobalPullsState, me: String?) -> GlobalBoardRows {
-        GlobalBoardRows(pulls: rows(in: state), issues: issueRows(in: state), review: reviewRows(in: state, me: me))
+        GlobalBoardRows(pulls: rows(in: state), issues: issueRows(in: state), review: reviewRows(in: state, me: me),
+                        issueRefusals: issueRefusals(in: state))
     }
 
     private func passes(_ rowRepo: String, _ searchText: String) -> Bool {

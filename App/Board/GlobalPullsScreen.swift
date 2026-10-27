@@ -83,7 +83,7 @@ private struct GlobalBoardList: View {
                     }
                 }
             case .issues:
-                ForEach(model.state.issueRefusals, id: \.project.repo) { ErrorNotice(message: $0.notice) }
+                ForEach(model.shown.issueRefusals, id: \.project.repo) { ErrorNotice(message: $0.notice) }
                 ForEach(model.shown.issues) { row in
                     DestinationLink(destination: .issue(repo: row.project.repo, issue: row.raw)) {
                         VStack(alignment: .leading, spacing: 5) {
