@@ -1,4 +1,5 @@
-// The global pull list's state and intents; project feeds keep its reads and cooldowns shared with each board.
+// The board across every project: its pull requests, issues and Review List tabs, their state and intents; project feeds
+// keep its reads and cooldowns shared with each board.
 import Combine
 import Foundation
 
@@ -8,19 +9,31 @@ final class GlobalPullsModel: ObservableObject {
         didSet { filter = filter.reconciled(in: state) }
     }
     @Published var filter = GlobalPullsFilter() {
-        didSet { rows = filter.rows(in: state) }
+        didSet { refilter() }
     }
-    @Published private(set) var rows: [GlobalPullRow]
+    @Published var tab = GlobalBoardTab.pulls
+    /// Each tab's rows under the filters, and without them for the tabs' labels. The Review List waits on the saved
+    /// GitHub login's review, or on each project's author's without one.
+    @Published private(set) var shown = GlobalBoardRows()
+    @Published private(set) var totals = GlobalBoardRows()
     private let reader: GlobalPullsReader
 
     init() {
         reader = GlobalPullsReader(saved: { Store.shared.cache.value($0) })
         state = reader.state
-        rows = reader.state.rows
+        refilter()
     }
 
-    var emptyTitle: String { state.emptyTitle(filtered: filter.isOn) }
+    var emptyTitle: String { state.emptyTitle(tab, filter: filter, me: GitHubLogin.current) }
     func clearFilters() { filter = GlobalPullsFilter() }
+
+    /// The saved GitHub login changed, and with it the Review List.
+    func loginChanged() { refilter() }
+
+    private func refilter() {
+        shown = filter.board(in: state, me: GitHubLogin.current)
+        totals = GlobalPullsFilter().board(in: state, me: GitHubLogin.current)
+    }
 
     @discardableResult
     func load(fresh: Bool = false) async -> APIError? {

@@ -36,23 +36,19 @@ final class AllSessionsTests: XCTestCase {
         XCTAssertTrue(list.cacheIsLoaded(projectsLoaded: Project.parseList(emptyAnswer) != nil, cachedRepos: []))
     }
 
-    func testEmptyStateDistinguishesNoSessionsFromFilteredResults() {
+    func testEmptyStateDistinguishesNoSessionsFromAllClosed() {
         XCTAssertEqual(AllSessions(sessions: [], projects: []).emptyState, .noSessions)
         let list = AllSessions(sessions: [session("a", repo: "org/api", status: "closed")], projects: [])
-        XCTAssertTrue(list.shown(search: "", showClosed: false).isEmpty)
-        XCTAssertEqual(list.emptyState, .noMatches)
+        XCTAssertTrue(list.shown.isEmpty)
+        XCTAssertEqual(list.count, 0)
+        XCTAssertEqual(list.emptyState, .allClosed)
     }
 
-    func testSearchesAcrossProjectsAndCanHideClosedSessions() {
+    func testHidesClosedSessionsAndNamesTheirProjects() {
         let list = AllSessions(sessions: [session("a", repo: "org/api"), session("b", repo: "org/web", status: "closed")],
                                projects: [Project(repo: "org/api", label: "Backend")])
-        XCTAssertEqual(list.count, 2)
-        XCTAssertEqual(list.shown(search: "", showClosed: true).map(\.id), ["a", "b"])
-        XCTAssertEqual(list.shown(search: "", showClosed: false).map(\.id), ["a"])
-        XCTAssertEqual(list.shown(search: " BACKEND ", showClosed: true).map(\.id), ["a"])
-        XCTAssertEqual(list.shown(search: "ORG/WEB", showClosed: true).map(\.id), ["b"])
-        XCTAssertEqual(list.shown(search: "login", showClosed: true).map(\.id), ["a", "b"])
-        XCTAssertTrue(list.shown(search: "missing", showClosed: true).isEmpty)
+        XCTAssertEqual(list.count, 1)
+        XCTAssertEqual(list.shown.map(\.id), ["a"])
         XCTAssertEqual(list.projectTitle(for: list.sessions[0]), "Backend")
         XCTAssertEqual(list.projectTitle(for: list.sessions[1]), "org/web")
     }
@@ -63,8 +59,8 @@ final class AllSessionsTests: XCTestCase {
                                           session("working", repo: "b", status: "running"),
                                           session("new", repo: "a", created: "2026-10-01T00:00:00Z")], projects: [])
         XCTAssertTrue(list.busy)
-        XCTAssertEqual(list.shown(search: "", showClosed: true).map(\.id), ["working", "new", "old", "a", "b"])
+        XCTAssertEqual(list.shown.map(\.id), ["working", "new", "old", "a", "b"])
         XCTAssertFalse(AllSessions(sessions: [], projects: []).busy)
-        XCTAssertTrue(AllSessions(sessions: [], projects: []).shown(search: "", showClosed: true).isEmpty)
+        XCTAssertTrue(AllSessions(sessions: [], projects: []).shown.isEmpty)
     }
 }

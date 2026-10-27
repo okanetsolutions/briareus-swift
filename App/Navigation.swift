@@ -12,6 +12,8 @@ enum Destination: Hashable, Identifiable {
     case conversation(id: String, session: JSON?)
     /// A project's board: pull requests and issues.
     case board(repo: String)
+    /// The board across every project: pull requests, issues and the Review List.
+    case globalBoard
     /// A pull request; `stack` is its StackPosition JSON and `summary` its board row, either nil when unknown.
     case pull(repo: String, number: Int, stack: JSON?, summary: JSON?)
     /// ▶ Run on the project's default branch, served in an embedded browser.
@@ -52,6 +54,7 @@ enum Destination: Hashable, Identifiable {
         case .project(let repo): return "project:\(repo)"
         case .conversation(let id, _): return "conversation:\(id)"
         case .board(let repo): return "pulls:\(repo)"
+        case .globalBoard: return "global-pulls"
         case .pull(let repo, let n, _, _): return "pull:\(repo)#\(n)"
         case .pullFiles(let repo, let n): return "files:\(repo)#\(n)"
         case .branchRun(let repo): return "branch-run:\(repo)"
@@ -83,6 +86,7 @@ enum Destination: Hashable, Identifiable {
         case .project(let repo): ProjectView(repo: repo)
         case .conversation(let id, let session): ConversationScreen(sessionID: id, initial: session)
         case .board(let repo): BoardScreen(repo: repo)
+        case .globalBoard: GlobalPullsScreen()
         case .pull(let repo, let number, let stack, let summary): PullScreen(repo: repo, number: number, stack: stack, summary: summary)
         case .pullFiles(let repo, let number): PullFilesScreen(repo: repo, number: number)
         case .branchRun(let repo): BranchRunScreen(repo: repo)

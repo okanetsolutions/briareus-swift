@@ -418,12 +418,7 @@ struct BoardScreen: View {
             if model.loaded { sub += " · \(model.reviewPulls.count) waiting on \(model.reviewer ?? "you")" }
             if let at = model.syncedAt { sub += " · synced \(formatRelative(at))" }
             sub += retryText
-            buttons.append(HeaderButton(glyph: "person.crop.circle", label: BoardEdits.login.map { "Reviewing as \($0)" } ?? "Set my GitHub login…",
-                                        tip: "The GitHub login whose reviews the Review List shows") {
-                model.dialogOpen = true
-                if BoardEdits.askLogin() { model.objectWillChange.send() }
-                model.dialogOpen = false
-            })
+            buttons.append(BoardEdits.reviewLoginButton(asking: { model.dialogOpen = $0 }) { model.objectWillChange.send() })
             buttons.append(refresh)
         default:
             // The pickers, as the Windows client's selects, and ⟳. C gives them no glyph; the SF Symbol stands in only when the
@@ -474,7 +469,7 @@ struct BoardScreen: View {
         // Board, after Issues, for a project that names a GitHub Projects board.
         if ProjectBoardModel.offered(repo) { labels.append((.board, "▦ Board")) }
         // Review List, the pull requests waiting on the user's review, after the board.
-        labels.append((.review, model.loaded ? "✓ Review List \(model.reviewPulls.count)" : "✓ Review List"))
+        labels.append((.review, boardReviewTabLabel(count: model.loaded ? model.reviewPulls.count : nil)))
         // Files, the repository's tree at a branch, for a server that lists it.
         if ProjectFilesModel.offered { labels.append((.files, "🗂 Files")) }
         // Run, on the default branch, for a token that may serve one.
@@ -490,13 +485,7 @@ struct BoardScreen: View {
         if ProjectEnvoyerModel.offered { labels.append((.envoyer, "🚢 Envoyer")) }
         // The meeting's transcript, while one runs on this project and after it.
         if meeting.transcript(for: repo) != nil { labels.append((.meeting, meeting.isFor(repo) ? "🎙 Meeting ●" : "🎙 Meeting")) }
-        return VStack(spacing: 0) {
-            HStack(spacing: 4) {
-                ForEach(labels, id: \.0) { tab, label in BoardTabButton(label: label, active: model.tab == tab) { select(tab) } }
-                Spacer(minLength: 0)
-            }
-            BoardRule().padding(.horizontal, -Theme.paneMargin)
-        }
+        return BoardTabStrip(labels: labels, active: model.tab) { select($0) }
     }
     private func select(_ tab: BoardTab) {
         model.tab = tab == .issues || tab == .review || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) || projectTabOffered(tab) || tab == .meeting ? tab : .pulls

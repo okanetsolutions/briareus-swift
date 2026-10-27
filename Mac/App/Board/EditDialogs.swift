@@ -23,6 +23,16 @@ enum BoardEdits {
         return true
     }
 
+    /// The Review List's header button: asks for the login, `asking` told while the dialog is up, and `changed` once one is saved.
+    static func reviewLoginButton(asking: @escaping (Bool) -> Void = { _ in }, changed: @escaping () -> Void) -> HeaderButton {
+        HeaderButton(glyph: "person.crop.circle", label: login.map { "Reviewing as \($0)" } ?? "Set my GitHub login…",
+                     tip: "The GitHub login whose reviews the Review List shows") {
+            asking(true)
+            if askLogin() { changed() }
+            asking(false)
+        }
+    }
+
     /// The ▾ beside the assignees: assign or unassign the user, edit the list, or change which login "me" is. What the pick
     /// sends as `assignees`, which replaces GitHub's list whole, or nil for nothing to send. `current` is copied by the
     /// caller before the menu opens, since the screen may read them again while it is up.
