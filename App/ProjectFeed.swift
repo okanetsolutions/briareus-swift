@@ -67,10 +67,9 @@ final class ProjectFeed: ObservableObject {
     /// A record from the live stream, in its row's place or first when new; the overview and its badge follow it, as a
     /// turn starting or ending, a question asked or a review round held all change them.
     func upsert(_ s: Session) {
-        guard let list = sessions.upserting(s) else { return }
+        guard let list = Store.shared.cache.upsertSession(s, repo: repo) else { return }
         sessions = list
         sessionsLoaded = true
-        Store.shared.cache.store(Session.json(list), "sessions:\(repo)")
         ProjectsModel.shared.recount()
     }
     /// A conversation the live stream says was deleted, if it is in this list.
@@ -214,8 +213,8 @@ final class ProjectsModel: ObservableObject {
             guard mine == generation else { return }
             guard let items = Session.parseList(listOf(all, "sessions")) else { throw APIError(.nonJSON) }
             for p in projects { Store.shared.feed(p.repo).adopt(items.filter { $0.repo == p.repo }) }
-            sessionsLoaded = true
-            sessionsError = nil
+            if !sessionsLoaded { sessionsLoaded = true }
+            if sessionsError != nil { sessionsError = nil }
             recount()
         } catch {
             guard mine == generation, !error.isCancellation else { throw error }

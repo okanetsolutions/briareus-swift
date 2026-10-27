@@ -141,8 +141,8 @@ final class ProjectsModel: ObservableObject {
             for p in projects {
                 Store.shared.cache.store(Session.json(items.filter { $0.repo == p.repo }), "sessions:\(p.repo)")
             }
-            sessionsLoaded = true
-            sessionsError = nil
+            if !sessionsLoaded { sessionsLoaded = true }
+            if sessionsError != nil { sessionsError = nil }
             recount()
             return nil
         } catch {
@@ -215,9 +215,7 @@ final class SessionFeed: ObservableObject {
         switch SessionsEvent(event, j) {
         case .session(let s)?:
             guard let repo = s.repo else { return }
-            let key = "sessions:\(repo)"
-            guard let list = (cache.value(key).flatMap(Session.parseList) ?? []).upserting(s) else { return }
-            cache.store(Session.json(list), key)
+            guard cache.upsertSession(s, repo: repo) != nil else { return }
             post(.sessionLive, ["repo": repo, "session": s.raw])
         case .deleted(let id)?:
             for p in ProjectsModel.shared.projects {
