@@ -12,6 +12,7 @@ struct HeaderButton: Identifiable {
     var enabled = true
     var destructive = false
     var prominent = false
+    var loading = false
     var action: () -> Void
 }
 
@@ -78,11 +79,16 @@ struct PaneHeader: View {
                     if let label = b.label, labels {
                         Button(action: b.action) { Text(label) }.dashButton(b.prominent ? .prominent : b.destructive ? .destructive : .bordered)
                     } else {
-                        Button(action: b.action) { Image(systemName: b.glyph) }
+                        Button(action: b.action) {
+                            if b.loading {
+                                ProgressView().controlSize(.small).frame(width: 16, height: 16)
+                                    .accessibilityLabel("Refreshing")
+                            } else { Image(systemName: b.glyph) }
+                        }
                             .buttonStyle(IconButtonStyle(destructive: b.destructive, prominent: b.prominent))
                     }
                 }
-                .disabled(!b.enabled)
+                .disabled(!b.enabled || b.loading)
                 .help(b.tip ?? b.label ?? "")
             }
         }

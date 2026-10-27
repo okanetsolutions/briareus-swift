@@ -351,18 +351,14 @@ struct BoardScreen: View {
                 }
             }
         }
-        .task {
-            await poll(every: 45) {
-                if model.dialogOpen { return nil }
-                return await model.load()
-            }
-        }
+        .task { await poll(every: 45) { await model.pollBoard() } }
+        .task(id: model.tab) { await model.openPulls() }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in model.refresh() }
         // A list held by the server's cooldown is read as soon as it is over.
         .task(id: model.cooldownTick) {
             guard let until = PullsGate.deadline(repo) else { return }
             try? await Task.sleep(nanoseconds: UInt64(max(until.timeIntervalSinceNow, 0) * 1_000_000_000) + 200_000_000)
-            if !Task.isCancelled { await model.load() }
+            if !Task.isCancelled { await model.pollBoard() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .pullsCooldownChanged)) { note in
             if note.userInfo?["repo"] as? String == repo { cooldownRevision += 1 }
@@ -387,8 +383,8 @@ struct BoardScreen: View {
         sub += retryText
         var status: String?
         var buttons: [HeaderButton] = []
-        let refresh = HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Refresh the list (the server may return cached data)",
-                                   enabled: !model.reading && retry == nil) { model.refresh() }
+        let refresh = HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Refresh the list from GitHub",
+                                   enabled: !model.reading && retry == nil, loading: model.reading) { model.refresh() }
         switch model.tab {
         case .ssh, .sftp:
             _ = remoteRevision
@@ -658,23 +654,5 @@ struct BoardScreen: View {
                 Text(model.issues.isEmpty ? "No open issues." : "No issues match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)
             }
         }
-    }
-}
-
-/// One of `#proj-tabs`: 13px, the open one underlined in the accent, 34px tall.
-private struct BoardTabButton: View {
-    var label: String
-    var active: Bool
-    var action: () -> Void
-    @State private var hovered = false
-    var body: some View {
-        Button(action: action) {
-            Text(label).font(Theme.footnote).foregroundStyle(active || hovered ? Theme.ink : Theme.muted)
-                .padding(.horizontal, 8).frame(height: 34)
-                .overlay(alignment: .bottom) { if active { Rectangle().fill(Theme.accent).frame(height: 2) } }
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovered = $0 }
     }
 }

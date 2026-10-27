@@ -6,40 +6,6 @@
 // SSH and SFTP tabs are left out: they drive local ssh and sftp processes a phone does not have.
 import SwiftUI
 
-/// The board's pickers, kept on disk per repository as the Mac keeps them. A board never filtered opens on the project's
-/// configured author, while they have something open.
-@MainActor
-final class BoardFilters: ObservableObject {
-    let repo: String
-    @Published var pulls = BoardFilter()
-    @Published var issues = BoardFilter()
-    /// The filter the board last opened on, until the server has answered once and the picks are the user's.
-    private var opening: BoardFilter?
-
-    init(repo: String) {
-        self.repo = repo
-        if let saved = Store.shared.cache.value("pulls-filters:\(repo)") {
-            pulls = BoardFilter(saved: saved["pulls"]); issues = BoardFilter(saved: saved["issues"])
-        } else {
-            opening = BoardFilter()
-        }
-    }
-
-    /// A pick by the user: the board no longer opens on the author, and the picks are saved.
-    func picked() {
-        opening = nil
-        Store.shared.cache.store(["pulls": pulls.saved, "issues": issues.saved], "pulls-filters:\(repo)")
-    }
-    /// A board shown before the server answered may be out of date about who has something open, so the server's answer
-    /// opens it again, unless the pickers were touched meanwhile.
-    func opened(_ board: JSON, answered: Bool) {
-        guard let last = opening, board.isObject else { return }
-        let f = BoardFilter.opening(author: board["author"].string, rows: PullSummary.parseList(board["pulls"]).map(BoardRow.init))
-        if pulls == last { pulls = f }
-        opening = answered ? nil : f
-    }
-}
-
 struct BoardScreen: View {
     let repo: String
     private enum Tab: Hashable { case pulls, issues, review }
@@ -119,6 +85,9 @@ struct BoardScreen: View {
         .navigationTitle(projects.project(repo)?.title ?? "Board").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                if feed.boardReading {
+                    ProgressView().accessibilityLabel("Refreshing pull requests")
+                }
                 if tab != .review {
                     BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label],
                                     stacked: tab == .pulls) { filters.picked() }
@@ -139,6 +108,7 @@ struct BoardScreen: View {
             await catalog.load()
         }
         .task { await poll(every: ProjectFeed.boardEvery) { await reading { try await load() } } }
+        .task(id: tab) { await read(ifStale: true) }
         // Each linked issue's Status, one read at a time while the board is on show, the rows the filters show first.
         .onAppear { issueStatus.shown = true; issueStatus.next(pulls: self.pulls, filter: filters.pulls) }
         .onDisappear { issueStatus.shown = false }
@@ -165,9 +135,10 @@ struct BoardScreen: View {
         }
     }
 
-    private func load(fresh: Bool = false) async throws {
+    private func load(fresh: Bool = false, ifStale: Bool = false) async throws {
         do {
-            try await feed.loadBoard(fresh: fresh)
+            if ifStale { try await feed.refreshBoardIfStale() }
+            else { try await feed.loadBoard(fresh: fresh) }
             filters.opened(board, answered: true)
             error = nil
             issueStatus.next(pulls: pulls, filter: filters.pulls)
@@ -176,7 +147,9 @@ struct BoardScreen: View {
             throw error
         }
     }
-    private func read(fresh: Bool) async { _ = await reading { try await load(fresh: fresh) } }
+    private func read(fresh: Bool = false, ifStale: Bool = false) async {
+        _ = await reading { try await load(fresh: fresh, ifStale: ifStale) }
+    }
 
     // MARK: Pull requests
 

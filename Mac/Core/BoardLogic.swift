@@ -3,6 +3,13 @@
 // Ported from the Windows client's screen_pulls.c and screen_files.c.
 import Foundation
 
+/// A cached list is fresh for five minutes after GitHub was read; receiving it again does not renew that time.
+func pullsNeedRefresh(_ board: JSON, now: Date = Date()) -> Bool {
+    guard let syncedAt = boardDateParse(board["syncedAt"].string) else { return true }
+    let age = now.timeIntervalSince(syncedAt)
+    return age < 0 || age >= 5 * 60
+}
+
 // MARK: - Descriptions
 
 /// What GitHub shows of a description: without HTML comments and raw HTML lines (bots' badges and footers), code blocks

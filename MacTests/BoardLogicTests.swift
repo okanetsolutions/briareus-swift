@@ -3,6 +3,22 @@ import XCTest
 @testable import BriareusMacCore
 
 final class BoardLogicTests: XCTestCase {
+    func testPullListFreshnessUsesGitHubSyncTime() {
+        let board = j(#"{"syncedAt":"2026-10-27T12:00:00Z","pulls":[]}"#)
+        let syncedAt = boardDateParse(board["syncedAt"].string)!
+        XCTAssertFalse(pullsNeedRefresh(board, now: syncedAt))
+        XCTAssertFalse(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(299)))
+        XCTAssertTrue(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(300)))
+        XCTAssertTrue(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(900)))
+        XCTAssertTrue(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(-1)))
+    }
+
+    func testPullListWithoutAValidSyncTimeNeedsRefresh() {
+        XCTAssertTrue(pullsNeedRefresh(.null))
+        XCTAssertTrue(pullsNeedRefresh(j(#"{"pulls":[]}"#)))
+        XCTAssertTrue(pullsNeedRefresh(j(#"{"syncedAt":"invalid"}"#)))
+    }
+
     func testVisibleMarkdownDropsCommentsAndRawHTMLButKeepsCode() {
         XCTAssertEqual(visibleMarkdown("Hello <!-- hidden --> world"), "Hello  world")
         XCTAssertEqual(visibleMarkdown("Keep\n<!-- open forever\nlost"), "Keep")
