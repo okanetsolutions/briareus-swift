@@ -56,6 +56,10 @@ struct RootTabs: View {
                 if width == .regular { SplitRoot() } else { NavigationRoot { ProjectsList() } }
             }
             .tabItem { Label("Projects", systemImage: "folder") }
+            if store.supports("projects") && store.supports("pulls") {
+                NavigationRoot { GlobalPullsScreen() }
+                    .tabItem { Label("Pull requests", systemImage: "arrow.triangle.pull") }
+            }
             if store.supports("sessions") {
                 NavigationRoot { FindingsScreen(repo: nil) }
                     .tabItem { Label("Findings", systemImage: "flag") }

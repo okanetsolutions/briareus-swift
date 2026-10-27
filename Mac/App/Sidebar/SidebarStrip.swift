@@ -2,9 +2,10 @@
 // the count of conversations needing you, 📊, ⚑ with its count, as 26px squares (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
 import SwiftUI
 
-enum StripAction { case newSession, whatsapp, mail, status, usage, findings }
+enum StripAction { case newSession, whatsapp, mail, status, usage, findings, globalPulls }
 
 struct SidebarStrip: View {
+    @ObservedObject private var store = Store.shared
     /// The detail pane's root id, for the WhatsApp, ◉, 📊 and ⚑ switches' accent.
     var selected: String?
     /// The ⚑ badge: review rounds and approvals waiting.
@@ -26,6 +27,13 @@ struct SidebarStrip: View {
             }
             .frame(maxWidth: .infinity)
             .help("New session")
+            if store.supports("projects") && store.supports("pulls") {
+                StripButton(active: selected == "global-pulls", action: { action(.globalPulls) }) {
+                    Image(systemName: "arrow.triangle.pull").font(Theme.footnote)
+                        .foregroundStyle(selected == "global-pulls" ? Theme.accent : Theme.ink)
+                }
+                .frame(width: Self.iconWidth).help("Pull requests across all projects").accessibilityLabel("Pull requests")
+            }
             StripButton(active: selected == "whatsapp", action: { action(.whatsapp) }) { WhatsAppMark() }
                 .frame(width: Self.iconWidth).help("WhatsApp")
             // The synced mail, on a server that has it for an Admin token.

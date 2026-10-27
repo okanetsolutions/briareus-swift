@@ -83,6 +83,9 @@ final class ProjectFeed: ObservableObject {
     /// When each repository's pull request list may be read again, shared by every project's feed.
     private static var cooldown = PullsCooldown()
 
+    /// Other lists reading through this feed respect the same repository cooldown.
+    static func boardDeadline(_ repo: String) -> Date? { cooldown.deadline(repo) }
+
     /// `fresh` also has the server ask GitHub again instead of answering from its own short cache.
     func loadBoard(fresh: Bool = false) async throws {
         // While the server's cooldown on the list runs (a spent GitHub allowance), the board shown stays as it is.
