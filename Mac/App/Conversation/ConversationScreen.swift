@@ -423,18 +423,12 @@ struct ConversationScreen: View {
         GeometryReader { outer in
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        TranscriptColumn(model: model, blocks: model.blocks, session: model.session, expanded: model.expanded,
-                                         decisions: model.decisions, triageNote: model.triageNote, loaded: model.loaded,
-                                         error: model.error, writeError: model.writeError, busy: model.busy, loading: model.loading,
-                                         uncertain: model.uncertain, canMessage: model.canMessage)
-                            .equatable()
-                            .textSelectionScope(model.selection)
-                        Color.clear.frame(height: 1).id("end")
-                            .background(GeometryReader { g in
-                                Color.clear.preference(key: TranscriptEndKey.self, value: g.frame(in: .named("transcript")).maxY)
-                            })
-                    }
+                    TranscriptColumn(model: model, blocks: model.blocks, session: model.session, expanded: model.expanded,
+                                     decisions: model.decisions, triageNote: model.triageNote, loaded: model.loaded,
+                                     error: model.error, writeError: model.writeError, busy: model.busy, loading: model.loading,
+                                     uncertain: model.uncertain, canMessage: model.canMessage)
+                        .equatable()
+                        .textSelectionScope(model.selection)
                     .background(UserScrollWatcher { scrolling?.cancel(); scrolling = nil; userScrolled = true })
                     .padding(.top, 18).padding(.bottom, 30)
                     .padding(.horizontal, 24)
@@ -542,8 +536,9 @@ private struct UserScrollWatcher: NSViewRepresentable {
     }
 }
 
-private struct TranscriptEndKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
+/// An end outside the lazy stack's loaded region has not been reached.
+struct TranscriptEndKey: PreferenceKey {
+    static let defaultValue: CGFloat = .infinity
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
