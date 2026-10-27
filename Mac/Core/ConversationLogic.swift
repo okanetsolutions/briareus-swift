@@ -267,13 +267,37 @@ func conversationComposerNote(active: Bool, liveInput: Bool, uploading: Bool, fi
 }
 
 /// An attachment's chip: 📎 (… while uploading), its name and its size.
-func attachmentChipLabel(name: String, size: Int, uploaded: Bool) -> String {
-    "\(uploaded ? "\u{1F4CE}" : "\u{2026}") \(name) \u{00B7} \(formatFileSize(size))"
+func attachmentChipLabel(name: String, size: Int?, uploaded: Bool) -> String {
+    "\(uploaded ? "\u{1F4CE}" : "\u{2026}") \(name)" + (size.map { " \u{00B7} \(formatFileSize($0))" } ?? "")
 }
 /// The most files one message takes, as the Windows client's "At most 10 files per message".
 let attachmentsMax = 10
 /// Why a file could not be attached: "name why." lines.
 func attachmentRefusal(_ name: String, _ why: String) -> String { "\(name) \(why)." }
+
+/// A composer's files are read and uploaded one at a time, keeping only the current file's bytes in memory.
+@MainActor
+final class AttachmentUploadQueue {
+    private var tail: Task<Void, Never>?
+
+    func enqueue(releaseOnCancel: Bool = true, _ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let previous = tail
+        let (finished, continuation) = AsyncStream<Void>.makeStream()
+        let task = Task {
+            await previous?.value
+            defer { continuation.finish() }
+            guard !Task.isCancelled else { return }
+            await withTaskCancellationHandler {
+                await operation()
+            } onCancel: {
+                // Photos retain their turn until a conversion already in progress has stopped.
+                if releaseOnCancel { continuation.finish() }
+            }
+        }
+        tail = Task { for await _ in finished {} }
+        return task
+    }
+}
 
 // MARK: - Panel
 

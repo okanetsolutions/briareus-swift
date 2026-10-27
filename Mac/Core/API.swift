@@ -486,7 +486,7 @@ final class URLSessionTransport: NSObject, HTTPTransport, URLSessionTaskDelegate
 final class APIClient: @unchecked Sendable {
     static let requestTimeout: TimeInterval = 30
     static let maxRequestBytes = 1_048_576
-    static let uploadLimit = 25 * 1024 * 1024
+    static let uploadLimit = 500 * 1024 * 1024
 
     let address: ServerAddress
     private let token: String
@@ -644,7 +644,7 @@ final class APIClient: @unchecked Sendable {
     /// Stores a file to attach to a message, as the Windows client's composer does: the bytes are the body and the name rides in the
     /// query. The answer is the id a message takes in `attachments`.
     func upload(name: String, bytes: Data) async throws -> String {
-        if bytes.count > APIClient.uploadLimit { throw APIError(.http, status: 413, message: "The file exceeds the server’s 25 MB limit for an attachment.") }
+        if bytes.count > APIClient.uploadLimit { throw APIError(.http, status: 413, message: "The file exceeds the server’s 500 MiB limit for an attachment.") }
         let url = address.baseURL + "uploads?name=" + APIClient.encode(name.isEmpty ? "file" : name)
         // Always octet-stream, whatever the file is: the server reads the raw body.
         let j = try await send(method: "POST", url: url, contentType: "application/octet-stream", body: bytes, timeout: 120)
