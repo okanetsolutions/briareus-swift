@@ -184,7 +184,8 @@ final class ProjectsModel: ObservableObject {
         }
         let list = AllSessions(sessions: all, projects: projects)
         if list != allSessions { allSessions = list }
-        sessionsLoaded = list.cacheIsLoaded(projectsLoaded: Project.parseList(raw) != nil, cachedRepos: cachedRepos)
+        let loaded = list.cacheIsLoaded(projectsLoaded: Project.parseList(raw) != nil, cachedRepos: cachedRepos)
+        if loaded != sessionsLoaded { sessionsLoaded = loaded }
         let overview = SessionOverview(all)
         if overview != self.overview { self.overview = overview }
     }
