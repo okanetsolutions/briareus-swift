@@ -101,6 +101,8 @@ struct GlobalPullsFilter: Equatable, Sendable {
 final class GlobalPullsReader {
     private(set) var state = GlobalPullsState()
     private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var freshGeneration = 0
+    private var lastFreshError: APIError?
 
     init(saved: (String) -> JSON?) {
         if let answer = saved("projects"), let projects = Project.parseList(answer) {
@@ -109,19 +111,25 @@ final class GlobalPullsReader {
     }
 
     /// A nil board means its shared cooldown is still running; retain its rows and report that updates are delayed.
-    /// A fresh request waits for the active pass, then performs its own read before returning.
+    /// Fresh requests queued during one pass share a follow-up fresh pass and wait for its result.
     func load(fresh: Bool = false, projects: () async throws -> JSON, saved: (String) -> JSON?,
               keepProjects: (JSON) -> Void = { _ in },
+              cooldownError: (String) -> APIError? = { _ in nil },
               read: (String) async throws -> JSON?, current: () -> Bool,
               changed: (GlobalPullsState) -> Void) async -> APIError? {
+        let requestedAfter = freshGeneration
         while state.loading {
             guard fresh else { return nil }
             await withCheckedContinuation { waiting.append($0) }
         }
         guard !Task.isCancelled, current() else { return APIError(.cancelled) }
+        if fresh, freshGeneration > requestedAfter { return lastFreshError }
+        if fresh { freshGeneration += 1 }
+        var loadError: APIError?
         state.loading = true
         changed(state)
         defer {
+            if fresh { lastFreshError = loadError }
             state.loading = false
             changed(state)
             let ready = waiting
@@ -138,7 +146,8 @@ final class GlobalPullsReader {
             state.error = nil
             changed(state)
         } catch {
-            return failed(error, current: current())
+            loadError = failed(error, current: current())
+            return loadError
         }
         for index in state.projects.indices {
             do {
@@ -148,11 +157,13 @@ final class GlobalPullsReader {
                 try Task.checkCancellation()
                 guard current() else { throw CancellationError() }
                 if let answer { try state.projects[index].adopt(answer) }
+                else if let error = cooldownError(state.projects[index].project.repo) { throw error }
                 else if state.projects[index].error == nil { state.projects[index].error = APIError(.http, status: 429) }
             } catch {
                 let error = normalized(error)
                 if error.kind == .cancelled || error.unauthorized || !current() {
-                    return failed(error, current: current())
+                    loadError = failed(error, current: current())
+                    return loadError
                 }
                 state.projects[index].error = error
             }

@@ -704,6 +704,7 @@ func runSessionServingBranch(_ sessions: JSON) -> (sessionId: String, url: Strin
 struct PullsCooldown: Sendable {
     private var until: [String: Date] = [:]
     private var failures: [String: Int] = [:]
+    private var errors: [String: APIError] = [:]
 
     /// The time the list may be read again, when it is still ahead.
     func deadline(_ repo: String, now: Date = Date()) -> Date? {
@@ -712,10 +713,16 @@ struct PullsCooldown: Sendable {
     }
     func mayRead(_ repo: String, now: Date = Date()) -> Bool { deadline(repo, now: now) == nil }
 
+    /// The real failure behind an active cooldown, including one started by another screen.
+    func error(_ repo: String, now: Date = Date()) -> APIError? {
+        deadline(repo, now: now) == nil ? nil : errors[repo]
+    }
+
     /// A failed read: the server's Retry-After, else 60 s for a 429, else the backoff for the streak. Never earlier than
     /// a deadline already set. A cancelled read changes nothing.
     mutating func failed(_ repo: String, error: APIError, now: Date = Date()) {
         if error.kind == .cancelled { return }
+        errors[repo] = error
         let streak = min((failures[repo] ?? 0) + 1, 6)
         failures[repo] = streak
         let seconds = error.retryAfter ?? (error.kind == .http && error.status == 429 ? 60 : min(pow(2, Double(streak)), 60))

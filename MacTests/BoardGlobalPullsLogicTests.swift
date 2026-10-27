@@ -241,6 +241,35 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
     }
 
     @MainActor
+    func testNewReadersReportCooldownFailuresFromOtherScreensAndRecover() async {
+        let now = Date(timeIntervalSince1970: 1_000)
+        for status in [404, 502] {
+            var cooldown = PullsCooldown()
+            let failure = APIError(.http, status: status, message: "Unavailable repository", retryAfter: 60)
+            // The board screen failed before either global reader existed.
+            cooldown.failed("o/a", error: failure, now: now)
+            for _ in 0..<2 {
+                let reader = GlobalPullsReader(saved: { _ in nil })
+                var reads: [String] = []
+                await reader.load(projects: { self.projects }, saved: { _ in self.first },
+                                  cooldownError: { cooldown.error($0, now: now) }, read: { repo in
+                    guard cooldown.mayRead(repo, now: now) else { return nil }
+                    reads.append(repo)
+                    return self.second
+                }, current: { true }, changed: { _ in })
+                XCTAssertEqual(reads, ["o/b"])
+                XCTAssertEqual(reader.state.projects[0].error, failure)
+                XCTAssertNil(reader.state.projects[1].error)
+                XCTAssertEqual(reader.state.rows.count, 2)
+                await reader.load(projects: { self.projects }, saved: { _ in self.first },
+                                  cooldownError: { cooldown.error($0, now: now.addingTimeInterval(60)) },
+                                  read: { _ in self.second }, current: { true }, changed: { _ in })
+                XCTAssertFalse(reader.state.hasErrors)
+            }
+        }
+    }
+
+    @MainActor
     func testOnlyCurrentParseableProjectsAreKept() async {
         for answer in [projects, JSON.null] {
             for connectionChanges in [false, true] {
@@ -304,6 +333,65 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
         XCTAssertNil(freshError)
         XCTAssertEqual(reader.state.rows.first?.pull.title, "Database")
         XCTAssertFalse(reader.state.loading)
+    }
+
+    @MainActor
+    func testQueuedFreshRefreshesShareOnePassAndWaitForItsResult() async {
+        for initiallyFresh in [false, true] {
+            for failure in [nil, APIError(.http, status: 503)] {
+                let reader = GlobalPullsReader(saved: { _ in nil })
+                let loading = expectation(description: "Initial pass is reading")
+                let queued = expectation(description: "Four refreshes queued during the initial pass")
+                queued.expectedFulfillmentCount = 4
+                let refreshing = expectation(description: "Shared fresh pass is reading")
+                var finishInitial: CheckedContinuation<Void, Never>?
+                var finishFresh: CheckedContinuation<Void, Never>?
+                var projectReads = 0, boardReads = 0, returned = 0
+                let list = Project.json([Project(repo: "o/a")])
+                let initial = Task {
+                    await reader.load(fresh: initiallyFresh, projects: {
+                        projectReads += 1
+                        return list
+                    }, saved: { _ in nil }, read: { _ in
+                        boardReads += 1
+                        await withCheckedContinuation { finishInitial = $0; loading.fulfill() }
+                        return self.first
+                    }, current: { true }, changed: { _ in })
+                }
+                await fulfillment(of: [loading], timeout: 5)
+                let refreshes = (0..<4).map { _ in Task {
+                    queued.fulfill()
+                    let result = await reader.load(fresh: true, projects: {
+                        projectReads += 1
+                        await withCheckedContinuation { finishFresh = $0; refreshing.fulfill() }
+                        if let failure { throw failure }
+                        return list
+                    }, saved: { _ in nil }, read: { _ in
+                        boardReads += 1
+                        return self.second
+                    }, current: { true }, changed: { _ in })
+                    returned += 1
+                    return result
+                } }
+                await fulfillment(of: [queued], timeout: 5)
+                XCTAssertEqual(returned, 0)
+                finishInitial?.resume()
+                await fulfillment(of: [refreshing], timeout: 5)
+                XCTAssertEqual(returned, 0)
+                XCTAssertTrue(reader.state.loading)
+                finishFresh?.resume()
+                _ = await initial.value
+                for refresh in refreshes {
+                    let error = await refresh.value
+                    XCTAssertEqual(error, failure)
+                }
+                XCTAssertEqual(projectReads, 2)
+                XCTAssertEqual(boardReads, failure == nil ? 2 : 1)
+                XCTAssertEqual(returned, 4)
+                XCTAssertEqual(reader.state.rows.first?.pull.title, failure == nil ? "Database" : "Login")
+                XCTAssertFalse(reader.state.loading)
+            }
+        }
     }
 
     @MainActor

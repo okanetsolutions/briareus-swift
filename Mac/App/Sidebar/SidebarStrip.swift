@@ -1,5 +1,5 @@
 // The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then Pull requests, WhatsApp, ✉, ◉ Status with
-// the count of conversations needing you, 📊, ⚑ with its count, as 26px squares (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
+// the count of conversations needing you, 📊, ⚑ with its count, as compact icon buttons (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
 import SwiftUI
 
 enum StripAction { case newSession, whatsapp, mail, status, usage, findings, globalPulls }
@@ -14,12 +14,11 @@ struct SidebarStrip: View {
     var needsYou: Int
     var action: (StripAction) -> Void
 
-    static let height: CGFloat = 32, iconWidth: CGFloat = 26, gap: CGFloat = 3
+    static let height: CGFloat = 32, iconWidth: CGFloat = 22, gap: CGFloat = 3
 
     var body: some View {
         HStack(spacing: Self.gap) {
-            // The label 6px in, as C draws it. The Mac's system font sets it about 6% wider than Segoe UI does, so it may
-            // use the right inset and tighten a little rather than lose "on" to an ellipsis in the width the icons leave.
+            // Six compact icons and their gaps leave 98pt for New session in the 248pt strip, including its insets.
             StripButton(active: false, action: { action(.newSession) }) {
                 Text("＋ New session").font(Theme.footnote).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
                     .allowsTightening(true).minimumScaleFactor(0.85)

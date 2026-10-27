@@ -85,6 +85,7 @@ final class ProjectFeed: ObservableObject {
 
     /// Other lists reading through this feed respect the same repository cooldown.
     static func boardDeadline(_ repo: String) -> Date? { cooldown.deadline(repo) }
+    static func boardCooldownError(_ repo: String) -> APIError? { cooldown.error(repo) }
 
     /// `fresh` also has the server ask GitHub again instead of answering from its own short cache.
     func loadBoard(fresh: Bool = false) async throws {

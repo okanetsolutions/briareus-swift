@@ -29,7 +29,7 @@ final class GlobalPullsModel: ObservableObject {
             try await Store.shared.call("projects")
         }, saved: { Store.shared.cache.value("pulls:\($0)") }, keepProjects: {
             Store.shared.cache.store($0, "projects")
-        }, read: { repo in
+        }, cooldownError: { PullsGate.cooldown.error($0) }, read: { repo in
             guard let result = await PullsGate.read(repo, fresh: fresh) else { return nil }
             let answer = try result.get()
             if Store.shared.client === client { Store.shared.cache.store(answer, "pulls:\(repo)") }

@@ -29,7 +29,7 @@ final class GlobalPullsModel: ObservableObject {
             try await Store.shared.call("projects")
         }, saved: { Store.shared.cache.value("pulls:\($0)") }, keepProjects: {
             Store.shared.cache.store($0, "projects")
-        }, read: { repo in
+        }, cooldownError: { ProjectFeed.boardCooldownError($0) }, read: { repo in
             guard ProjectFeed.boardDeadline(repo) == nil else { return nil }
             let feed = Store.shared.feed(repo)
             try await feed.loadBoard(fresh: fresh)
