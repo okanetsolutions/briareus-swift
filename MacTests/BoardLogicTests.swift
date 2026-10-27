@@ -39,6 +39,74 @@ final class BoardLogicTests: XCTestCase {
         XCTAssertNil(ServerTimeReference("invalid"))
     }
 
+    @MainActor
+    func testAutomaticPullReadReusesWarmServerCache() async throws {
+        var now: Date?
+        var requests: [Bool] = []
+        let cached = j(#"{"syncedAt":"2026-10-27T12:00:00Z","pulls":[]}"#)
+        let answer = try await readPulls(fresh: false, now: { now }) { fresh in
+            requests.append(fresh)
+            // The first HTTP response establishes server time before freshness is checked.
+            now = boardDateParse("2026-10-27T12:01:00Z")
+            return cached
+        }
+        XCTAssertEqual(requests, [false])
+        XCTAssertEqual(answer, cached)
+    }
+
+    @MainActor
+    func testAutomaticPullReadRefreshesStaleServerCache() async throws {
+        let now = boardDateParse("2026-10-27T12:05:00Z")!
+        let stale = j(#"{"syncedAt":"2026-10-27T12:00:00Z"}"#)
+        let updated = j(#"{"syncedAt":"2026-10-27T12:05:00Z"}"#)
+        var requests: [Bool] = []
+        let answer = try await readPulls(fresh: false, now: { now }) { fresh in
+            requests.append(fresh)
+            return fresh ? updated : stale
+        }
+        XCTAssertEqual(requests, [false, true])
+        XCTAssertEqual(answer, updated)
+    }
+
+    @MainActor
+    func testManualPullReadSkipsServerCache() async throws {
+        var requests: [Bool] = []
+        _ = try await readPulls(fresh: true, now: { nil }) { fresh in
+            requests.append(fresh)
+            return [:]
+        }
+        XCTAssertEqual(requests, [true])
+    }
+
+    @MainActor
+    func testPullReadFallsBackForOldServer() async throws {
+        var requests: [Bool] = []
+        let answer = try await readPulls(fresh: false, now: { nil }) { fresh in
+            requests.append(fresh)
+            if fresh { throw APIError(.http, status: 400) }
+            return [:]
+        }
+        XCTAssertEqual(requests, [false, true, false])
+        XCTAssertEqual(answer, [:])
+    }
+
+    @MainActor
+    func testPullReadPropagatesFailuresWithoutRetrying() async {
+        for failureAt in [0, 1] {
+            var requests: [Bool] = []
+            let failure = APIError(.http, status: 429, retryAfter: 60)
+            do {
+                _ = try await readPulls(fresh: false, now: { nil }) { fresh in
+                    requests.append(fresh)
+                    if requests.count == failureAt + 1 { throw failure }
+                    return [:]
+                }
+                XCTFail("The failed read must propagate")
+            } catch { XCTAssertEqual(error as? APIError, failure) }
+            XCTAssertEqual(requests, failureAt == 0 ? [false] : [false, true])
+        }
+    }
+
     func testVisibleMarkdownDropsCommentsAndRawHTMLButKeepsCode() {
         XCTAssertEqual(visibleMarkdown("Hello <!-- hidden --> world"), "Hello  world")
         XCTAssertEqual(visibleMarkdown("Keep\n<!-- open forever\nlost"), "Keep")

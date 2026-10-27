@@ -128,7 +128,7 @@ final class BoardModel: ObservableObject {
         let gen = readGen
         reading = true
         // While the server's cooldown runs the list is not read; the board waits for it (cooldownTick) with what it shows.
-        guard let r = await PullsGate.read(repo, fresh: fresh) else {
+        guard let r = await PullsGate.read(repo, fresh: fresh, ifStale: true) else {
             if gen == readGen { reading = false; cooldownTick += 1 }
             return nil
         }
@@ -359,7 +359,7 @@ struct BoardScreen: View {
         .task(id: model.cooldownTick) {
             guard let until = PullsGate.deadline(repo) else { return }
             try? await Task.sleep(nanoseconds: UInt64(max(until.timeIntervalSinceNow, 0) * 1_000_000_000) + 200_000_000)
-            if !Task.isCancelled { _ = await model.pollBoard() }
+            if !Task.isCancelled { await model.load() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .pullsCooldownChanged)) { note in
             if note.userInfo?["repo"] as? String == repo { cooldownRevision += 1 }

@@ -11,6 +11,20 @@ func pullsNeedRefresh(_ board: JSON, now: Date?) -> Bool {
     return age >= 5 * 60
 }
 
+/// Automatic reads try the server's cache before asking GitHub; manual refresh skips that first read.
+@MainActor
+func readPulls(fresh: Bool, now: () -> Date?, read: (Bool) async throws -> JSON) async throws -> JSON {
+    if !fresh {
+        let cached = try await read(false)
+        if !pullsNeedRefresh(cached, now: now()) { return cached }
+    }
+    do { return try await read(true) }
+    catch let e as APIError where e.kind == .http && e.status == 400 {
+        // A server from before `fresh` refuses the argument it does not know.
+        return try await read(false)
+    }
+}
+
 // MARK: - Descriptions
 
 /// What GitHub shows of a description: without HTML comments and raw HTML lines (bots' badges and footers), code blocks
