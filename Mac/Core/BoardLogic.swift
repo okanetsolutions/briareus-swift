@@ -3,6 +3,40 @@
 // Ported from the Windows client's screen_pulls.c and screen_files.c.
 import Foundation
 
+// MARK: - Reads
+
+/// A cached list is fresh for five minutes after GitHub was read; receiving it again does not renew that time.
+/// Without a server-time reference, read once to establish one rather than trusting the device's clock.
+func pullsNeedRefresh(_ board: JSON, now: Date?) -> Bool {
+    guard let now, let syncedAt = boardDateParse(board["syncedAt"].string) else { return true }
+    let age = now.timeIntervalSince(syncedAt)
+    return age >= 5 * 60
+}
+
+/// Automatic reads try the server's cache before asking GitHub; manual refresh skips that first read.
+@MainActor
+func readPulls(fresh: Bool, now: () -> Date?, read: (Bool) async throws -> JSON) async throws -> JSON {
+    if !fresh {
+        let cached = try await read(false)
+        if !pullsNeedRefresh(cached, now: now()) { return cached }
+    }
+    do { return try await read(true) }
+    catch let e as APIError where e.kind == .http && e.status == 400 {
+        // A server from before `fresh` refuses the argument it does not know.
+        return try await read(false)
+    }
+}
+
+/// Older servers reject `fresh`; retry once without it and let the caller apply the final result's cooldown.
+@MainActor
+func readPulls(fresh: Bool, request: (Bool) async -> Result<JSON, APIError>) async -> Result<JSON, APIError> {
+    let result = await request(fresh)
+    if fresh, case .failure(let error) = result, error.kind == .http, error.status == 400 {
+        return await request(false)
+    }
+    return result
+}
+
 // MARK: - Descriptions
 
 /// What GitHub shows of a description: without HTML comments and raw HTML lines (bots' badges and footers), code blocks

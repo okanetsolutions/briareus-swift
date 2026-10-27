@@ -109,7 +109,6 @@ final class IssueModel: ObservableObject {
             return nil
         case .failure(let e):
             if e.kind == .cancelled { return e }
-            if fresh && e.kind == .http && e.status == 400 { return await load(fresh: false) }
             loadError = e.description
             return e
         }

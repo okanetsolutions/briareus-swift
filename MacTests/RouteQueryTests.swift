@@ -4,14 +4,29 @@ import XCTest
 private final class Recorder: HTTPTransport, @unchecked Sendable {
     var url: URL?, body: Data?
     let response: String
-    init(response: String = "{}") { self.response = response }
+    let date: String?
+    init(response: String = "{}", date: String? = nil) { self.response = response; self.date = date }
     func send(method: String, url: URL, headers: [String: String], body: Data?, timeout: TimeInterval) async throws -> HTTPResponse {
         self.url = url; self.body = body
-        return HTTPResponse(status: 200, contentType: "application/json", retryAfter: nil, body: Data(response.utf8))
+        return HTTPResponse(status: 200, contentType: "application/json", retryAfter: nil, body: Data(response.utf8), date: date)
     }
 }
 
 final class RouteQueryTests: XCTestCase {
+    func testClientEstablishesServerClockFromHTTPDate() async throws {
+        let client = try APIClient(address: ServerAddress("https://example.com")!, token: "brm_" + String(repeating: "a", count: 43),
+                                   transport: Recorder(date: "Tue, 27 Oct 2026 12:00:00 GMT"))
+        XCTAssertNil(client.serverNow)
+        _ = try await client.call("pulls", ["repo": "o/r"])
+        let first = try XCTUnwrap(client.serverNow)
+        let date = boardDateParse("2026-10-27T12:00:00Z")!
+        XCTAssertGreaterThanOrEqual(first.timeIntervalSince(date), 0)
+        XCTAssertLessThan(first.timeIntervalSince(date), 60)
+        client.transport = Recorder(date: "invalid")
+        _ = try await client.call("pulls", ["repo": "o/r"])
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(client.serverNow), first)
+    }
+
     func testUploadAtServerLimitSendsRawBytes() async throws {
         let rec = Recorder(response: #"{"file":{"id":"abcd1234"}}"#)
         let client = try APIClient(address: ServerAddress("https://example.com")!, token: "brm_" + String(repeating: "a", count: 43), transport: rec)

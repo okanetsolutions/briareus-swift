@@ -1,11 +1,12 @@
-// The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then WhatsApp, ✉, ◉ Status with
-// the count of conversations needing you, 📊, ⚑ with its count, as 26px squares (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
+// The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then Pull requests, WhatsApp, ✉, ◉ Status with
+// the count of conversations needing you, 📊, ⚑ with its count, as compact icon buttons (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
 import SwiftUI
 
-enum StripAction { case newSession, whatsapp, mail, status, usage, findings }
+enum StripAction { case newSession, whatsapp, mail, status, usage, findings, globalPulls }
 
 struct SidebarStrip: View {
-    /// The detail pane's root id, for the WhatsApp, ◉, 📊 and ⚑ switches' accent.
+    @ObservedObject private var store = Store.shared
+    /// The detail pane's root id, for the Pull requests, WhatsApp, ✉, ◉, 📊 and ⚑ switches' accent.
     var selected: String?
     /// The ⚑ badge: review rounds and approvals waiting.
     var waiting: Int
@@ -15,12 +16,11 @@ struct SidebarStrip: View {
     var canStartSession = true
     var action: (StripAction) -> Void
 
-    static let height: CGFloat = 32, iconWidth: CGFloat = 26, gap: CGFloat = 3
+    static let height: CGFloat = 32, iconWidth: CGFloat = 22, gap: CGFloat = 3
 
     var body: some View {
         HStack(spacing: Self.gap) {
-            // The label 6px in, as C draws it. The Mac's system font sets it about 6% wider than Segoe UI does, so it may
-            // use the right inset and tighten a little rather than lose "on" to an ellipsis in the width the icons leave.
+            // Six compact icons and their gaps leave 98pt for New session in the 248pt strip, including its insets.
             if canStartSession {
                 StripButton(active: false, action: { action(.newSession) }) {
                     Text("＋ New session").font(Theme.footnote).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
@@ -31,6 +31,13 @@ struct SidebarStrip: View {
                 .help("New session")
             } else {
                 Spacer(minLength: 0)
+            }
+            if store.supports("projects") && store.supports("pulls") {
+                StripButton(active: selected == "global-pulls", action: { action(.globalPulls) }) {
+                    Image(systemName: "arrow.triangle.pull").font(Theme.footnote)
+                        .foregroundStyle(selected == "global-pulls" ? Theme.accent : Theme.ink)
+                }
+                .frame(width: Self.iconWidth).help("Pull requests across all projects").accessibilityLabel("Pull requests")
             }
             StripButton(active: selected == "whatsapp", action: { action(.whatsapp) }) { WhatsAppMark() }
                 .frame(width: Self.iconWidth).help("WhatsApp")

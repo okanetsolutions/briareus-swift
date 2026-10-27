@@ -20,6 +20,9 @@ final class ProjectFeed: ObservableObject {
         didSet { parseBoard() }
     }
     @Published private(set) var boardLoaded = false
+    /// True while the pull request list is being read, including a refresh with cached rows still on screen.
+    @Published private(set) var boardReading = false
+    private var boardReadCount = 0
     /// The board's pull requests and issues, each issue with what the server sent for it.
     private(set) var pulls: [PullSummary] = []
     private(set) var issues: [(summary: IssueSummary, raw: JSON)] = []
@@ -81,17 +84,27 @@ final class ProjectFeed: ObservableObject {
     /// When each repository's pull request list may be read again, shared by every project's feed.
     private static var cooldown = PullsCooldown()
 
+    /// Other lists reading through this feed respect the same repository cooldown.
+    static func boardDeadline(_ repo: String) -> Date? { cooldown.deadline(repo) }
+    static func boardCooldownError(_ repo: String) -> APIError? { cooldown.error(repo) }
+
     /// `fresh` also has the server ask GitHub again instead of answering from its own short cache.
     func loadBoard(fresh: Bool = false) async throws {
         // While the server's cooldown on the list runs (a spent GitHub allowance), the board shown stays as it is.
         if !Self.cooldown.mayRead(repo) { return }
-        try await read(\.readingBoard, every: Self.boardEvery, fresh: fresh) { [self] in
+        if !fresh, let task = readingBoard.task { return try await task.value }
+        let stale = pullsNeedRefresh(board, now: Store.shared.client?.serverNow)
+        try await read(\.readingBoard, every: Self.boardEvery, fresh: fresh || stale) { [self] in
+            boardReadCount += 1
+            boardReading = true
+            defer {
+                boardReadCount -= 1
+                boardReading = boardReadCount > 0
+            }
             var answer: JSON
             do {
-                do { answer = try await Store.shared.call("pulls", fresh ? ["repo": .string(repo), "fresh": "1"] : ["repo": .string(repo)]) }
-                catch let e as APIError where fresh && e.kind == .http && e.status == 400 {
-                    // A server from before `fresh` refuses the argument it does not know.
-                    answer = try await Store.shared.call("pulls", ["repo": .string(repo)])
+                answer = try await readPulls(fresh: fresh, now: { Store.shared.client?.serverNow }) { fresh in
+                    try await Store.shared.call("pulls", fresh ? ["repo": .string(repo), "fresh": "1"] : ["repo": .string(repo)])
                 }
                 Self.cooldown.succeeded(repo)
             } catch let e as APIError {
@@ -102,6 +115,15 @@ final class ProjectFeed: ObservableObject {
             boardLoaded = true
             Store.shared.cache.store(answer, "pulls:\(repo)")
         }
+    }
+
+    /// Opening the PR tab reuses a recent GitHub sync, including one already in flight. Returns whether a read answered.
+    func refreshBoardIfStale() async throws -> Bool {
+        var answered = false
+        if let task = readingBoard.task { try await task.value; answered = true }
+        guard pullsNeedRefresh(board, now: Store.shared.client?.serverNow), Self.cooldown.mayRead(repo) else { return answered }
+        try await loadBoard()
+        return true
     }
 
     /// One request at a time. A poll finding an answer young enough asks nothing, and one finding a request on its way

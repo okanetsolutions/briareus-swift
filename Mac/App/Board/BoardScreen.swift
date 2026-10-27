@@ -128,7 +128,7 @@ final class BoardModel: ObservableObject {
         let gen = readGen
         reading = true
         // While the server's cooldown runs the list is not read; the board waits for it (cooldownTick) with what it shows.
-        guard let r = await PullsGate.read(repo, fresh: fresh) else {
+        guard let r = await PullsGate.read(repo, fresh: fresh, ifStale: true) else {
             if gen == readGen { reading = false; cooldownTick += 1 }
             return nil
         }
@@ -145,8 +145,6 @@ final class BoardModel: ObservableObject {
             return nil
         case .failure(let e):
             if e.kind == .cancelled { return e }
-            // A server from before `fresh` refuses the argument it does not know.
-            if fresh && e.kind == .http && e.status == 400 { return await load(fresh: false) }
             error = e.description
             loaded = true
             return e
@@ -351,12 +349,9 @@ struct BoardScreen: View {
                 }
             }
         }
-        .task {
-            await poll(every: 45) {
-                if model.dialogOpen { return nil }
-                return await model.load()
-            }
-        }
+        .task { await poll(every: 45) { await model.pollBoard() } }
+        .onAppear { model.openPulls() }
+        .onChange(of: model.tab) { _, _ in model.openPulls() }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in model.refresh() }
         // A list held by the server's cooldown is read as soon as it is over.
         .task(id: model.cooldownTick) {
@@ -387,8 +382,8 @@ struct BoardScreen: View {
         sub += retryText
         var status: String?
         var buttons: [HeaderButton] = []
-        let refresh = HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Refresh the list (the server may return cached data)",
-                                   enabled: !model.reading && retry == nil) { model.refresh() }
+        let refresh = HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Refresh the list from GitHub",
+                                   enabled: !model.reading && retry == nil, loading: model.reading) { model.refresh() }
         switch model.tab {
         case .ssh, .sftp:
             _ = remoteRevision
@@ -658,23 +653,5 @@ struct BoardScreen: View {
                 Text(model.issues.isEmpty ? "No open issues." : "No issues match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)
             }
         }
-    }
-}
-
-/// One of `#proj-tabs`: 13px, the open one underlined in the accent, 34px tall.
-private struct BoardTabButton: View {
-    var label: String
-    var active: Bool
-    var action: () -> Void
-    @State private var hovered = false
-    var body: some View {
-        Button(action: action) {
-            Text(label).font(Theme.footnote).foregroundStyle(active || hovered ? Theme.ink : Theme.muted)
-                .padding(.horizontal, 8).frame(height: 34)
-                .overlay(alignment: .bottom) { if active { Rectangle().fill(Theme.accent).frame(height: 2) } }
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovered = $0 }
     }
 }

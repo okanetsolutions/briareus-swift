@@ -894,4 +894,26 @@ final class BoardTests: XCTestCase {
         c.failed("o/r", error: APIError(.http, status: 429, retryAfter: 10), now: now.addingTimeInterval(5))
         XCTAssertEqual(c.deadline("o/r", now: now), now.addingTimeInterval(300))
     }
+
+    func testCooldownReportsItsRealFailureOnlyWhileActive() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        for status in [404, 429, 502] {
+            var cooldown = PullsCooldown()
+            let error = APIError(.http, status: status, message: "Repository read failed", retryAfter: 60)
+            XCTAssertNil(cooldown.error("o/r", now: now))
+            cooldown.failed("o/r", error: error, now: now)
+            XCTAssertEqual(cooldown.error("o/r", now: now.addingTimeInterval(59)), error)
+            XCTAssertNil(cooldown.error("o/other", now: now))
+            cooldown.failed("o/r", error: APIError(.cancelled), now: now)
+            XCTAssertEqual(cooldown.error("o/r", now: now), error)
+            // A concurrent success keeps the deadline, so its explanation must remain available too.
+            cooldown.succeeded("o/r")
+            XCTAssertEqual(cooldown.error("o/r", now: now), error)
+            XCTAssertNil(cooldown.error("o/r", now: now.addingTimeInterval(60)))
+            let next = APIError(.network)
+            cooldown.failed("o/r", error: next, now: now.addingTimeInterval(1))
+            XCTAssertEqual(cooldown.error("o/r", now: now.addingTimeInterval(1)), next)
+            XCTAssertEqual(cooldown.deadline("o/r", now: now), now.addingTimeInterval(60))
+        }
+    }
 }

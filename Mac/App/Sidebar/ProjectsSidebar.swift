@@ -38,6 +38,7 @@ enum SidebarCommon {
         case .mail: nav.show(MailInboxModel.offered ? .mail : .mailSettings(id: nil))
         case .findings: nav.show(.findings)
         case .status: nav.show(.status)
+        case .globalPulls: nav.show(.globalPulls)
         }
     }
 
