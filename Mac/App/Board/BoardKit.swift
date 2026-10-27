@@ -48,14 +48,14 @@ enum PullsGate {
 
     static func read(_ repo: String, fresh: Bool = false) async -> Result<JSON, APIError>? {
         guard cooldown.mayRead(repo) else { return nil }
-        var args: JSON = ["repo": .string(repo)]
-        if fresh { args["fresh"] = "1" }
-        let r = await boardCall("pulls", args)
+        let r = await readPulls(fresh: fresh) { fresh in
+            var args: JSON = ["repo": .string(repo)]
+            if fresh { args["fresh"] = "1" }
+            return await boardCall("pulls", args)
+        }
         switch r {
         case .success: cooldown.succeeded(repo)
-        case .failure(let e):
-            // A server from before `fresh` refuses the argument it does not know: not a failure of the list.
-            if !(fresh && e.kind == .http && e.status == 400) { cooldown.failed(repo, error: e) }
+        case .failure(let e): cooldown.failed(repo, error: e)
         }
         post(.pullsCooldownChanged, ["repo": repo])
         return r

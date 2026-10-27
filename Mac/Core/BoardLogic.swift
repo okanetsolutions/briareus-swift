@@ -3,6 +3,18 @@
 // Ported from the Windows client's screen_pulls.c and screen_files.c.
 import Foundation
 
+// MARK: - Reads
+
+/// Older servers reject `fresh`; retry once without it and let the caller apply the final result's cooldown.
+@MainActor
+func readPulls(fresh: Bool, request: (Bool) async -> Result<JSON, APIError>) async -> Result<JSON, APIError> {
+    let result = await request(fresh)
+    if fresh, case .failure(let error) = result, error.kind == .http, error.status == 400 {
+        return await request(false)
+    }
+    return result
+}
+
 // MARK: - Descriptions
 
 /// What GitHub shows of a description: without HTML comments and raw HTML lines (bots' badges and footers), code blocks

@@ -10,6 +10,7 @@ struct ScreenView: View {
         case .newSession(let repo): NewSessionScreen(repo: repo)
         case .conversation(let id, let session): ConversationScreen(sessionID: id, initial: session)
         case .board(let repo): BoardScreen(repo: repo)
+        case .globalPulls: GlobalPullsScreen()
         case .pull(let repo, let number, let stack, let summary): PullScreen(repo: repo, number: number, stack: stack, summary: summary)
         case .pullFiles(let repo, let number): PullFilesScreen(repo: repo, number: number)
         case .issue(let repo, let issue): IssueScreen(repo: repo, issue: issue)

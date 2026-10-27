@@ -14,6 +14,8 @@ enum Screen: Hashable, Identifiable {
     case conversation(id: String, session: JSON?)
     /// A project's board: pull requests, issues, SSH sessions and SFTP sessions as tabs.
     case board(repo: String)
+    /// Open pull requests across all projects this token can read.
+    case globalPulls
     /// A pull request; `stack` is its StackPosition JSON and `summary` its board row, either nil when unknown.
     case pull(repo: String, number: Int, stack: JSON?, summary: JSON?)
     /// The changed files on their own, for the conversation's menu.
@@ -62,6 +64,7 @@ enum Screen: Hashable, Identifiable {
         case .newSession(let repo): return "new:\(repo ?? "")"
         case .conversation(let id, _): return "conversation:\(id)"
         case .board(let repo): return "pulls:\(repo)"
+        case .globalPulls: return "global-pulls"
         case .pull(let repo, let n, _, _): return "pull:\(repo)#\(n)"
         case .pullFiles(let repo, let n): return "files:\(repo)#\(n)"
         case .issue(let repo, let issue): return "issue:\(repo)#\(issue["number"].int ?? 0)"
