@@ -145,8 +145,6 @@ final class BoardModel: ObservableObject {
             return nil
         case .failure(let e):
             if e.kind == .cancelled { return e }
-            // A server from before `fresh` refuses the argument it does not know.
-            if fresh && e.kind == .http && e.status == 400 { return await load(fresh: false) }
             error = e.description
             loaded = true
             return e
