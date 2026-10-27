@@ -5,6 +5,8 @@
 import SwiftUI
 
 struct SSHServersScreen: View {
+    @EnvironmentObject private var store: Store
+    @State private var showResources = false
     @ObservedObject private var model = SSHServersModel.shared
     @ObservedObject private var sessions = SSHSessions.shared
     @ObservedObject private var projects = ProjectsModel.shared
@@ -13,7 +15,7 @@ struct SSHServersScreen: View {
         let header = ProjectSSHTab.header(session: sessions.active, refresh: RemoteRegistry.offered ? { model.refresh() } : nil,
                                           refreshTip: "Read the SSH servers again")
         VStack(spacing: 0) {
-            PaneHeader(title: "\u{276F} SSH servers", subtitle: header.subtitle, status: header.status, buttons: header.buttons)
+            PaneHeader(title: "\u{276F} SSH servers", subtitle: header.subtitle, status: header.status, buttons: header.buttons + (store.supports("ssh_resource_servers") ? [HeaderButton(glyph: "gauge.with.dots.needle.33percent", label: "Resources", tip: "CPU, memory, disks and network · last 24 hours") { showResources = true }] : []))
             if RemoteRegistry.offered {
                 content
             } else {
@@ -23,6 +25,7 @@ struct SSHServersScreen: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
+        .sheet(isPresented: $showResources) { SSHResourcesScreen() }
         .onAppear { model.revisit() }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in model.refresh() }
     }

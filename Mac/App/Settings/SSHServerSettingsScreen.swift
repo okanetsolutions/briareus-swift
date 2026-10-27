@@ -77,6 +77,10 @@ struct SSHServerSettingsScreen: View {
             SettingsCheck(label: "Available to sessions on this project", on: state.enabled, height: 36) { model.toggle() }
                 .padding(.top, SettingsFonts.footnoteLineHeight + 6).padding(.bottom, 14)
         }
+        if state.offersMonitoring {
+            SettingsCheck(label: "Monitor resources · last 24 hours", on: state.monitoringEnabled) { model.toggleMonitoring() }
+            SettingsNote(text: "Installs a small collector on Linux with Python 3 and reads CPU, memory, disks and network every minute over SSH, independently of agent approvals.")
+        }
         SettingsNote(text: "First verify the server's host key and add it to the Briareus account's known_hosts file. Unknown or changed host keys are refused. SSH configuration aliases and interactive commands are not supported.")
     }
 

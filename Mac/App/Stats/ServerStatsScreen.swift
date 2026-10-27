@@ -5,6 +5,8 @@
 import SwiftUI
 
 struct ServerStatsScreen: View {
+    @EnvironmentObject private var store: Store
+    @State private var showSSHResources = false
     /// The page's width, for how many tiles fit across.
     @State private var width: CGFloat = 0
     @StateObject private var model = ServerStatsModel()
@@ -12,7 +14,7 @@ struct ServerStatsScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             PaneHeader(title: "\u{25A4} Server", subtitle: model.server.map { "\($0.host.cpus) cores \u{00B7} \($0.openSessions) open sessions" },
-                       buttons: [HeaderButton(glyph: "arrow.clockwise", tip: "Read the figures again") { Task { await model.load() } }])
+                       buttons: (store.supports("ssh_resource_servers") ? [HeaderButton(glyph: "server.rack", label: "SSH resources", tip: "Resources of registered SSH servers") { showSSHResources = true }] : []) + [HeaderButton(glyph: "arrow.clockwise", tip: "Read the figures again") { Task { await model.load() } }])
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     content
@@ -22,6 +24,7 @@ struct ServerStatsScreen: View {
                 .padding(.horizontal, Theme.paneMargin).padding(.vertical, 12)
             }
         }
+        .sheet(isPresented: $showSSHResources) { SSHResourcesScreen() }
         .task { await model.follow() }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await model.load() } }
     }

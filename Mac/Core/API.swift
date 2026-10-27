@@ -259,6 +259,8 @@ struct APIRoute: Sendable {
         // messages agents ask approval for, each approved or denied.
         .init(name: "attention", method: "GET", path: "attention"),
         .init(name: "ssh_requests", method: "GET", path: "ssh/requests"),
+        .init(name: "ssh_resource_servers", method: "GET", path: "ssh/servers"),
+        .init(name: "ssh_resources", method: "GET", path: "ssh/servers/{id}/resources"),
         .init(name: "ssh_decision", method: "POST", path: "ssh/requests/{id}/decision"),
         .init(name: "slack_requests", method: "GET", path: "slack/requests"),
         .init(name: "slack_decision", method: "POST", path: "slack/requests/{id}/decision"),

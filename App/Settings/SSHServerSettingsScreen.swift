@@ -129,6 +129,10 @@ struct SSHServerSettingsScreen: View {
                               hint: "Ask holds each command until it is approved. Don't ask anything sends every command immediately.")
             }
             Toggle("Available to sessions on this project", isOn: model.enabledBinding).tint(Theme.accent)
+            if state.offersMonitoring {
+                Toggle("Monitor resources · last 24 hours", isOn: model.monitoringBinding).tint(Theme.accent)
+                Text("Installs a small collector on Linux with Python 3 and reads CPU, memory, disks and network every minute over SSH, independently of agent approvals.").font(.footnote).foregroundStyle(.secondary)
+            }
         } footer: {
             Text("First verify the server's host key and add it to the Briareus account's known_hosts file. Unknown or changed host keys are refused. SSH configuration aliases and interactive commands are not supported.")
         }

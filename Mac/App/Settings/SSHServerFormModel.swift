@@ -48,6 +48,7 @@ final class SSHServerFormModel: ObservableObject {
             self.changed()
         })
     }
+    func toggleMonitoring() { state.monitoringEnabled.toggle(); changed() }
     func toggleClear(_ f: SSHServerField) { state.toggleClear(f); changed() }
     func toggle() { state.enabled.toggle(); changed() }
 

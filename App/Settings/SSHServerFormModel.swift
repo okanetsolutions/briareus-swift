@@ -48,7 +48,11 @@ final class SSHServerFormModel: ObservableObject {
             self.changed()
         })
     }
+    func toggleMonitoring() { state.monitoringEnabled.toggle(); changed() }
     func toggleClear(_ f: SSHServerField) { state.toggleClear(f); changed() }
+    var monitoringBinding: Binding<Bool> {
+        Binding(get: { self.state.monitoringEnabled }, set: { value in self.state.monitoringEnabled = value; self.changed() })
+    }
     var enabledBinding: Binding<Bool> {
         Binding(get: { self.state.enabled }, set: { v in guard v != self.state.enabled else { return }; self.state.enabled = v; self.changed() })
     }

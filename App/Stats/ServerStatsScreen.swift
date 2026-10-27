@@ -5,13 +5,21 @@
 import SwiftUI
 
 struct ServerStatsScreen: View {
+    @EnvironmentObject private var store: Store
+    @State private var showSSHResources = false
     @StateObject private var model = ServerStatsModel()
     @Environment(\.navigate) private var navigate
 
     var body: some View {
         content
             .navigationTitle("Server")
-            .task { await model.follow() }
+            .toolbar {
+                if store.supports("ssh_resource_servers") {
+                    Button("SSH resources", systemImage: "server.rack") { showSSHResources = true }
+                }
+            }
+            .sheet(isPresented: $showSSHResources) { SSHResourcesScreen() }
+        .task { await model.follow() }
             .refreshable { await model.load() }
     }
 

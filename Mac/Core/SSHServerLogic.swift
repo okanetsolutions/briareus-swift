@@ -56,6 +56,8 @@ struct SSHServerFormState: Equatable, Sendable {
     var texts: [SSHServerField: String] = [:]
     /// Available to sessions on this project.
     var enabled = true
+    var monitoringEnabled = false
+    var offersMonitoring: Bool { row.object?["monitoringEnabled"] != nil }
     var repo = ""
     var mode = "ask"
     var dirty = false
@@ -127,6 +129,7 @@ struct SSHServerFormState: Equatable, Sendable {
 
     mutating func fill() {
         enabled = Self.savedEnabled(row)
+        monitoringEnabled = row["monitoringEnabled"].is(true)
         repo = Self.savedRepo(row)
         mode = Self.savedMode(row)
         // A clone's row carries the login and passwords it was copied with; a saved one only says whether there are any.
@@ -173,6 +176,7 @@ struct SSHServerFormState: Equatable, Sendable {
         body["repo"] = .string(repo)
         body["permissionMode"] = .string(mode)
         body["enabled"] = .bool(enabled)
+        if offersMonitoring { body["monitoringEnabled"] = .bool(monitoringEnabled) }
         if (body["repo"].string ?? "").isEmpty { return .failure(FormProblem(message: "Choose the project whose sessions may use this server.")) }
         if (body["host"].string ?? "").isEmpty { return .failure(FormProblem(message: "Enter the host: a hostname or an IP address.")) }
         if (body["username"].string ?? "").isEmpty { return .failure(FormProblem(message: "Enter the username to connect as.")) }
@@ -251,7 +255,7 @@ struct SSHServerFormState: Equatable, Sendable {
     /// Whether the form holds a change not saved yet, for the dot after the tab's title.
     var changed: Bool { SSHServerTab.allCases.contains { tabChanged($0) } }
     func tabChanged(_ t: SSHServerTab) -> Bool {
-        if t == .server && (enabled != Self.savedEnabled(row) || repo != Self.savedRepo(row) || mode != Self.savedMode(row) || !clear.isEmpty) {
+        if t == .server && (enabled != Self.savedEnabled(row) || monitoringEnabled != row["monitoringEnabled"].is(true) || repo != Self.savedRepo(row) || mode != Self.savedMode(row) || !clear.isEmpty) {
             return true
         }
         if t == .database && !offersDatabase { return false }

@@ -270,8 +270,8 @@ struct StatsRow: Equatable, Sendable, Identifiable {
 
 /// A line over the last hour. `unit` says how its axis reads.
 struct StatsSeries: Equatable, Sendable, Identifiable {
-    enum Unit: Equatable, Sendable { case percent, bytes }
-    struct Point: Equatable, Sendable { var at: Date; var value: Double }
+    enum Unit: Equatable, Sendable { case percent, bytes, bytesPerSecond }
+    struct Point: Equatable, Sendable { var at: Date; var value: Double; var segment: Int = 0 }
     var id: String
     var label: String
     var unit: Unit
@@ -280,7 +280,7 @@ struct StatsSeries: Equatable, Sendable, Identifiable {
     var slot: Int
 
     /// The axis label of a value of this series.
-    func axis(_ value: Double) -> String { unit == .percent ? StatsFormat.percent(value) : StatsFormat.bytes(value) }
+    func axis(_ value: Double) -> String { unit == .percent ? StatsFormat.percent(value) : StatsFormat.bytes(value) + (unit == .bytesPerSecond ? "/s" : "") }
     /// The last value, as the legend names it.
     var latest: String { points.last.map { axis($0.value) } ?? "\u{2014}" }
 }
