@@ -220,9 +220,8 @@ final class SessionFeed: ObservableObject {
             post(.sessionLive, ["repo": repo, "session": s.raw])
         case .deleted(let id)?:
             for p in ProjectsModel.shared.projects {
-                let key = "sessions:\(p.repo)"
-                guard let list = cache.value(key).flatMap(Session.parseList)?.removing(id) else { continue }
-                cache.store(Session.json(list), key)
+                let saved = cache.removeSession(id, repo: p.repo)
+                guard saved != nil || ProjectsModel.shared.openProject?.project.repo == p.repo else { continue }
                 cache.remove("transcript:\(id)")
                 post(.sessionForgotten, ["id": id, "repo": p.repo])
             }
