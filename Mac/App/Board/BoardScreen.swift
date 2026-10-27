@@ -352,7 +352,8 @@ struct BoardScreen: View {
             }
         }
         .task { await poll(every: 45) { await model.pollBoard() } }
-        .task(id: model.tab) { await model.openPulls() }
+        .onAppear { model.openPulls() }
+        .onChange(of: model.tab) { _, _ in model.openPulls() }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in model.refresh() }
         // A list held by the server's cooldown is read as soon as it is over.
         .task(id: model.cooldownTick) {

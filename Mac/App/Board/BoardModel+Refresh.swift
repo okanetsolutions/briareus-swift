@@ -12,9 +12,12 @@ extension BoardModel {
         return await load(fresh: pullsNeedRefresh(savedBoard))
     }
 
-    func openPulls() async {
-        guard tab == .pulls || tab == .review, !dialogOpen, !reading,
-              pullsNeedRefresh(savedBoard) else { return }
-        await load(fresh: true)
+    /// The model owns the request so switching tabs cannot cancel a refresh another tab still needs.
+    func openPulls() {
+        Task {
+            guard tab == .pulls || tab == .review, !dialogOpen, !reading,
+                  pullsNeedRefresh(savedBoard) else { return }
+            await load(fresh: true)
+        }
     }
 }
