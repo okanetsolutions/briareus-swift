@@ -19,7 +19,7 @@ struct GlobalPullsScreen: View {
             }
             if model.state.showsLoading {
                 ProgressView(model.tab.loadingText).frame(maxWidth: .infinity).listRowBackground(Color.clear)
-            } else if !model.state.loading && model.state.loaded && model.shown.count(model.tab) == 0 {
+            } else if model.state.loaded && model.shown.count(model.tab) == 0 {
                 ContentUnavailableView(model.emptyTitle, systemImage: model.tab.symbol)
                     .listRowBackground(Color.clear)
             }

@@ -164,7 +164,7 @@ struct BoardScreen: View {
         } footer: {
             if let at = boardDateParse(board["syncedAt"].string), !shown.isEmpty { Text("Synced with GitHub \(formatRelative(at)).") }
         }
-        if loaded && !feed.boardReading && shown.isEmpty && error == nil {
+        if !boardShowsLoading(loaded: loaded, refreshing: feed.boardRefreshing) && shown.isEmpty && error == nil {
             ContentUnavailableView(review ? (reviewer == nil ? "Set your GitHub login" : "Nothing waiting on your review")
                                    : pulls.isEmpty ? "No open pull requests" : "No pull requests match the filters", systemImage: "arrow.triangle.pull")
                 .listRowBackground(Color.clear)
@@ -278,7 +278,7 @@ struct BoardScreen: View {
             } footer: {
                 if board["issuesTruncated"].is(true) { Text("This repository has more open issues; only the most recently updated are listed.") }
             }
-            if loaded && !feed.boardReading && visible.isEmpty && error == nil {
+            if !boardShowsLoading(loaded: loaded, refreshing: feed.boardRefreshing) && visible.isEmpty && error == nil {
                 ContentUnavailableView(issues.isEmpty ? "No open issues" : "No issues match the filters", systemImage: "smallcircle.filled.circle")
                     .listRowBackground(Color.clear)
             }
