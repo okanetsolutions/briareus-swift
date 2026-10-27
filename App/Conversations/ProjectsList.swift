@@ -20,6 +20,17 @@ struct ProjectsList: View {
                 Section { ErrorNotice(message: error) }.listRowBackground(Theme.row)
             }
             Section {
+                DestinationLink(destination: .allSessions) {
+                    HStack {
+                        Text("All").font(.body.weight(.medium))
+                        Spacer()
+                        if model.allSessions.busy { StatusDot(status: "running") }
+                        if model.sessionsLoaded {
+                            Text("\(model.allSessions.count)").font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 3)
+                }
                 ForEach(model.projects, id: \.repo) { project in
                     DestinationLink(destination: .project(repo: project.repo)) {
                         ProjectRowLabel(project: project, feed: store.feed(project.repo))

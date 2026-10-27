@@ -84,6 +84,7 @@ struct SidebarSessionRow: View {
     var lit: Bool
     var selectMode: Bool
     var picked: Bool
+    var projectTitle: String? = nil
     var action: () -> Void
     @State private var hovered = false
 
@@ -102,6 +103,9 @@ struct SidebarSessionRow: View {
                     }
                     .frame(height: 23)
                     meta
+                    if let projectTitle {
+                        Text(projectTitle).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1)
+                    }
                 }
             }
             .padding(.leading, 8).padding(.trailing, 8).padding(.vertical, 7)

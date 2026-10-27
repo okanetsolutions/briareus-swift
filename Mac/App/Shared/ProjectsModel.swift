@@ -26,6 +26,12 @@ final class ProjectsModel: ObservableObject {
     @Published private(set) var error: String?
     /// The project screen pushed inside the sidebar (sessions_screen_new), nil on the projects list.
     @Published var openProject: SidebarSessions?
+    @Published var showingAllSessions = false
+
+    /// All cached project sessions, kept current by polling and the live stream.
+    @Published private(set) var allSessions = AllSessions(sessions: [], projects: [])
+    @Published private(set) var sessionsLoaded = false
+    @Published private(set) var sessionsError: String?
 
     private var generation = 0
     private var observers: [NSObjectProtocol] = []
@@ -68,8 +74,9 @@ final class ProjectsModel: ObservableObject {
 
     private func reset() {
         generation += 1
+        allSessions = AllSessions(sessions: [], projects: []); sessionsLoaded = false; sessionsError = nil
         projects = []; raw = .null; findingsWaiting = 0; counts = [:]; busy = [:]; overview = SessionOverview([])
-        loaded = false; error = nil; openProject = nil
+        loaded = false; error = nil; openProject = nil; showingAllSessions = false
     }
 
     /// projects_count: what the saved lists say about each project's conversations, and the ⚑ count across them.
@@ -87,6 +94,11 @@ final class ProjectsModel: ObservableObject {
         if counts != self.counts { self.counts = counts }
         if busy != self.busy { self.busy = busy }
         if waiting != findingsWaiting { findingsWaiting = waiting }
+        let list = AllSessions(sessions: all, projects: projects)
+        if list != allSessions { allSessions = list }
+        if loaded && (projects.isEmpty || projects.contains { Store.shared.cache.value("sessions:\($0.repo)") != nil }) {
+            sessionsLoaded = true
+        }
         let overview = SessionOverview(all)
         if overview != self.overview { self.overview = overview }
     }
@@ -118,15 +130,17 @@ final class ProjectsModel: ObservableObject {
         do {
             let all = try await Store.shared.call("sessions")
             guard mine == generation else { return nil }
-            if let items = Session.parseList(all) {
-                for p in projects {
-                    Store.shared.cache.store(Session.json(items.filter { $0.repo == p.repo }), "sessions:\(p.repo)")
-                }
+            guard let items = Session.parseList(all) else { throw APIError(.nonJSON) }
+            for p in projects {
+                Store.shared.cache.store(Session.json(items.filter { $0.repo == p.repo }), "sessions:\(p.repo)")
             }
+            sessionsLoaded = true
+            sessionsError = nil
             recount()
             return nil
         } catch {
             guard mine == generation, !error.isCancellation else { return nil }
+            sessionsError = errorText(error)
             recount()
             return error as? APIError
         }

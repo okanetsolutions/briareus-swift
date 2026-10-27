@@ -10,7 +10,9 @@ struct ProjectsSidebar: View {
 
     var body: some View {
         Group {
-            if let open = model.openProject {
+            if model.showingAllSessions {
+                AllSessionsScreen()
+            } else if let open = model.openProject {
                 SidebarSessionsScreen(model: open).id(open.project.repo)
             } else {
                 SidebarProjectsScreen()
@@ -58,7 +60,7 @@ enum SidebarCommon {
 
 /// A sidebar screen: the strip held at the top, then the rows scrolling under it between the sidebar's 10px margins, over
 /// the foot.
-private struct SidebarScreenFrame<Content: View>: View {
+struct SidebarScreenFrame<Content: View>: View {
     var sessions: SidebarSessions?
     var strip: SidebarStrip
     @ViewBuilder var content: () -> Content
@@ -163,6 +165,9 @@ private struct SidebarProjectsScreen: View {
             if let error = model.error {
                 Notice(message: error).padding(.horizontal, 8)
                 Color.clear.frame(height: 8)
+            }
+            ProjectRow(name: "All", count: model.allSessions.count, busy: model.allSessions.busy) {
+                model.showingAllSessions = true
             }
             ForEach(model.projects, id: \.repo) { p in
                 ProjectRow(name: p.title, count: model.counts[p.repo] ?? 0, busy: model.busy[p.repo] ?? false, height: 39) {

@@ -68,11 +68,10 @@ final class ProjectFeed: ObservableObject {
     /// turn starting or ending, a question asked or a review round held all change them.
     func upsert(_ s: Session) {
         guard let list = sessions.upserting(s) else { return }
-        let state = sessions.first { $0.id == s.id }?.state
         sessions = list
         sessionsLoaded = true
         Store.shared.cache.store(Session.json(list), "sessions:\(repo)")
-        if state != s.state { ProjectsModel.shared.recount() }
+        ProjectsModel.shared.recount()
     }
     /// A conversation the live stream says was deleted, if it is in this list.
     func remove(_ id: String) {
@@ -140,6 +139,11 @@ final class ProjectsModel: ObservableObject {
     /// Why the last read of the projects failed.
     @Published private(set) var error: String?
 
+    /// All cached project sessions, kept current by polling and the live stream.
+    @Published private(set) var allSessions = AllSessions(sessions: [], projects: [])
+    @Published private(set) var sessionsLoaded = false
+    @Published private(set) var sessionsError: String?
+
     private var generation = 0
     private var signOut: AnyCancellable?
 
@@ -161,6 +165,7 @@ final class ProjectsModel: ObservableObject {
     }
     private func reset() {
         generation += 1
+        allSessions = AllSessions(sessions: [], projects: []); sessionsLoaded = false; sessionsError = nil
         projects = []; raw = .null; overview = SessionOverview([]); loaded = false; error = nil
     }
 
@@ -172,6 +177,11 @@ final class ProjectsModel: ObservableObject {
         for p in projects {
             guard let list = Store.shared.cache.value("sessions:\(p.repo)").flatMap(Session.parseList) else { continue }
             all += list
+        }
+        let list = AllSessions(sessions: all, projects: projects)
+        if list != allSessions { allSessions = list }
+        if loaded && (projects.isEmpty || projects.contains { Store.shared.cache.value("sessions:\($0.repo)") != nil }) {
+            sessionsLoaded = true
         }
         let overview = SessionOverview(all)
         if overview != self.overview { self.overview = overview }
@@ -193,9 +203,18 @@ final class ProjectsModel: ObservableObject {
         error = nil
         Store.shared.cache.store(answer, "projects")
         guard Store.shared.supports("sessions") else { return }
-        let all = try await Store.shared.call("sessions")
-        guard mine == generation, let items = Session.parseList(listOf(all, "sessions")) else { return }
-        for p in projects { Store.shared.feed(p.repo).adopt(items.filter { $0.repo == p.repo }) }
-        recount()
+        do {
+            let all = try await Store.shared.call("sessions")
+            guard mine == generation else { return }
+            guard let items = Session.parseList(listOf(all, "sessions")) else { throw APIError(.nonJSON) }
+            for p in projects { Store.shared.feed(p.repo).adopt(items.filter { $0.repo == p.repo }) }
+            sessionsLoaded = true
+            sessionsError = nil
+            recount()
+        } catch {
+            guard mine == generation, !error.isCancellation else { throw error }
+            sessionsError = errorText(error)
+            throw error
+        }
     }
 }

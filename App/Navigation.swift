@@ -6,6 +6,8 @@ import SwiftUI
 enum Destination: Hashable, Identifiable {
     /// A project's conversations, with its board, findings and a new conversation above them.
     case project(repo: String)
+    /// Conversations across every project this device can read.
+    case allSessions
     /// A conversation; `session` is the record the list had, shown until the server answers.
     case conversation(id: String, session: JSON?)
     /// A project's board: pull requests and issues.
@@ -46,6 +48,7 @@ enum Destination: Hashable, Identifiable {
 
     var id: String {
         switch self {
+        case .allSessions: return "all-sessions"
         case .project(let repo): return "project:\(repo)"
         case .conversation(let id, _): return "conversation:\(id)"
         case .board(let repo): return "pulls:\(repo)"
@@ -76,6 +79,7 @@ enum Destination: Hashable, Identifiable {
 
     @MainActor @ViewBuilder var screen: some View {
         switch self {
+        case .allSessions: AllSessionsScreen()
         case .project(let repo): ProjectView(repo: repo)
         case .conversation(let id, let session): ConversationScreen(sessionID: id, initial: session)
         case .board(let repo): BoardScreen(repo: repo)
@@ -173,9 +177,12 @@ struct SplitRoot: View {
             }
             .environment(\.detailSelection, detail?.id ?? "")
             .environment(\.navigate, Navigate { destination in
-                // A project opens in the list column; anything else fills the right-hand side.
-                if case .project = destination { if listPath.last != destination { listPath.append(destination) } }
-                else { detail = destination; detailPath = [] }
+                // Session lists open in the list column; conversation details fill the right-hand side.
+                switch destination {
+                case .project, .allSessions:
+                    if listPath.last != destination { listPath.append(destination) }
+                default: detail = destination; detailPath = []
+                }
             })
             .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 460)
             // The two sides share a background, so a rule marks where the list ends.
