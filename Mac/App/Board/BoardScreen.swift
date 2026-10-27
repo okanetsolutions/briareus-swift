@@ -523,17 +523,9 @@ struct BoardScreen: View {
     // MARK: Lists
 
     @ViewBuilder private var lists: some View {
-        if let e = model.error { Notice(message: e); Spacer().frame(height: 10) }
-        if let e = model.writeError {
-            Notice(message: e)
-            if model.uncertain {
-                Text("The request may have completed. Refresh (F5) and look for its conversation in the project before starting another agent.")
-                    .font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
-            }
-            Spacer().frame(height: 10)
-        }
+        BoardListFeedback(error: model.error, writeError: model.writeError, uncertain: model.uncertain,
+                          loading: !model.loaded || model.reading)
         if model.tab == .review { reviewList } else { filteredLists }
-        if !model.loaded { LoadingNote(text: "Loading pull requests…").padding(.horizontal, -8) }
     }
 
     @ViewBuilder private var filteredLists: some View {
@@ -562,7 +554,7 @@ struct BoardScreen: View {
             }
             .padding(.bottom, 8)
         }
-        if model.loaded && shown.isEmpty && model.error == nil {
+        if model.loaded && !model.reading && shown.isEmpty && model.error == nil {
             Text(model.reviewer == nil ? "Set your GitHub login to see the pull requests waiting on your review." : "Nothing is waiting on your review.")
                 .font(Theme.footnote).foregroundStyle(Theme.muted)
         }
@@ -576,7 +568,7 @@ struct BoardScreen: View {
             }
             .padding(.bottom, 8)
         }
-        if model.loaded && shown == 0 && model.error == nil {
+        if model.loaded && !model.reading && shown == 0 && model.error == nil {
             Text(model.pulls.isEmpty ? "No open pull requests." : "No pull requests match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)
         }
     }
@@ -638,7 +630,7 @@ struct BoardScreen: View {
                 Text("This repository has more open issues; only the most recently updated are listed.")
                     .font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
             }
-            if model.loaded && shown == 0 && model.error == nil {
+            if model.loaded && !model.reading && shown == 0 && model.error == nil {
                 Text(model.issues.isEmpty ? "No open issues." : "No issues match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)
             }
         }
