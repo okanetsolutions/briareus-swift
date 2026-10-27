@@ -11,6 +11,7 @@ struct SidebarStrip: View {
     var waiting: Int
     /// The ◉ badge: conversations waiting for an answer or a decision.
     var needsYou: Int
+    var canStartSession = true
     var action: (StripAction) -> Void
 
     static let height: CGFloat = 32, iconWidth: CGFloat = 26, gap: CGFloat = 3
@@ -19,13 +20,17 @@ struct SidebarStrip: View {
         HStack(spacing: Self.gap) {
             // The label 6px in, as C draws it. The Mac's system font sets it about 6% wider than Segoe UI does, so it may
             // use the right inset and tighten a little rather than lose "on" to an ellipsis in the width the icons leave.
-            StripButton(active: false, action: { action(.newSession) }) {
-                Text("＋ New session").font(Theme.footnote).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
-                    .allowsTightening(true).minimumScaleFactor(0.85)
-                    .padding(.leading, 6).padding(.trailing, 2).frame(maxWidth: .infinity, alignment: .leading)
+            if canStartSession {
+                StripButton(active: false, action: { action(.newSession) }) {
+                    Text("＋ New session").font(Theme.footnote).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
+                        .allowsTightening(true).minimumScaleFactor(0.85)
+                        .padding(.leading, 6).padding(.trailing, 2).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity)
+                .help("New session")
+            } else {
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity)
-            .help("New session")
             StripButton(active: selected == "whatsapp", action: { action(.whatsapp) }) { WhatsAppMark() }
                 .frame(width: Self.iconWidth).help("WhatsApp")
             // The synced mail, on a server that has it for an Admin token.

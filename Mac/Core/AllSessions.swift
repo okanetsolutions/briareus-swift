@@ -2,11 +2,31 @@
 import Foundation
 
 struct AllSessions: Equatable, Sendable {
+    enum EmptyState: Equatable, Sendable {
+        case noSessions, noMatches
+
+        var title: String {
+            switch self {
+            case .noSessions: return "No sessions yet"
+            case .noMatches: return "No matching sessions"
+            }
+        }
+    }
+
+    static let unavailableMessage = "Sessions are unavailable on this server or for this device."
+
     var sessions: [Session]
     var projects: [Project]
 
     var count: Int { sessions.count }
     var busy: Bool { sessions.contains(where: \.isActive) }
+    /// Why a filtered list has no rows: nothing exists, or the current filters hid it.
+    var emptyState: EmptyState { sessions.isEmpty ? .noSessions : .noMatches }
+
+    /// Cached rows can be shown before the server answers, including a cached empty list.
+    func cacheIsLoaded(projectsLoaded: Bool, hasCachedSessions: Bool) -> Bool {
+        projectsLoaded && (projects.isEmpty || hasCachedSessions)
+    }
 
     func projectTitle(for session: Session) -> String {
         projects.first { $0.repo == session.repo }?.title ?? session.repo ?? ""

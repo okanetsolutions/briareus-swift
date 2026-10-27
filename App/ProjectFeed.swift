@@ -180,7 +180,9 @@ final class ProjectsModel: ObservableObject {
         }
         let list = AllSessions(sessions: all, projects: projects)
         if list != allSessions { allSessions = list }
-        if loaded && (projects.isEmpty || projects.contains { Store.shared.cache.value("sessions:\($0.repo)") != nil }) {
+        if list.cacheIsLoaded(projectsLoaded: loaded, hasCachedSessions: projects.contains {
+            Store.shared.cache.value("sessions:\($0.repo)") != nil
+        }) {
             sessionsLoaded = true
         }
         let overview = SessionOverview(all)
@@ -202,7 +204,10 @@ final class ProjectsModel: ObservableObject {
         adopt(answer)
         error = nil
         Store.shared.cache.store(answer, "projects")
-        guard Store.shared.supports("sessions") else { return }
+        guard Store.shared.supports("sessions") else {
+            sessionsError = AllSessions.unavailableMessage
+            return
+        }
         do {
             let all = try await Store.shared.call("sessions")
             guard mine == generation else { return }

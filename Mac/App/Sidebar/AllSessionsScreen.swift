@@ -5,12 +5,13 @@ struct AllSessionsScreen: View {
     @ObservedObject private var model = ProjectsModel.shared
     @ObservedObject private var navigator = Navigator.main
     @ObservedObject private var attention = AttentionModel.shared
+    @ObservedObject private var store = Store.shared
     @State private var search = ""
     @State private var showClosed = true
 
     var body: some View {
         let strip = SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting + attention.approvals,
-                                 needsYou: model.overview.needsYouCount) {
+                                 needsYou: model.overview.needsYouCount, canStartSession: store.supports("start_session")) {
             SidebarCommon.perform($0, newSessionRepo: nil)
         }
         SidebarScreenFrame(sessions: nil, strip: strip) {
@@ -52,7 +53,7 @@ private struct AllSessionsRows: View {
             }
         }
         if loaded && rows.isEmpty {
-            EmptyNote(title: list.count == 0 ? "No sessions yet." : "No matching sessions.")
+            EmptyNote(title: list.emptyState.title)
         }
         if !loaded && !failed { LoadingNote() }
     }

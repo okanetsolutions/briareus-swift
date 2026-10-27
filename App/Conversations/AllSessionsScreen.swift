@@ -46,7 +46,7 @@ private struct AllSessionsRows: View {
                 }
             }
             if loaded && rows.isEmpty {
-                ContentUnavailableView(list.count == 0 ? "No sessions yet" : "No matching sessions",
+                ContentUnavailableView(list.emptyState.title,
                                        systemImage: "bubble.left.and.text.bubble.right")
             }
             if !loaded && !failed { ProgressView().frame(maxWidth: .infinity) }

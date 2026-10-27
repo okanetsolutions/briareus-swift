@@ -96,7 +96,9 @@ final class ProjectsModel: ObservableObject {
         if waiting != findingsWaiting { findingsWaiting = waiting }
         let list = AllSessions(sessions: all, projects: projects)
         if list != allSessions { allSessions = list }
-        if loaded && (projects.isEmpty || projects.contains { Store.shared.cache.value("sessions:\($0.repo)") != nil }) {
+        if list.cacheIsLoaded(projectsLoaded: loaded, hasCachedSessions: projects.contains {
+            Store.shared.cache.value("sessions:\($0.repo)") != nil
+        }) {
             sessionsLoaded = true
         }
         let overview = SessionOverview(all)
@@ -126,7 +128,10 @@ final class ProjectsModel: ObservableObject {
         recount()
         // The approvals agents wait on count on the ⚑ too.
         _ = await AttentionModel.shared.load()
-        guard Store.shared.supports("sessions") else { return nil }
+        guard Store.shared.supports("sessions") else {
+            sessionsError = AllSessions.unavailableMessage
+            return nil
+        }
         do {
             let all = try await Store.shared.call("sessions")
             guard mine == generation else { return nil }
