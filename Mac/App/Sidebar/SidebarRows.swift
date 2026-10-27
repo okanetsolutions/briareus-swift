@@ -9,7 +9,7 @@ import SwiftUI
 /// a conversation works. Raised when hovered or selected.
 struct ProjectRow: View {
     var name: String
-    var count: Int
+    var count: Int?
     var busy = false
     var selected = false
     var chevron = true
@@ -23,7 +23,7 @@ struct ProjectRow: View {
                 Text(name).font(Theme.subheadline).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if busy { StatusDot(status: "running") }
-                Text(verbatim: "\(count)").font(Theme.caption).foregroundStyle(Theme.muted)
+                if let count { Text(verbatim: "\(count)").font(Theme.caption).foregroundStyle(Theme.muted) }
                 if chevron { Text("›").font(Theme.caption2).foregroundStyle(Theme.muted).frame(width: 6, alignment: .trailing) }
             }
             .padding(.horizontal, 8)
@@ -84,6 +84,7 @@ struct SidebarSessionRow: View {
     var lit: Bool
     var selectMode: Bool
     var picked: Bool
+    var projectTitle: String? = nil
     var action: () -> Void
     @State private var hovered = false
 
@@ -102,6 +103,9 @@ struct SidebarSessionRow: View {
                     }
                     .frame(height: 23)
                     meta
+                    if let projectTitle {
+                        Text(projectTitle).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1)
+                    }
                 }
             }
             .padding(.leading, 8).padding(.trailing, 8).padding(.vertical, 7)

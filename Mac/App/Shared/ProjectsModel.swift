@@ -26,6 +26,15 @@ final class ProjectsModel: ObservableObject {
     @Published private(set) var error: String?
     /// The project screen pushed inside the sidebar (sessions_screen_new), nil on the projects list.
     @Published var openProject: SidebarSessions?
+    /// Whether the sidebar is showing conversations across all projects.
+    @Published var showingAllSessions = false
+
+    /// All cached project sessions, kept current by polling and the live stream.
+    @Published private(set) var allSessions = AllSessions(sessions: [], projects: [])
+    /// Every project's sessions have been read, from valid saved lists or the server.
+    @Published private(set) var sessionsLoaded = false
+    /// Why the last cross-project sessions read failed, including an unavailable route.
+    @Published private(set) var sessionsError: String?
 
     private var generation = 0
     private var observers: [NSObjectProtocol] = []
@@ -48,6 +57,7 @@ final class ProjectsModel: ObservableObject {
             let repo = note.userInfo?["repo"] as? String
             MainActor.assumeIsolated {
                 let model = ProjectsModel.shared
+                if model.showingAllSessions { Task { await model.load() } }
                 if let open = model.openProject, repo == nil || repo == open.project.repo { Task { await open.load() } }
                 model.recount()
             }
@@ -68,8 +78,9 @@ final class ProjectsModel: ObservableObject {
 
     private func reset() {
         generation += 1
+        allSessions = AllSessions(sessions: [], projects: []); sessionsLoaded = false; sessionsError = nil
         projects = []; raw = .null; findingsWaiting = 0; counts = [:]; busy = [:]; overview = SessionOverview([])
-        loaded = false; error = nil; openProject = nil
+        loaded = false; error = nil; openProject = nil; showingAllSessions = false
     }
 
     /// projects_count: what the saved lists say about each project's conversations, and the ⚑ count across them.
@@ -87,6 +98,11 @@ final class ProjectsModel: ObservableObject {
         if counts != self.counts { self.counts = counts }
         if busy != self.busy { self.busy = busy }
         if waiting != findingsWaiting { findingsWaiting = waiting }
+        let list = AllSessions(sessions: all, projects: projects)
+        if list != allSessions { allSessions = list }
+        let loaded = list.cacheIsLoaded(projectsLoaded: Project.parseList(raw) != nil,
+                                        cachedRepos: Set(counts.keys))
+        if loaded != sessionsLoaded { sessionsLoaded = loaded }
         let overview = SessionOverview(all)
         if overview != self.overview { self.overview = overview }
     }
@@ -114,19 +130,25 @@ final class ProjectsModel: ObservableObject {
         recount()
         // The approvals agents wait on count on the ⚑ too.
         _ = await AttentionModel.shared.load()
-        guard Store.shared.supports("sessions") else { return nil }
+        guard mine == generation else { return nil }
+        guard Store.shared.supports("sessions") else {
+            sessionsError = AllSessions.unavailableMessage
+            return nil
+        }
         do {
             let all = try await Store.shared.call("sessions")
             guard mine == generation else { return nil }
-            if let items = Session.parseList(all) {
-                for p in projects {
-                    Store.shared.cache.store(Session.json(items.filter { $0.repo == p.repo }), "sessions:\(p.repo)")
-                }
+            guard let items = Session.parseList(all) else { throw APIError(.nonJSON) }
+            for p in projects {
+                Store.shared.cache.store(Session.json(items.filter { $0.repo == p.repo }), "sessions:\(p.repo)")
             }
+            if !sessionsLoaded { sessionsLoaded = true }
+            if sessionsError != nil { sessionsError = nil }
             recount()
             return nil
         } catch {
             guard mine == generation, !error.isCancellation else { return nil }
+            sessionsError = errorText(error)
             recount()
             return error as? APIError
         }
@@ -194,15 +216,12 @@ final class SessionFeed: ObservableObject {
         switch SessionsEvent(event, j) {
         case .session(let s)?:
             guard let repo = s.repo else { return }
-            let key = "sessions:\(repo)"
-            guard let list = (cache.value(key).flatMap(Session.parseList) ?? []).upserting(s) else { return }
-            cache.store(Session.json(list), key)
+            _ = cache.upsertSession(s, repo: repo)
             post(.sessionLive, ["repo": repo, "session": s.raw])
         case .deleted(let id)?:
             for p in ProjectsModel.shared.projects {
-                let key = "sessions:\(p.repo)"
-                guard let list = cache.value(key).flatMap(Session.parseList)?.removing(id) else { continue }
-                cache.store(Session.json(list), key)
+                let saved = cache.removeSession(id, repo: p.repo)
+                guard saved != nil || ProjectsModel.shared.openProject?.project.repo == p.repo else { continue }
                 cache.remove("transcript:\(id)")
                 post(.sessionForgotten, ["id": id, "repo": p.repo])
             }

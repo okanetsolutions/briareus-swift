@@ -12,6 +12,8 @@ struct SidebarStrip: View {
     var waiting: Int
     /// The ◉ badge: conversations waiting for an answer or a decision.
     var needsYou: Int
+    /// Whether this device's catalog offers the new-session action.
+    var canStartSession = true
     var action: (StripAction) -> Void
 
     static let height: CGFloat = 32, iconWidth: CGFloat = 22, gap: CGFloat = 3
@@ -19,13 +21,17 @@ struct SidebarStrip: View {
     var body: some View {
         HStack(spacing: Self.gap) {
             // Six compact icons and their gaps leave 98pt for New session in the 248pt strip, including its insets.
-            StripButton(active: false, action: { action(.newSession) }) {
-                Text("＋ New session").font(Theme.footnote).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
-                    .allowsTightening(true).minimumScaleFactor(0.85)
-                    .padding(.leading, 6).padding(.trailing, 2).frame(maxWidth: .infinity, alignment: .leading)
+            if canStartSession {
+                StripButton(active: false, action: { action(.newSession) }) {
+                    Text("＋ New session").font(Theme.footnote).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
+                        .allowsTightening(true).minimumScaleFactor(0.85)
+                        .padding(.leading, 6).padding(.trailing, 2).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity)
+                .help("New session")
+            } else {
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity)
-            .help("New session")
             if store.supports("projects") && store.supports("pulls") {
                 StripButton(active: selected == "global-pulls", action: { action(.globalPulls) }) {
                     Image(systemName: "arrow.triangle.pull").font(Theme.footnote)

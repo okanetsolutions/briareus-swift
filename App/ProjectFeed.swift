@@ -65,22 +65,25 @@ final class ProjectFeed: ObservableObject {
     }
     /// A deleted conversation leaves the list at once, before the server is asked again.
     func drop(_ id: String) {
-        adopt(sessions.filter { $0.id != id })
+        remove(id)
     }
     /// A record from the live stream, in its row's place or first when new; the overview and its badge follow it, as a
     /// turn starting or ending, a question asked or a review round held all change them.
     func upsert(_ s: Session) {
-        guard let list = sessions.upserting(s) else { return }
-        let state = sessions.first { $0.id == s.id }?.state
+        let saved = Store.shared.cache.upsertSession(s, repo: repo)
+        guard let list = saved ?? sessions.upserting(s) else { return }
         sessions = list
-        sessionsLoaded = true
-        Store.shared.cache.store(Session.json(list), "sessions:\(repo)")
-        if state != s.state { ProjectsModel.shared.recount() }
+        if saved != nil { sessionsLoaded = true }
+        ProjectsModel.shared.recount()
     }
     /// A conversation the live stream says was deleted, if it is in this list.
     func remove(_ id: String) {
-        guard let list = sessions.removing(id) else { return }
-        adopt(list)
+        let saved = Store.shared.cache.removeSession(id, repo: repo)
+        guard let list = saved ?? sessions.removing(id) else { return }
+        sessions = list
+        if saved != nil { sessionsLoaded = true }
+        Store.shared.cache.remove("transcript:\(id)")
+        ProjectsModel.shared.recount()
     }
 
     /// When each repository's pull request list may be read again, shared by every project's feed.
@@ -162,6 +165,13 @@ final class ProjectsModel: ObservableObject {
     /// Why the last read of the projects failed.
     @Published private(set) var error: String?
 
+    /// All cached project sessions, kept current by polling and the live stream.
+    @Published private(set) var allSessions = AllSessions(sessions: [], projects: [])
+    /// Every project's sessions have been read, from valid saved lists or the server.
+    @Published private(set) var sessionsLoaded = false
+    /// Why the last cross-project sessions read failed, including an unavailable route.
+    @Published private(set) var sessionsError: String?
+
     private var generation = 0
     private var signOut: AnyCancellable?
 
@@ -183,6 +193,7 @@ final class ProjectsModel: ObservableObject {
     }
     private func reset() {
         generation += 1
+        allSessions = AllSessions(sessions: [], projects: []); sessionsLoaded = false; sessionsError = nil
         projects = []; raw = .null; overview = SessionOverview([]); loaded = false; error = nil
     }
 
@@ -191,10 +202,16 @@ final class ProjectsModel: ObservableObject {
     /// The overview from what is saved of each project's conversations.
     func recount() {
         var all: [Session] = []
+        var cachedRepos: Set<String> = []
         for p in projects {
             guard let list = Store.shared.cache.value("sessions:\(p.repo)").flatMap(Session.parseList) else { continue }
+            cachedRepos.insert(p.repo)
             all += list
         }
+        let list = AllSessions(sessions: all, projects: projects)
+        if list != allSessions { allSessions = list }
+        let loaded = list.cacheIsLoaded(projectsLoaded: Project.parseList(raw) != nil, cachedRepos: cachedRepos)
+        if loaded != sessionsLoaded { sessionsLoaded = loaded }
         let overview = SessionOverview(all)
         if overview != self.overview { self.overview = overview }
     }
@@ -214,10 +231,22 @@ final class ProjectsModel: ObservableObject {
         adopt(answer)
         error = nil
         Store.shared.cache.store(answer, "projects")
-        guard Store.shared.supports("sessions") else { return }
-        let all = try await Store.shared.call("sessions")
-        guard mine == generation, let items = Session.parseList(listOf(all, "sessions")) else { return }
-        for p in projects { Store.shared.feed(p.repo).adopt(items.filter { $0.repo == p.repo }) }
-        recount()
+        guard Store.shared.supports("sessions") else {
+            sessionsError = AllSessions.unavailableMessage
+            return
+        }
+        do {
+            let all = try await Store.shared.call("sessions")
+            guard mine == generation else { return }
+            guard let items = Session.parseList(listOf(all, "sessions")) else { throw APIError(.nonJSON) }
+            for p in projects { Store.shared.feed(p.repo).adopt(items.filter { $0.repo == p.repo }) }
+            if !sessionsLoaded { sessionsLoaded = true }
+            if sessionsError != nil { sessionsError = nil }
+            recount()
+        } catch {
+            guard mine == generation, !error.isCancellation else { throw error }
+            sessionsError = errorText(error)
+            throw error
+        }
     }
 }

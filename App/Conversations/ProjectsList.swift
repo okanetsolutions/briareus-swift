@@ -20,9 +20,14 @@ struct ProjectsList: View {
                 Section { ErrorNotice(message: error) }.listRowBackground(Theme.row)
             }
             Section {
+                if !model.projects.isEmpty {
+                    DestinationLink(destination: .allSessions) {
+                        ProjectRowLabel(title: "All", sessions: model.allSessions.sessions, loaded: model.sessionsLoaded)
+                    }
+                }
                 ForEach(model.projects, id: \.repo) { project in
                     DestinationLink(destination: .project(repo: project.repo)) {
-                        ProjectRowLabel(project: project, feed: store.feed(project.repo))
+                        ProjectFeedRowLabel(project: project, feed: store.feed(project.repo))
                     }
                 }
             }
@@ -57,19 +62,31 @@ struct ProjectsList: View {
     }
 }
 
-/// A project: its monogram, its name and repository, how many conversations it holds, and how many are at work.
-private struct ProjectRowLabel: View {
+/// Observes a project's feed so its shared row label updates when sessions change.
+private struct ProjectFeedRowLabel: View {
     let project: Project
     @ObservedObject var feed: ProjectFeed
 
     var body: some View {
-        let working = feed.sessions.filter(\.isActive).count
-        let count = feed.sessions.count
+        ProjectRowLabel(title: project.title, repo: project.repo, sessions: feed.sessions, loaded: feed.sessionsLoaded)
+    }
+}
+
+/// A project or All: its title, optional repository, conversation count and working count, grouped for VoiceOver.
+private struct ProjectRowLabel: View {
+    let title: String
+    var repo: String? = nil
+    let sessions: [Session]
+    let loaded: Bool
+
+    var body: some View {
+        let working = sessions.filter(\.isActive).count
+        let count = sessions.count
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(project.title).font(.body.weight(.medium)).lineLimit(1)
-                if project.title != project.repo {
-                    Text(project.repo).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(title).font(.body.weight(.medium)).lineLimit(1)
+                if let repo, title != repo {
+                    Text(repo).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
@@ -79,12 +96,12 @@ private struct ProjectRowLabel: View {
                     Text("\(working)").font(.caption.weight(.medium).monospacedDigit()).foregroundStyle(Theme.ok)
                 }
             }
-            if feed.sessionsLoaded {
+            if loaded {
                 Text("\(count)").font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 3)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(feed.sessionsLoaded ? "\(count) conversation\(count == 1 ? "" : "s")\(working > 0 ? ", \(working) working" : "")" : "")
+        .accessibilityValue(loaded ? "\(count) conversation\(count == 1 ? "" : "s")\(working > 0 ? ", \(working) working" : "")" : "")
     }
 }

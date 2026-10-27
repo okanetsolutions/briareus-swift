@@ -43,6 +43,24 @@ extension Array where Element == Session {
     }
 }
 
+extension DiskCache {
+    /// A live record updates a saved full list; it cannot establish that every session has been read.
+    func upsertSession(_ session: Session, repo: String) -> [Session]? {
+        let key = "sessions:\(repo)"
+        guard let saved = value(key).flatMap(Session.parseList), let list = saved.upserting(session) else { return nil }
+        store(Session.json(list), key)
+        return list
+    }
+
+    /// A deletion updates a saved full list; live-only rows cannot establish a complete cache.
+    func removeSession(_ id: String, repo: String) -> [Session]? {
+        let key = "sessions:\(repo)"
+        guard let saved = value(key).flatMap(Session.parseList), let list = saved.removing(id) else { return nil }
+        store(Session.json(list), key)
+        return list
+    }
+}
+
 // MARK: - One conversation
 
 /// One event of a session's `session_events` stream: its record (named `session`) or a transcript line (unnamed, its
