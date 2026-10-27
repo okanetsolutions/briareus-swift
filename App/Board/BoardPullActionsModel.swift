@@ -38,14 +38,13 @@ final class BoardPullActionsModel: ObservableObject {
             let pr: JSON
             do { pr = try await Store.shared.call("pull", ["repo": .string(repo), "pr": JSON(number)])["pr"] }
             catch { mergeNote = failure(error); return }
-            guard pr["state"].string == "open" else { mergeNote = "This pull request is no longer open."; return }
-            guard let head = pr["headSha"].string, let base = pr["baseRef"].string else {
-                mergeNote = "The server did not say which commit to merge."
+            let record = PullRecord(number: number, pr: pr, row: pull)
+            guard let arguments = record.mergeArguments(repo: repo) else {
+                mergeNote = record.mergeBlocker?.message
                 return
             }
             do {
-                let value = try await Store.shared.call("merge_pull", ["repo": .string(repo), "pr": JSON(number),
-                    "headSha": .string(head), "baseRef": .string(base), "method": "squash"])
+                let value = try await Store.shared.call("merge_pull", arguments)
                 mergeNote = value["status"].string == "pending"
                     ? "GitHub accepted the merge and is still finishing it; the pull request leaves the list once it lands." : nil
             } catch {

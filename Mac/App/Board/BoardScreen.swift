@@ -241,9 +241,9 @@ final class BoardModel: ObservableObject {
             let read = await boardCall("pull", ["repo": .string(repo), "pr": JSON(number)])
             if let e = read.error { if e.kind != .cancelled { writeError = e.description }; return }
             let pr = read.value?["pr"] ?? .null
-            guard pr["state"].string == "open" else { writeError = "This pull request is no longer open."; return }
-            guard let head = pr["headSha"].string, let base = pr["baseRef"].string else { writeError = "The server did not say which commit to merge."; return }
-            let r = await boardCall("merge_pull", ["repo": .string(repo), "pr": JSON(number), "headSha": .string(head), "baseRef": .string(base), "method": "squash"])
+            let record = PullRecord(number: number, pr: pr, row: pull)
+            guard let arguments = record.mergeArguments(repo: repo) else { writeError = record.mergeBlocker?.message; return }
+            let r = await boardCall("merge_pull", arguments)
             switch r {
             case .success(let v):
                 writeError = v["status"].string == "pending"

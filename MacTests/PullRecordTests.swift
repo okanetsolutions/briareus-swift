@@ -28,6 +28,26 @@ final class PullRecordTests: XCTestCase {
         XCTAssertNil(PullRecord(number: 4, pr: unread).mergeArguments(repo: "o/r"))
     }
 
+    func testBoardMergeExplainsFreshDraftClosedAndMissingCommitStates() {
+        XCTAssertNil(PullRecord(number: 4, pr: openPull).mergeBlocker)
+        XCTAssertEqual(PullRecord(number: 4, pr: .null).mergeBlocker, .notOpen)
+        var changed = openPull
+        changed["state"] = "merged"
+        XCTAssertEqual(PullRecord(number: 4, pr: changed).mergeBlocker, .notOpen)
+        changed = openPull
+        changed["draft"] = true
+        let draft = PullRecord(number: 4, pr: changed)
+        XCTAssertEqual(draft.mergeBlocker, .draft)
+        XCTAssertNil(draft.mergeArguments(repo: "o/r"))
+        for field in ["headSha", "baseRef"] {
+            changed = openPull
+            changed[field] = .null
+            let missingCommit = PullRecord(number: 4, pr: changed)
+            XCTAssertEqual(missingCommit.mergeBlocker, .missingCommit)
+            XCTAssertNil(missingCommit.mergeArguments(repo: "o/r"))
+        }
+    }
+
     func testWritesNameTheHeadAndBaseRead() {
         let r = PullRecord(number: 4, pr: openPull)
         let merge = r.mergeArguments(repo: "o/r")
