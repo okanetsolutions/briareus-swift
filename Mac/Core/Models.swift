@@ -261,20 +261,37 @@ struct Event: Equatable, Sendable {
 struct Transcript: Equatable, Sendable {
     private(set) var events: [Event] = []
     private(set) var cursor = 0
+    private var seen: Set<Int> = []
+    private var presentation = TranscriptBlockBuilder()
+
+    /// Rows already folded as lines arrived, so a new line does not rebuild the conversation's history.
+    var blocks: [TranscriptBlock] { presentation.blocks }
+
+    static func == (a: Transcript, b: Transcript) -> Bool { a.events == b.events && a.cursor == b.cursor }
 
     init() {}
     /// Appends every event of a JSON array not already held (the first copy of a sequence wins), sorted by sequence,
-    /// and advances the cursor. Anything that is not an array adds nothing.
-    mutating func append(_ value: JSON) {
-        var seen = Set(events.map(\.seq))
-        var added = false
+    /// and advances the cursor. Returns whether the visible rows changed; anything that is not an array adds nothing.
+    @discardableResult
+    mutating func append(_ value: JSON) -> Bool {
+        let before = events.count
+        var needsSort = false
         for item in value.items {
-            guard let e = Event(item), !seen.contains(e.seq) else { continue }
-            seen.insert(e.seq); events.append(e); added = true
+            guard let e = Event(item), seen.insert(e.seq).inserted else { continue }
+            if let last = events.last, e.seq < last.seq { needsSort = true }
+            events.append(e)
         }
-        if added { events.sort { $0.seq < $1.seq } }
+        guard events.count != before else { return false }
+        if needsSort { events.sort { $0.seq < $1.seq } }
         let last = events.last?.seq ?? 0
         if last > cursor { cursor = last }
+        if needsSort {
+            // A poll can fill a gap behind the live cursor; its insertion may change existing folded runs.
+            presentation = TranscriptBlockBuilder()
+            presentation.append(events[...])
+            return true
+        }
+        return presentation.append(events[before...])
     }
     var json: JSON { .array(events.map(\.raw)) }
 }

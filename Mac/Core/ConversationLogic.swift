@@ -82,7 +82,7 @@ func logLineText(_ e: Event) -> String { e.kind == "cmd" ? "$ \(e.text ?? "")" :
 
 /// What the transcript lays out: workspace preparation folded into one block per turn, each run of tool calls into another,
 /// and the visible events between them.
-enum TranscriptBlock: Equatable {
+enum TranscriptBlock: Equatable, Sendable {
     case preparation([Event])
     case tools([Event])
     case event(Event)
@@ -105,31 +105,9 @@ enum TranscriptBlock: Equatable {
 }
 
 func transcriptBlocks(_ events: [Event]) -> [TranscriptBlock] {
-    var out: [TranscriptBlock] = []
-    var prepDone = false
-    var i = 0
-    while i < events.count {
-        let e = events[i]
-        if e.kind == "user" || e.kind == "result" { prepDone = false }
-        if !prepDone && isPrepLine(e) && !prepClosed(e) {
-            var j = i
-            while j < events.count && isPrepLine(events[j]) && !prepClosed(events[j]) { j += 1 }
-            out.append(.preparation(Array(events[i..<j])))
-            i = j
-            continue
-        }
-        if isPrepLine(e) && prepClosed(e) { prepDone = true }
-        if isToolEvent(e) {
-            var j = i
-            while j < events.count && isToolEvent(events[j]) { j += 1 }
-            out.append(.tools(Array(events[i..<j])))
-            i = j
-            continue
-        }
-        if e.isVisible { out.append(.event(e)) }
-        i += 1
-    }
-    return out
+    var builder = TranscriptBlockBuilder()
+    builder.append(events[...])
+    return builder.blocks
 }
 
 /// Whether a transcript holds only events without a time: saved before messages showed theirs, it is read again once.

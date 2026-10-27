@@ -89,12 +89,12 @@ final class ConversationScreenModel: ObservableObject {
             if let next = Session(answer["session"]), next != snapshot { snapshot = next }
             let events = answer["events"]
             if full { transcript = Transcript() }
-            transcript.append(events)
+            let changed = transcript.append(events)
             error = nil; loaded = true
             let cache = Store.shared.cache
             if full || unsaved { unsaved = !cache.replace(transcript.json.items, cacheKey) }
             else if events.count > 0 { unsaved = !cache.append(events.items, cacheKey) }
-            rebuild()
+            if full || changed { rebuild() }
         } catch {
             loading = false
             if error.isCancellation { return APIError(.cancelled) }
@@ -105,8 +105,7 @@ final class ConversationScreenModel: ObservableObject {
         return failed
     }
     private func rebuild() {
-        let next = transcriptBlocks(transcript.events)
-        if next != blocks { blocks = next }
+        blocks = transcript.blocks
     }
 
     /// Whether the session's event stream is flowing, so polling only checks in now and then.
@@ -129,10 +128,10 @@ final class ConversationScreenModel: ObservableObject {
         case .line(let line)?:
             // A line already held (read by a poll meanwhile) adds nothing.
             let before = transcript.events.count
-            transcript.append(.array([line]))
+            let changed = transcript.append(.array([line]))
             guard transcript.events.count != before else { return }
             if !unsaved { unsaved = !Store.shared.cache.append([line], cacheKey) }
-            rebuild()
+            if changed { rebuild() }
         case nil: return
         }
     }

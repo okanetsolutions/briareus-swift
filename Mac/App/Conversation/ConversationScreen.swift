@@ -103,12 +103,12 @@ final class ConversationModel: ObservableObject {
             if let next = Session(answer["session"]) { snapshot = next }
             let events = answer["events"]
             if full { transcript = Transcript() }
-            transcript.append(events)
+            let changed = transcript.append(events)
             error = nil; loaded = true
             let cache = Store.shared.cache
             if full || unsaved { unsaved = !cache.replace(transcript.json.items, cacheKey) }
             else if events.count > 0 { unsaved = !cache.append(events.items, cacheKey) }
-            rebuild()
+            if full || changed { rebuild() }
             showPanel()
         } catch {
             loading = false
@@ -120,8 +120,7 @@ final class ConversationModel: ObservableObject {
         return failure
     }
     private func rebuild() {
-        let next = transcriptBlocks(transcript.events)
-        if next != blocks { blocks = next }
+        blocks = transcript.blocks
     }
 
     /// Whether the session's event stream is flowing, so polling only checks in now and then.
@@ -162,10 +161,10 @@ final class ConversationModel: ObservableObject {
         }
         // A transcript line, unnamed; one already held (read by a poll meanwhile) adds nothing.
         let before = transcript.events.count
-        transcript.append(.array([j]))
+        let changed = transcript.append(.array([j]))
         guard transcript.events.count != before else { return }
         if !unsaved { unsaved = !Store.shared.cache.append([j], cacheKey) }
-        rebuild()
+        if changed { rebuild() }
     }
 
     /// Polls while the screen is up: every 2 seconds while the agent works, every 7 otherwise, with the Windows client's

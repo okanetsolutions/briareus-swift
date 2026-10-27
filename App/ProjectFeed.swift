@@ -61,7 +61,7 @@ final class ProjectFeed: ObservableObject {
         sessionsLoaded = true
         Store.shared.cache.store(Session.json(list), "sessions:\(repo)")
         for id in gone { Store.shared.cache.remove("transcript:\(id)") }
-        ProjectsModel.shared.recount()
+        ProjectsModel.shared.scheduleRecount()
     }
     /// A deleted conversation leaves the list at once, before the server is asked again.
     func drop(_ id: String) {
@@ -74,7 +74,7 @@ final class ProjectFeed: ObservableObject {
         guard let list = saved ?? sessions.upserting(s) else { return }
         sessions = list
         if saved != nil { sessionsLoaded = true }
-        ProjectsModel.shared.recount()
+        ProjectsModel.shared.scheduleRecount()
     }
     /// A conversation the live stream says was deleted, if it is in this list.
     func remove(_ id: String) {
@@ -83,7 +83,7 @@ final class ProjectFeed: ObservableObject {
         sessions = list
         if saved != nil { sessionsLoaded = true }
         Store.shared.cache.remove("transcript:\(id)")
-        ProjectsModel.shared.recount()
+        ProjectsModel.shared.scheduleRecount()
     }
 
     /// When each repository's pull request list may be read again, shared by every project's feed.
@@ -174,6 +174,7 @@ final class ProjectsModel: ObservableObject {
 
     private var generation = 0
     private var signOut: AnyCancellable?
+    private var recountTask: Task<Void, Never>?
 
     private init() {
         if let saved = Store.shared.cache.value("projects") { adopt(saved) }
@@ -193,14 +194,26 @@ final class ProjectsModel: ObservableObject {
     }
     private func reset() {
         generation += 1
+        recountTask?.cancel(); recountTask = nil
         allSessions = AllSessions(sessions: [], projects: []); sessionsLoaded = false; sessionsError = nil
         projects = []; raw = .null; overview = SessionOverview([]); loaded = false; error = nil
     }
 
     func project(_ repo: String?) -> Project? { projects.first { $0.repo == repo } }
 
+    /// Stream catch-up and a full read can change many feeds together; aggregate them once per burst.
+    func scheduleRecount() {
+        guard recountTask == nil else { return }
+        recountTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+            self?.recount()
+        }
+    }
+
     /// The overview from what is saved of each project's conversations.
     func recount() {
+        recountTask?.cancel(); recountTask = nil
         var all: [Session] = []
         var cachedRepos: Set<String> = []
         for p in projects {
