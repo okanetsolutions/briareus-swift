@@ -44,7 +44,7 @@ struct BriareusApp: App {
 }
 
 /// The Mac app's sidebar strip, as a phone's tab bar: the projects and their conversations, what waits for you across
-/// them (◉ Status and the review rounds, badged with the count needing you), what they spent, and Settings.
+/// them (Pull requests, ◉ Status and the review rounds, badged with the count needing you), what they spent, and Settings.
 struct RootTabs: View {
     @EnvironmentObject private var store: Store
     @ObservedObject private var projects = ProjectsModel.shared
@@ -56,6 +56,10 @@ struct RootTabs: View {
                 if width == .regular { SplitRoot() } else { NavigationRoot { ProjectsList() } }
             }
             .tabItem { Label("Projects", systemImage: "folder") }
+            if store.supports("projects") && store.supports("pulls") {
+                NavigationRoot { GlobalPullsScreen() }
+                    .tabItem { Label("Pull requests", systemImage: "arrow.triangle.pull") }
+            }
             if store.supports("sessions") {
                 NavigationRoot { FindingsScreen(repo: nil) }
                     .tabItem { Label("Findings", systemImage: "flag") }

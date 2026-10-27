@@ -3,6 +3,8 @@
 // Ported from the Windows client's screen_pulls.c and screen_files.c.
 import Foundation
 
+// MARK: - Reads
+
 /// A cached list is fresh for five minutes after GitHub was read; receiving it again does not renew that time.
 /// Without a server-time reference, read once to establish one rather than trusting the device's clock.
 func pullsNeedRefresh(_ board: JSON, now: Date?) -> Bool {
@@ -23,6 +25,16 @@ func readPulls(fresh: Bool, now: () -> Date?, read: (Bool) async throws -> JSON)
         // A server from before `fresh` refuses the argument it does not know.
         return try await read(false)
     }
+}
+
+/// Older servers reject `fresh`; retry once without it and let the caller apply the final result's cooldown.
+@MainActor
+func readPulls(fresh: Bool, request: (Bool) async -> Result<JSON, APIError>) async -> Result<JSON, APIError> {
+    let result = await request(fresh)
+    if fresh, case .failure(let error) = result, error.kind == .http, error.status == 400 {
+        return await request(false)
+    }
+    return result
 }
 
 // MARK: - Descriptions
