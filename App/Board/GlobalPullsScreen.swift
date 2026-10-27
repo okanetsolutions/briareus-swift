@@ -16,7 +16,7 @@ struct GlobalPullsScreen: View {
                 if let error = entry.error {
                     Section(entry.project.repo) { ErrorNotice(message: error.description) }.listRowBackground(Theme.row)
                 }
-                if let actions = model.actions[entry.project.repo] { BoardPullNotices(model: actions) }
+                if let actions = model.actions[entry.project.repo] { BoardPullNotices(model: actions, repo: entry.project.repo) }
             }
             GlobalBoardList(model: model)
             if model.state.loading && !model.state.loaded {

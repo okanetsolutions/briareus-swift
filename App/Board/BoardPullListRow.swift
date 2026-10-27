@@ -69,19 +69,25 @@ private struct BoardPullRowMenu: View {
 
 struct BoardPullNotices: View {
     @ObservedObject var model: BoardPullActionsModel
+    var repo: String? = nil
 
     var body: some View {
-        ErrandNotice(runner: model.errands, place: "in the project")
-        if let note = model.mergeNote { Section { ErrorNotice(message: note) }.listRowBackground(Theme.row) }
+        ErrandNotice(runner: model.errands, place: "in the project", repo: repo)
+        if let note = model.mergeNote {
+            Section { ErrorNotice(message: repo.map { "\($0): \(note)" } ?? note) }.listRowBackground(Theme.row)
+        }
     }
 }
 
 extension View {
-    func boardPullPrompts(_ model: BoardPullActionsModel) -> some View { modifier(BoardPullPrompts(model: model)) }
+    func boardPullPrompts(_ model: BoardPullActionsModel, reload: (@MainActor () async -> Void)? = nil) -> some View {
+        modifier(BoardPullPrompts(model: model, reload: reload))
+    }
 }
 
 private struct BoardPullPrompts: ViewModifier {
     @ObservedObject var model: BoardPullActionsModel
+    var reload: (@MainActor () async -> Void)?
 
     func body(content: Content) -> some View {
         content
@@ -89,7 +95,7 @@ private struct BoardPullPrompts: ViewModifier {
             .alert(model.mergeAsked.map { "Merge #\($0.number)?" } ?? "",
                    isPresented: Binding(get: { model.mergeAsked != nil }, set: { if !$0 { model.mergeAsked = nil } }),
                    presenting: model.mergeAsked) { pull in
-                Button("Merge") { model.merge(pull) }
+                Button("Merge") { model.merge(pull, reload: reload) }
                 Button("Cancel", role: .cancel) {}
             } message: { pull in
                 Text(boardPullMergeQuestion(pull))

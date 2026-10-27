@@ -107,7 +107,7 @@ struct BoardScreen: View {
             await poll(every: ProjectFeed.sessionsEvery) { await reading { try await feed.loadSessions() } }
         }
         .onChange(of: issues.isEmpty) { _, empty in if empty && tab == .issues && !board["issuesError"].isSet && feed.boardLoaded { self.tab = .pulls } }
-        .boardPullPrompts(pullActions)
+        .boardPullPrompts(pullActions, reload: { await read(fresh: true) })
     }
 
     private func load(fresh: Bool = false, ifStale: Bool = false) async throws {

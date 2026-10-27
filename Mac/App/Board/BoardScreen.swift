@@ -19,7 +19,7 @@ final class BoardModel: ObservableObject {
     @Published var runs: [Session] = []
     @Published var syncedAt: Date?
     /// Bumped when a read is held by the cooldown, so the board reads once it is over.
-    @Published private(set) var cooldownTick = 0
+    @Published var cooldownTick = 0
     @Published var pullFilter = BoardFilter()
     @Published var issueFilter = BoardFilter()
     @Published var loaded = false
@@ -32,7 +32,7 @@ final class BoardModel: ObservableObject {
     @Published var writeError: String?
     /// The pull request being merged from its row: read for its head first, then merged.
     @Published var mergingNumber = 0
-    @Published private(set) var reading = false
+    @Published var reading = false
     var dialogOpen = false
     /// The Board tab's own state (ProjectBoardTab.swift).
     lazy var projectBoard = ProjectBoardModel(repo: repo)
@@ -41,7 +41,7 @@ final class BoardModel: ObservableObject {
                                              changed: { [weak self] in self?.objectWillChange.send() })
     private var hasOpening = false
     private var opening = BoardFilter()
-    private var readGen = 0
+    var readGen = 0
     private var readingActions = false, readingRuns = false
     /// The Run, Database and Forge tabs (project_run.c, project_db.c, project_forge.c), kept with the board as the Windows
     /// client keeps them with its screen; what they change redraws the board's header.
@@ -124,31 +124,7 @@ final class BoardModel: ObservableObject {
             }
         }
         if Store.shared.supports("sessions") && !readingRuns { Task { await loadRuns() } }
-        readGen += 1
-        let gen = readGen
-        reading = true
-        // While the server's cooldown runs the list is not read; the board waits for it (cooldownTick) with what it shows.
-        guard let r = await PullsGate.read(repo, fresh: fresh, ifStale: true) else {
-            if gen == readGen { reading = false; cooldownTick += 1 }
-            return nil
-        }
-        guard gen == readGen else { return nil }
-        reading = false
-        switch r {
-        case .success(let v):
-            show(v, saved: false)
-            error = nil
-            // When the server read GitHub, not when its copy reached the app.
-            syncedAt = boardDateParse(v["syncedAt"].string) ?? Date()
-            Store.shared.cache.store(v, "pulls:\(repo)")
-            issueStatus.next()
-            return nil
-        case .failure(let e):
-            if e.kind == .cancelled { return e }
-            error = e.description
-            loaded = true
-            return e
-        }
+        return await loadBoard(fresh: fresh, ifStale: true)?.error
     }
     /// The newest read wins: after a start, C cancels the read in flight and reads again.
     private var runsGen = 0

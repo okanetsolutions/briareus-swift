@@ -104,6 +104,33 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
     }
 
     @MainActor
+    func testRowActionRefreshSurvivesAnOlderPollAnswerOrFailure() async throws {
+        for failedPoll in [false, true] {
+            let reader = GlobalPullsReader(saved: { key in key == "projects" ? self.projects : self.first })
+            let polling = expectation(description: "The first project's poll is in flight")
+            var finishPoll: CheckedContinuation<JSON, Error>?
+            let poll = Task {
+                await reader.load(projects: { self.projects }, saved: { _ in nil }, read: { repo in
+                    if repo == "o/a" {
+                        return try await withCheckedThrowingContinuation { finishPoll = $0; polling.fulfill() }
+                    }
+                    return self.second
+                }, current: { true }, changed: { _ in })
+            }
+            await fulfillment(of: [polling], timeout: 5)
+            try reader.adopt(jBoard([]), repo: "O/A")
+            if failedPoll { finishPoll?.resume(throwing: APIError(.http, status: 503)) }
+            else { finishPoll?.resume(returning: first) }
+            let error = await poll.value
+            XCTAssertNil(error)
+            XCTAssertEqual(reader.state.rows.map(\.id), ["o/b#7"])
+            XCTAssertFalse(reader.state.hasErrors)
+            XCTAssertTrue(reader.state.loaded)
+            XCTAssertFalse(reader.state.loading)
+        }
+    }
+
+    @MainActor
     func testPartialFailureKeepsCachedRowsAndPublishesSuccessfulProjects() async {
         let reader = GlobalPullsReader(saved: { _ in nil })
         var changes: [GlobalPullsState] = []

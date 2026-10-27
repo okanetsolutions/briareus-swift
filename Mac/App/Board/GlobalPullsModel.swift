@@ -20,6 +20,7 @@ final class GlobalPullsModel: ObservableObject {
     private let reader: GlobalPullsReader
     private var boardSinks: [String: AnyCancellable] = [:]
     private var readingActions = false
+    private var actionsRead: (client: APIClient, at: Date)?
 
     init() {
         reader = GlobalPullsReader(saved: { Store.shared.cache.value($0) })
@@ -62,11 +63,13 @@ final class GlobalPullsModel: ObservableObject {
 
     private func loadActions() async {
         guard Store.shared.canManage, Store.shared.supports("actions"), !readingActions else { return }
+        guard let client = Store.shared.client else { return }
+        if let actionsRead, actionsRead.client === client, Date().timeIntervalSince(actionsRead.at) < 300 { return }
         readingActions = true
         defer { readingActions = false }
-        let client = Store.shared.client
         let result = await boardCall("actions")
         guard Store.shared.client === client, let value = result.value else { return }
+        actionsRead = (client, Date())
         Store.shared.cache.store(value, "actions")
         for board in boards.values { board.catalog = value["actions"] }
     }
@@ -77,24 +80,26 @@ final class GlobalPullsModel: ObservableObject {
         if fresh {
             for board in boards.values { board.uncertain = false; board.writeError = nil }
         }
-        await loadActions()
-        return await reader.load(fresh: fresh, projects: {
-            try await Store.shared.call("projects")
-        }, saved: { Store.shared.cache.value("pulls:\($0)") }, keepProjects: {
-            Store.shared.cache.store($0, "projects")
-        }, cooldownError: { PullsGate.cooldown.error($0) }, read: { repo in
-            guard let result = await PullsGate.read(repo, fresh: fresh) else { return nil }
-            let answer = try result.get()
-            if Store.shared.client === client {
-                Store.shared.cache.store(answer, "pulls:\(repo)")
-                boards[repo]?.show(answer, saved: false)
-                if Store.shared.supports("sessions") { await boards[repo]?.loadRuns() }
-            }
-            return answer
-        }, current: { Store.shared.client === client }, changed: { [weak self] in
-            self?.state = $0
-            self?.reconcileBoards()
-        })
+        async let actions: Void = loadActions()
+        let error = await withTaskGroup(of: Void.self) { group in
+            await reader.load(fresh: fresh, projects: {
+                try await Store.shared.call("projects")
+            }, saved: { Store.shared.cache.value("pulls:\($0)") }, keepProjects: {
+                Store.shared.cache.store($0, "projects")
+            }, cooldownError: { PullsGate.cooldown.error($0) }, read: { repo in
+                guard let board = boards[repo], let result = await board.loadBoard(fresh: fresh) else { return nil }
+                let answer = try result.get()
+                if Store.shared.client === client, Store.shared.supports("sessions") {
+                    group.addTask { await board.loadRuns() }
+                }
+                return answer
+            }, current: { Store.shared.client === client }, changed: { [weak self] in
+                self?.state = $0
+                self?.reconcileBoards()
+            })
+        }
+        await actions
+        return error
     }
 
     func open(_ row: GlobalPullRow) {

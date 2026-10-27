@@ -157,25 +157,6 @@ func paidNote(_ p: PendingErrand) -> String {
     return "\(hint)This runs a paid agent on pull request #\(p.number) and may write to GitHub."
 }
 
-/// What an errand start left to say: why it failed, and whether it may have started anyway.
-struct ErrandNotice: View {
-    @ObservedObject var runner: ErrandRunner
-    var place: String
-    var body: some View {
-        if let e = runner.writeError {
-            Section {
-                ErrorNotice(message: e)
-                if runner.uncertain {
-                    Text("The request may have completed. Look for its conversation \(place) before starting another agent.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Button("I have checked") { runner.checked() }.font(.callout)
-                }
-            }
-            .listRowBackground(Theme.row)
-        }
-    }
-}
-
 // MARK: - Badges and chips
 
 /// A small capsule: a symbol and a word in one colour on its tint.

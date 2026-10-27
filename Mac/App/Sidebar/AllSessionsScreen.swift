@@ -1,4 +1,4 @@
-// The All entry in the project sidebar, drawn as a project's own screen: `‹ All projects`, the All row opening the board
+// The All entry in the project sidebar, drawn as a project's own screen: `‹ All projects`, the All sessions row opening the board
 // across every project (its pull requests, issues and Review List tabs), then every open conversation with its project.
 import SwiftUI
 
@@ -17,7 +17,7 @@ struct AllSessionsScreen: View {
         SidebarScreenFrame(sessions: nil, strip: strip) {
             BackRow { model.showingAllSessions = false }
             Color.clear.frame(height: 2)
-            // The All row opens the board across every project, as a project's row opens its board.
+            // The All sessions row opens the board across every project, as a project's row opens its board.
             if store.supports("projects") && store.supports("pulls") {
                 ProjectRow(name: "All sessions", count: model.sessionsLoaded ? model.allSessions.count : nil,
                            selected: navigator.selectedID == Screen.globalPulls.id, chevron: false, height: 35) {

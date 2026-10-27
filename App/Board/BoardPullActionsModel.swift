@@ -1,4 +1,4 @@
-// The project and cross-project lists share each repository's errand runner and merge progress.
+// The project and cross-project lists use the same per-repository errand and merge flow.
 import Combine
 import Foundation
 
@@ -29,7 +29,7 @@ final class BoardPullActionsModel: ObservableObject {
     func runs(on number: Int) -> BoardPullRuns { BoardPullRuns(feed.sessions, number: number) }
 
     /// Read the current head before merging: a list summary never authorizes a different commit.
-    func merge(_ pull: PullSummary) {
+    func merge(_ pull: PullSummary, reload: (@MainActor () async -> Void)? = nil) {
         guard mergingNumber == 0 else { return }
         let number = pull.number
         mergingNumber = number; mergeNote = nil
@@ -54,8 +54,11 @@ final class BoardPullActionsModel: ObservableObject {
                 }
             }
             mergingNumber = 0
-            do { try await feed.loadBoard(fresh: true) }
-            catch { if let said = failure(error), mergeNote == nil { mergeNote = said } }
+            if let reload { await reload() }
+            else {
+                do { try await feed.loadBoard(fresh: true) }
+                catch { if let said = failure(error), mergeNote == nil { mergeNote = said } }
+            }
         }
     }
 }
