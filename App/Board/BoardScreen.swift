@@ -108,7 +108,7 @@ struct BoardScreen: View {
             await catalog.load()
         }
         .task { await poll(every: ProjectFeed.boardEvery) { await reading { try await load() } } }
-        .task(id: tab) { await read(ifStale: true) }
+        .task(id: tab) { if tab == .pulls || tab == .review { await read(ifStale: true) } }
         // Each linked issue's Status, one read at a time while the board is on show, the rows the filters show first.
         .onAppear { issueStatus.shown = true; issueStatus.next(pulls: self.pulls, filter: filters.pulls) }
         .onDisappear { issueStatus.shown = false }
@@ -137,7 +137,7 @@ struct BoardScreen: View {
 
     private func load(fresh: Bool = false, ifStale: Bool = false) async throws {
         do {
-            if ifStale { try await feed.refreshBoardIfStale() }
+            if ifStale { guard try await feed.refreshBoardIfStale() else { return } }
             else { try await feed.loadBoard(fresh: fresh) }
             filters.opened(board, answered: true)
             error = nil

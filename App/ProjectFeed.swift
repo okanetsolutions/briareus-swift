@@ -112,11 +112,14 @@ final class ProjectFeed: ObservableObject {
         }
     }
 
-    /// Opening the PR tab reuses a recent GitHub sync, including one already in flight.
-    func refreshBoardIfStale() async throws {
-        if let task = readingBoard.task { _ = try? await task.value }
-        guard !Task.isCancelled, pullsNeedRefresh(board) else { return }
+    /// Opening the PR tab reuses a recent GitHub sync, including one already in flight. Returns whether a read answered.
+    func refreshBoardIfStale() async throws -> Bool {
+        var answered = false
+        if let task = readingBoard.task { try await task.value; answered = true }
+        guard !Task.isCancelled else { return false }
+        guard pullsNeedRefresh(board), Self.cooldown.mayRead(repo) else { return answered }
         try await loadBoard(fresh: true)
+        return !Task.isCancelled
     }
 
     /// One request at a time. A poll finding an answer young enough asks nothing, and one finding a request on its way

@@ -359,7 +359,7 @@ struct BoardScreen: View {
         .task(id: model.cooldownTick) {
             guard let until = PullsGate.deadline(repo) else { return }
             try? await Task.sleep(nanoseconds: UInt64(max(until.timeIntervalSinceNow, 0) * 1_000_000_000) + 200_000_000)
-            if !Task.isCancelled { await model.pollBoard() }
+            if !Task.isCancelled { _ = await model.pollBoard() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .pullsCooldownChanged)) { note in
             if note.userInfo?["repo"] as? String == repo { cooldownRevision += 1 }

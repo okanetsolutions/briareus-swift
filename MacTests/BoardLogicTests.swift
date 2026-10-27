@@ -10,7 +10,9 @@ final class BoardLogicTests: XCTestCase {
         XCTAssertFalse(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(299)))
         XCTAssertTrue(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(300)))
         XCTAssertTrue(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(900)))
-        XCTAssertTrue(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(-1)))
+        XCTAssertFalse(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(-1)))
+        XCTAssertFalse(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(-120)))
+        XCTAssertFalse(pullsNeedRefresh(board, now: syncedAt.addingTimeInterval(-300)))
     }
 
     func testPullListWithoutAValidSyncTimeNeedsRefresh() {
