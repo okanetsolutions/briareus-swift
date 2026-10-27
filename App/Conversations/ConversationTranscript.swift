@@ -70,7 +70,8 @@ struct ConversationTranscript: View, Equatable {
             }
             if session.isActive { WorkingIndicator(status: session.status, background: session.backgroundTasks, answered: transcriptAnswered(blocks)) }
             // Keep the target in the lazy stack so jumping to it also lays out the latest messages.
-            Color.clear.frame(height: 1).id("bottom")
+            // The negative padding cancels the stack's 16pt spacing so the last item rests where it did.
+            Color.clear.frame(height: 1).padding(.top, -16).id("bottom")
                 .onAppear { atBottom = true }.onDisappear { atBottom = false }
         }
     }
