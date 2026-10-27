@@ -63,6 +63,31 @@ final class LiveEventsTests: XCTestCase {
         XCTAssertTrue(loaded())
     }
 
+    func testLiveRemovalOnlyChangesAnExistingFullList() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let cache = DiskCache(directory: directory, protection: [])
+        defer { cache.flush(); try? FileManager.default.removeItem(at: directory) }
+        let repo = "okanet/app", key = "sessions:\(repo)"
+
+        XCTAssertNil(cache.removeSession("s1", repo: repo))
+        XCTAssertNil(cache.value(key))
+        let malformed: JSON = ["error": "unavailable"]
+        cache.store(malformed, key)
+        XCTAssertNil(cache.removeSession("s1", repo: repo))
+        XCTAssertEqual(cache.value(key), malformed)
+
+        cache.store(Session.json([session("s1"), session("s2")]), key)
+        XCTAssertNil(cache.removeSession("unknown", repo: repo))
+        XCTAssertEqual(cache.value(key).flatMap(Session.parseList), [session("s1"), session("s2")])
+        XCTAssertEqual(cache.removeSession("s1", repo: repo), [session("s2")])
+        cache.flush()
+        let reopened = DiskCache(directory: directory, protection: [])
+        XCTAssertEqual(reopened.value(key).flatMap(Session.parseList), [session("s2")])
+        XCTAssertEqual(cache.removeSession("s2", repo: repo), [])
+        XCTAssertNil(cache.removeSession("s2", repo: repo))
+        XCTAssertEqual(cache.value(key).flatMap(Session.parseList), [])
+    }
+
     // MARK: One conversation
 
     func testConversationEventReadsTheRecordEitherWay() {

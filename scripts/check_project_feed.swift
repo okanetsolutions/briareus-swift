@@ -61,6 +61,7 @@ struct ProjectFeedChecks {
         try await overlappingReads(failFirst: true)
         liveSessionsAfterCacheWipe()
         liveSessionsBeforeFirstRead()
+        liveSessionDeletions()
         print("Project feed cache reuse, tab cancellation, skipped reads, failures, overlapping spinner and live session checks passed")
     }
 
@@ -96,6 +97,42 @@ struct ProjectFeedChecks {
         precondition(feed.sessions == [session], "An unread list must show live records without duplicates")
         precondition(!feed.sessionsLoaded && Store.shared.cache.value("sessions:\(repo)") == nil,
                      "A live record alone must not mark the full list as read")
+    }
+
+    @MainActor
+    static func liveSessionDeletions() {
+        let store = Store.shared
+        for drop in [false, true] {
+            for state in ["unread", "wiped", "saved"] {
+                let repo = "delete/\(drop)/\(state)", key = "sessions:\(repo)"
+                let feed = ProjectFeed(repo: repo)
+                let first = Session(["id": "s1", "repo": .string(repo), "status": "idle"])!
+                let second = Session(["id": "s2", "repo": .string(repo), "status": "idle"])!
+                if state != "unread" { feed.adopt([first, second]) }
+                if state == "wiped" { store.cache.remove(key) }
+                feed.upsert(first)
+                feed.upsert(second)
+                store.cache.store(["events": []], "transcript:s1")
+                if drop { feed.drop("s1") } else { feed.remove("s1") }
+                precondition(feed.sessions == [second], "Deletion must preserve the other live rows")
+                precondition(feed.sessionsLoaded == (state != "unread"),
+                             "Deletion must not mark a never-read list loaded")
+                precondition(store.cache.value("transcript:s1") == nil, "Deletion must clear the saved transcript")
+                let saved = store.cache.value(key).flatMap(Session.parseList)
+                precondition(saved == (state == "saved" ? [second] : nil),
+                             "Deletion may update only an existing full-list cache")
+                let all = AllSessions(sessions: feed.sessions, projects: [Project(repo: repo)])
+                precondition(all.cacheIsLoaded(projectsLoaded: true, cachedRepos: saved == nil ? [] : [repo]) == (state == "saved"),
+                             "Live-only deletions must not make All complete")
+                if drop { feed.drop("s2") } else { feed.remove("s2") }
+                precondition(feed.sessions.isEmpty)
+                precondition(store.cache.value(key).flatMap(Session.parseList) == (state == "saved" ? [] : nil),
+                             "Deleting the final row must preserve cache completeness")
+                if drop { feed.drop("unknown") } else { feed.remove("unknown") }
+                precondition(store.cache.value(key).flatMap(Session.parseList) == (state == "saved" ? [] : nil),
+                             "An unknown deletion must not create a cache")
+            }
+        }
     }
 
     @MainActor

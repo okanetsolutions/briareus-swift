@@ -51,6 +51,14 @@ extension DiskCache {
         store(Session.json(list), key)
         return list
     }
+
+    /// A deletion updates a saved full list; live-only rows cannot establish a complete cache.
+    func removeSession(_ id: String, repo: String) -> [Session]? {
+        let key = "sessions:\(repo)"
+        guard let saved = value(key).flatMap(Session.parseList), let list = saved.removing(id) else { return nil }
+        store(Session.json(list), key)
+        return list
+    }
 }
 
 // MARK: - One conversation

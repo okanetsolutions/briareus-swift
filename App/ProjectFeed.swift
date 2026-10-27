@@ -65,7 +65,7 @@ final class ProjectFeed: ObservableObject {
     }
     /// A deleted conversation leaves the list at once, before the server is asked again.
     func drop(_ id: String) {
-        adopt(sessions.filter { $0.id != id })
+        remove(id)
     }
     /// A record from the live stream, in its row's place or first when new; the overview and its badge follow it, as a
     /// turn starting or ending, a question asked or a review round held all change them.
@@ -78,8 +78,12 @@ final class ProjectFeed: ObservableObject {
     }
     /// A conversation the live stream says was deleted, if it is in this list.
     func remove(_ id: String) {
-        guard let list = sessions.removing(id) else { return }
-        adopt(list)
+        let saved = Store.shared.cache.removeSession(id, repo: repo)
+        guard let list = saved ?? sessions.removing(id) else { return }
+        sessions = list
+        if saved != nil { sessionsLoaded = true }
+        Store.shared.cache.remove("transcript:\(id)")
+        ProjectsModel.shared.recount()
     }
 
     /// When each repository's pull request list may be read again, shared by every project's feed.
