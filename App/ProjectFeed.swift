@@ -22,6 +22,7 @@ final class ProjectFeed: ObservableObject {
     @Published private(set) var boardLoaded = false
     /// True while the pull request list is being read, including a refresh with cached rows still on screen.
     @Published private(set) var boardReading = false
+    private var boardReadCount = 0
     /// The board's pull requests and issues, each issue with what the server sent for it.
     private(set) var pulls: [PullSummary] = []
     private(set) var issues: [(summary: IssueSummary, raw: JSON)] = []
@@ -90,10 +91,14 @@ final class ProjectFeed: ObservableObject {
         // While the server's cooldown on the list runs (a spent GitHub allowance), the board shown stays as it is.
         if !Self.cooldown.mayRead(repo) { return }
         if !fresh, let task = readingBoard.task { return try await task.value }
-        let fresh = fresh || pullsNeedRefresh(board)
+        let fresh = fresh || pullsNeedRefresh(board, now: Store.shared.client?.serverNow)
         try await read(\.readingBoard, every: Self.boardEvery, fresh: fresh) { [self] in
+            boardReadCount += 1
             boardReading = true
-            defer { boardReading = false }
+            defer {
+                boardReadCount -= 1
+                boardReading = boardReadCount > 0
+            }
             var answer: JSON
             do {
                 do { answer = try await Store.shared.call("pulls", fresh ? ["repo": .string(repo), "fresh": "1"] : ["repo": .string(repo)]) }
@@ -116,10 +121,9 @@ final class ProjectFeed: ObservableObject {
     func refreshBoardIfStale() async throws -> Bool {
         var answered = false
         if let task = readingBoard.task { try await task.value; answered = true }
-        guard !Task.isCancelled else { return false }
-        guard pullsNeedRefresh(board), Self.cooldown.mayRead(repo) else { return answered }
+        guard pullsNeedRefresh(board, now: Store.shared.client?.serverNow), Self.cooldown.mayRead(repo) else { return answered }
         try await loadBoard(fresh: true)
-        return !Task.isCancelled
+        return true
     }
 
     /// One request at a time. A poll finding an answer young enough asks nothing, and one finding a request on its way

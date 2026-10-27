@@ -392,6 +392,7 @@ struct HTTPResponse: Sendable {
     var contentType: String?
     var retryAfter: String?
     var body: Data
+    var date: String? = nil
 }
 
 /// One round trip. Throws only when nothing was received, with the reason as the error's message.
@@ -441,7 +442,8 @@ final class URLSessionTransport: NSObject, HTTPTransport, URLSessionTaskDelegate
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw APIError(.network, message: "The server could not be reached.") }
             return HTTPResponse(status: http.statusCode, contentType: http.value(forHTTPHeaderField: "Content-Type"),
-                                retryAfter: http.value(forHTTPHeaderField: "Retry-After"), body: data)
+                                retryAfter: http.value(forHTTPHeaderField: "Retry-After"), body: data,
+                                date: http.value(forHTTPHeaderField: "Date"))
         } catch let error as URLError {
             if error.code == .cancelled { throw APIError(.cancelled) }
             throw APIError(.network, message: URLSessionTransport.text(error))
@@ -492,6 +494,21 @@ final class APIClient: @unchecked Sendable {
     private let token: String
     var transport: HTTPTransport
 
+    private let clockLock = NSLock()
+    private var clockReference: ServerTimeReference?
+
+    /// Server time advanced by a continuous clock, independent of device clock skew or clock changes.
+    var serverNow: Date? {
+        clockLock.lock(); defer { clockLock.unlock() }
+        return clockReference?.now()
+    }
+
+    private func observeServerTime(_ header: String?) {
+        guard let reference = ServerTimeReference(header) else { return }
+        clockLock.lock(); defer { clockLock.unlock() }
+        clockReference = reference
+    }
+
     /// The Authorization header's value, for a stream opened outside `send` (EventStream.swift).
     var authorization: String { "Bearer \(token)" }
 
@@ -507,6 +524,7 @@ final class APIClient: @unchecked Sendable {
         if let contentType { headers["Content-Type"] = contentType }
         // No automatic application-level retries, including for POST reads: the screen owns read backoff.
         let r = try await transport.send(method: method, url: u, headers: headers, body: body, timeout: timeout)
+        observeServerTime(r.date)
         if r.status >= 300 && r.status < 400 { throw APIError(.redirected, status: r.status) }
         let type = r.contentType?.lowercased().split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces) }
         let isJSON = type == "application/json"

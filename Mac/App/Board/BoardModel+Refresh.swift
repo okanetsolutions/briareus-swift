@@ -9,14 +9,14 @@ extension BoardModel {
 
     func pollBoard() async -> APIError? {
         guard !dialogOpen, !reading else { return nil }
-        return await load(fresh: pullsNeedRefresh(savedBoard))
+        return await load(fresh: pullsNeedRefresh(savedBoard, now: Store.shared.client?.serverNow))
     }
 
     /// The model owns the request so switching tabs cannot cancel a refresh another tab still needs.
     func openPulls() {
         Task {
             guard tab == .pulls || tab == .review, !dialogOpen, !reading,
-                  pullsNeedRefresh(savedBoard) else { return }
+                  pullsNeedRefresh(savedBoard, now: Store.shared.client?.serverNow) else { return }
             await load(fresh: true)
         }
     }

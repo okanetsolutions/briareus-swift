@@ -4,9 +4,9 @@
 import Foundation
 
 /// A cached list is fresh for five minutes after GitHub was read; receiving it again does not renew that time.
-/// A sync ahead of the device's clock is still fresh.
-func pullsNeedRefresh(_ board: JSON, now: Date = Date()) -> Bool {
-    guard let syncedAt = boardDateParse(board["syncedAt"].string) else { return true }
+/// Without a server-time reference, read once to establish one rather than trusting the device's clock.
+func pullsNeedRefresh(_ board: JSON, now: Date?) -> Bool {
+    guard let now, let syncedAt = boardDateParse(board["syncedAt"].string) else { return true }
     let age = now.timeIntervalSince(syncedAt)
     return age >= 5 * 60
 }

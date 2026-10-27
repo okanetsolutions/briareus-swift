@@ -16,9 +16,27 @@ final class BoardLogicTests: XCTestCase {
     }
 
     func testPullListWithoutAValidSyncTimeNeedsRefresh() {
-        XCTAssertTrue(pullsNeedRefresh(.null))
-        XCTAssertTrue(pullsNeedRefresh(j(#"{"pulls":[]}"#)))
-        XCTAssertTrue(pullsNeedRefresh(j(#"{"syncedAt":"invalid"}"#)))
+        let now = boardDateParse("2026-10-27T12:00:00Z")!
+        XCTAssertTrue(pullsNeedRefresh(.null, now: now))
+        XCTAssertTrue(pullsNeedRefresh(j(#"{"pulls":[]}"#), now: now))
+        XCTAssertTrue(pullsNeedRefresh(j(#"{"syncedAt":"invalid"}"#), now: now))
+        XCTAssertTrue(pullsNeedRefresh(j(#"{"syncedAt":"2026-10-27T12:00:00Z"}"#), now: nil))
+    }
+
+    func testPullListUsesServerTimeAndElapsedTimeDespiteDeviceClockSkew() {
+        let instant = ContinuousClock.now
+        let reference = ServerTimeReference("Tue, 27 Oct 2026 12:00:00 GMT", at: instant)!
+        let board = j(#"{"syncedAt":"2026-10-27T12:00:00Z"}"#)
+        // The device's wall clock is never an input to the reference, whether minutes ahead or behind.
+        XCTAssertFalse(pullsNeedRefresh(board, now: reference.now(at: instant)))
+        XCTAssertFalse(pullsNeedRefresh(board, now: reference.now(at: instant.advanced(by: .seconds(299)))))
+        XCTAssertTrue(pullsNeedRefresh(board, now: reference.now(at: instant.advanced(by: .seconds(300)))))
+        XCTAssertTrue(pullsNeedRefresh(board, now: reference.now(at: instant.advanced(by: .seconds(900)))))
+        // Receiving an old GitHub sync again does not reset its age.
+        let later = ServerTimeReference("Tue, 27 Oct 2026 12:05:00 GMT", at: instant)!
+        XCTAssertTrue(pullsNeedRefresh(board, now: later.now(at: instant)))
+        XCTAssertNil(ServerTimeReference(nil))
+        XCTAssertNil(ServerTimeReference("invalid"))
     }
 
     func testVisibleMarkdownDropsCommentsAndRawHTMLButKeepsCode() {
