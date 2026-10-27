@@ -60,20 +60,26 @@ final class GlobalPullsModel: ObservableObject {
     func load(fresh: Bool = false) async -> APIError? {
         guard let client = Store.shared.client else { return APIError(.cancelled) }
         if fresh { for model in actions.values { model.checked() } }
-        await ErrandCatalog.shared.load()
-        return await reader.load(fresh: fresh, projects: {
-            try await Store.shared.call("projects")
-        }, saved: { Store.shared.cache.value("pulls:\($0)") }, keepProjects: {
-            Store.shared.cache.store($0, "projects")
-        }, cooldownError: { ProjectFeed.boardCooldownError($0) }, read: { repo in
-            guard ProjectFeed.boardDeadline(repo) == nil else { return nil }
-            let feed = Store.shared.feed(repo)
-            try await feed.loadBoard(fresh: fresh)
-            if Store.shared.supports("sessions") { try? await feed.loadSessions(fresh: fresh) }
-            return feed.board
-        }, current: { Store.shared.client === client }, changed: { [weak self] in
-            self?.state = $0
-            self?.reconcileActions()
-        })
+        async let catalog: Void = ErrandCatalog.shared.load()
+        let error = await withTaskGroup(of: Void.self) { group in
+            await reader.load(fresh: fresh, projects: {
+                try await Store.shared.call("projects")
+            }, saved: { Store.shared.cache.value("pulls:\($0)") }, keepProjects: {
+                Store.shared.cache.store($0, "projects")
+            }, cooldownError: { ProjectFeed.boardCooldownError($0) }, read: { repo in
+                guard ProjectFeed.boardDeadline(repo) == nil else { return nil }
+                let feed = Store.shared.feed(repo)
+                try await feed.loadBoard(fresh: fresh)
+                if Store.shared.client === client, Store.shared.supports("sessions") {
+                    group.addTask { try? await feed.loadSessions(fresh: fresh) }
+                }
+                return feed.board
+            }, current: { Store.shared.client === client }, changed: { [weak self] in
+                self?.state = $0
+                self?.reconcileActions()
+            })
+        }
+        await catalog
+        return error
     }
 }
