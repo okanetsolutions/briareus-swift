@@ -17,7 +17,7 @@ struct GlobalPullsScreen: View {
                     Section(entry.project.repo) { ErrorNotice(message: error.description) }.listRowBackground(Theme.row)
                 }
             }
-            GlobalBoardRows(model: model)
+            GlobalBoardList(model: model)
             if model.state.loading && !model.state.loaded {
                 ProgressView(model.tab.loadingText).frame(maxWidth: .infinity).listRowBackground(Color.clear)
             } else if model.state.loaded && model.shown.count(model.tab) == 0 {
@@ -69,7 +69,7 @@ private struct GlobalPullsFilters: View {
 }
 
 /// The rows of the tab on show.
-private struct GlobalBoardRows: View {
+private struct GlobalBoardList: View {
     @ObservedObject var model: GlobalPullsModel
 
     var body: some View {
