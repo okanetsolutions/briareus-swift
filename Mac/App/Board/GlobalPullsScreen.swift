@@ -76,6 +76,9 @@ private struct GlobalBoardList: View {
                     IssueRowView(issue: row.issue, repo: row.project.repo) { model.open(row) }
                 }
             }
+            ForEach(model.shown.issueTruncations, id: \.project.repo) {
+                Text($0.notice).font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }

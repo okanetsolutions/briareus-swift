@@ -92,6 +92,9 @@ private struct GlobalBoardList: View {
                         }
                     }
                 }
+                ForEach(model.shown.issueTruncations, id: \.project.repo) {
+                    Text($0.notice).font(.footnote).foregroundStyle(Theme.muted)
+                }
             }
         }
         .listRowBackground(Theme.row)

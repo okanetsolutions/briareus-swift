@@ -98,6 +98,28 @@ final class BoardGlobalBoardTabsTests: XCTestCase {
         XCTAssertNotEqual(state().emptyTitle(.review, filter: all, me: nil), asking)
     }
 
+    func testReviewListLoginPromptFollowsTheProjectPicker() {
+        var mixed = GlobalPullsState()
+        mixed.replaceProjects(Project.parseList(projects)!, saved: { $0 == "o/a" ? j(#"{"pulls":[]}"#) : beta })
+        let asking = GlobalPullsState().emptyTitle(.review, filter: GlobalPullsFilter(), me: nil)
+        // Only Beta has an author, so Alpha alone has nobody whose review its list waits on.
+        XCTAssertEqual(mixed.emptyTitle(.review, filter: GlobalPullsFilter(repo: "O/A"), me: nil), asking)
+        XCTAssertNotEqual(mixed.emptyTitle(.review, filter: GlobalPullsFilter(repo: "o/b"), me: nil), asking)
+        XCTAssertNotEqual(mixed.emptyTitle(.review, filter: GlobalPullsFilter(), me: nil), asking)
+    }
+
+    func testTruncatedIssuesAreNotedForThePickedProjects() {
+        var cut = GlobalPullsState()
+        cut.replaceProjects(Project.parseList(projects)!, saved: { $0 == "o/a" ? j(#"{"pulls":[],"issuesTruncated":true}"#) : beta })
+        XCTAssertEqual(cut.issueTruncations.map(\.project.repo), ["o/a"])
+        XCTAssertTrue(state().issueTruncations.isEmpty)
+        XCTAssertEqual(GlobalPullsFilter(query: "nothing").board(in: cut, me: nil).issueTruncations.map(\.project.repo), ["o/a"])
+        XCTAssertTrue(GlobalPullsFilter(repo: "o/b").board(in: cut, me: nil).issueTruncations.isEmpty)
+        // A later full read clears the note.
+        try? cut.projects[0].adopt(j(#"{"pulls":[]}"#))
+        XCTAssertTrue(cut.issueTruncations.isEmpty)
+    }
+
     func testBoardRowsCountEachTabAndTheDefaultFilterGivesTotals() {
         let totals = GlobalPullsFilter().board(in: state(), me: "me")
         XCTAssertEqual(GlobalBoardTab.allCases.map { totals.count($0) }, [4, 2, 2])

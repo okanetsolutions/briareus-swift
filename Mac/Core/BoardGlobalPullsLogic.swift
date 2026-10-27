@@ -22,6 +22,8 @@ struct GlobalBoardRows: Equatable, Sendable {
     var review: [GlobalPullRow] = []
     /// The Issues tab's notices for the projects whose issues GitHub would not list.
     var issueRefusals: [GlobalIssueRefusal] = []
+    /// The Issues tab's notes for the projects whose open issues the server cut to the most recently updated.
+    var issueTruncations: [GlobalIssueTruncation] = []
 
     func count(_ tab: GlobalBoardTab) -> Int {
         switch tab {
@@ -37,6 +39,12 @@ struct GlobalIssueRefusal: Equatable, Sendable {
     let project: Project
     let message: String
     var notice: String { "\(project.repo): GitHub would not read this repository’s issues. \(message)" }
+}
+
+/// A project with more open issues than the server listed, and the note that says only the newest are shown.
+struct GlobalIssueTruncation: Equatable, Sendable {
+    let project: Project
+    var notice: String { "\(project.repo) has more open issues; only the most recently updated are listed." }
 }
 
 struct GlobalPullRow: Identifiable, Equatable, Sendable {
@@ -80,6 +88,8 @@ struct GlobalPullProject: Equatable, Sendable {
     var issues: [GlobalIssueRow] = []
     /// What GitHub said when it would not list the repository's issues; its pull requests are unaffected.
     var issuesError: String?
+    /// Whether the server listed only the most recently updated open issues, as the project's own board notes.
+    var issuesTruncated = false
     /// The board's stacks and author, which decide its Review List as the project's own board does.
     var stacks: JSON = .null
     var author: String?
@@ -96,6 +106,7 @@ struct GlobalPullProject: Equatable, Sendable {
             IssueSummary(raw).flatMap { seenIssues.insert($0.number).inserted ? GlobalIssueRow(project: project, issue: $0, raw: raw) : nil }
         }
         issuesError = board["issuesError"].string
+        issuesTruncated = board["issuesTruncated"].is(true)
         stacks = board["stacks"]
         author = board["author"].nonEmpty
         error = nil
@@ -149,8 +160,13 @@ struct GlobalPullsState: Equatable, Sendable {
         projects.compactMap { entry in entry.issuesError.map { GlobalIssueRefusal(project: entry.project, message: $0) } }
     }
 
+    /// The projects whose open issues the server cut short.
+    var issueTruncations: [GlobalIssueTruncation] {
+        projects.filter(\.issuesTruncated).map { GlobalIssueTruncation(project: $0.project) }
+    }
+
     /// What an empty tab says: a refused or failed read before the filters, and the Review List asks for a login when
-    /// neither a saved one nor any project's author decides whose review it waits on.
+    /// neither a saved one nor the author of any project the picker shows decides whose review it waits on.
     func emptyTitle(_ tab: GlobalBoardTab, filter: GlobalPullsFilter, me: String?) -> String {
         let filtered = filter.isOn
         switch tab {
@@ -162,7 +178,9 @@ struct GlobalPullsState: Equatable, Sendable {
             return filtered ? "No issues match the filters" : "No open issues"
         case .review:
             if hasErrors { return "Pull requests could not all be loaded" }
-            if (me ?? "").isEmpty && !projects.contains(where: { $0.author != nil }) { return "Set your GitHub login" }
+            if (me ?? "").isEmpty && !projects.contains(where: { $0.author != nil && filter.shows($0.project) }) {
+                return "Set your GitHub login"
+            }
             return filtered ? "No pull requests match the filters" : "Nothing is waiting on your review"
         }
     }
@@ -208,13 +226,21 @@ struct GlobalPullsFilter: Equatable, Sendable {
 
     /// The refusals of the projects the picker shows; the search does not hide them.
     func issueRefusals(in state: GlobalPullsState) -> [GlobalIssueRefusal] {
-        state.issueRefusals.filter { repo.isEmpty || foldEqual($0.project.repo, repo) }
+        state.issueRefusals.filter { shows($0.project) }
     }
+
+    /// The truncation notes of the projects the picker shows; the search does not hide them.
+    func issueTruncations(in state: GlobalPullsState) -> [GlobalIssueTruncation] {
+        state.issueTruncations.filter { shows($0.project) }
+    }
+
+    /// Whether the project picker includes this project.
+    func shows(_ project: Project) -> Bool { repo.isEmpty || foldEqual(project.repo, repo) }
 
     /// Every tab's rows under this filter; the default filter gives the totals the tabs are labelled with.
     func board(in state: GlobalPullsState, me: String?) -> GlobalBoardRows {
         GlobalBoardRows(pulls: rows(in: state), issues: issueRows(in: state), review: reviewRows(in: state, me: me),
-                        issueRefusals: issueRefusals(in: state))
+                        issueRefusals: issueRefusals(in: state), issueTruncations: issueTruncations(in: state))
     }
 
     private func passes(_ rowRepo: String, _ searchText: String) -> Bool {
