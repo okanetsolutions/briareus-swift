@@ -70,9 +70,10 @@ final class ProjectFeed: ObservableObject {
     /// A record from the live stream, in its row's place or first when new; the overview and its badge follow it, as a
     /// turn starting or ending, a question asked or a review round held all change them.
     func upsert(_ s: Session) {
-        guard let list = Store.shared.cache.upsertSession(s, repo: repo) else { return }
+        let saved = Store.shared.cache.upsertSession(s, repo: repo)
+        guard let list = saved ?? sessions.upserting(s) else { return }
         sessions = list
-        sessionsLoaded = true
+        if saved != nil { sessionsLoaded = true }
         ProjectsModel.shared.recount()
     }
     /// A conversation the live stream says was deleted, if it is in this list.

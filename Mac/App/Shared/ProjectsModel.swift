@@ -130,6 +130,7 @@ final class ProjectsModel: ObservableObject {
         recount()
         // The approvals agents wait on count on the ⚑ too.
         _ = await AttentionModel.shared.load()
+        guard mine == generation else { return nil }
         guard Store.shared.supports("sessions") else {
             sessionsError = AllSessions.unavailableMessage
             return nil
@@ -215,7 +216,7 @@ final class SessionFeed: ObservableObject {
         switch SessionsEvent(event, j) {
         case .session(let s)?:
             guard let repo = s.repo else { return }
-            guard cache.upsertSession(s, repo: repo) != nil else { return }
+            _ = cache.upsertSession(s, repo: repo)
             post(.sessionLive, ["repo": repo, "session": s.raw])
         case .deleted(let id)?:
             for p in ProjectsModel.shared.projects {

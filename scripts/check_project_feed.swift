@@ -59,7 +59,43 @@ struct ProjectFeedChecks {
         try await cancelledTabRead(join: true)
         try await overlappingReads(failFirst: false)
         try await overlappingReads(failFirst: true)
-        print("Project feed cache reuse, tab cancellation, skipped reads, failures and overlapping spinner checks passed")
+        liveSessionsAfterCacheWipe()
+        liveSessionsBeforeFirstRead()
+        print("Project feed cache reuse, tab cancellation, skipped reads, failures, overlapping spinner and live session checks passed")
+    }
+
+    @MainActor
+    static func liveSessionsAfterCacheWipe() {
+        let store = Store.shared, repo = "live/wiped"
+        let feed = ProjectFeed(repo: repo)
+        let first = Session(["id": "s1", "repo": .string(repo), "status": "idle"])!
+        let second = Session(["id": "s2", "repo": .string(repo), "status": "idle"])!
+        let running = Session(["id": "s1", "repo": .string(repo), "status": "running"])!
+        feed.adopt([first, second])
+        store.cache.removeAll()
+        feed.upsert(running)
+        precondition(feed.sessions == [running, second] && feed.sessionsLoaded,
+                     "A cache wipe must not prevent updates to the list still on screen")
+        let added = Session(["id": "s3", "repo": .string(repo), "status": "idle"])!
+        feed.upsert(added)
+        precondition(feed.sessions == [added, running, second], "Live additions must preserve the other rows")
+        precondition(store.cache.value("sessions:\(repo)") == nil,
+                     "Live events must not restore a wiped full-list cache")
+        feed.adopt([added, running, second])
+        feed.upsert(first)
+        precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, first, second],
+                     "Live events must keep updating the cache after a full read")
+    }
+
+    @MainActor
+    static func liveSessionsBeforeFirstRead() {
+        let repo = "live/unread", feed = ProjectFeed(repo: repo)
+        let session = Session(["id": "s1", "repo": .string(repo), "status": "running"])!
+        feed.upsert(session)
+        feed.upsert(session)
+        precondition(feed.sessions == [session], "An unread list must show live records without duplicates")
+        precondition(!feed.sessionsLoaded && Store.shared.cache.value("sessions:\(repo)") == nil,
+                     "A live record alone must not mark the full list as read")
     }
 
     @MainActor
