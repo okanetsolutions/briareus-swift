@@ -19,6 +19,11 @@ func boardCall(_ operation: String, _ arguments: JSON = [:]) async -> Result<JSO
     catch { return .failure(error as? APIError ?? APIError(.cancelled)) }
 }
 
+extension Result where Failure == APIError {
+    var value: Success? { if case .success(let value) = self { return value }; return nil }
+    var error: APIError? { if case .failure(let error) = self { return error }; return nil }
+}
+
 @MainActor
 enum PullsGate {
     static let cooldown = PullsCooldown()
