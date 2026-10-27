@@ -275,6 +275,15 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(t.events.map(\.seq), Array(1...200))
         t.append(events); XCTAssertEqual(t.events.count, 200)
     }
+    func testTranscriptReportsOnlyTheSuffixUnlessAnInsertionReordersHistory() {
+        var t = Transcript()
+        XCTAssertEqual(t.append(j(#"[{"seq":2,"kind":"tool"},{"seq":6,"kind":"tool"}]"#)), 0..<2)
+        XCTAssertEqual(t.append(j(#"[{"seq":8,"kind":"status"}]"#)), 2..<3)
+        XCTAssertNil(t.append(j(#"[{"seq":8,"kind":"status"},null,{"kind":"tool"}]"#)))
+        XCTAssertEqual(t.append(j(#"[{"seq":4,"kind":"status"}]"#)), 0..<4)
+        XCTAssertEqual(t.events.map(\.seq), [2, 4, 6, 8])
+        XCTAssertEqual(t.cursor, 8)
+    }
     func testSavedTranscriptRestoresEventsAndCursor() {
         let events = j(#"[{"seq":2,"kind":"text","text":"b","extra":{"k":1}},{"seq":1,"kind":"user","text":"a"}]"#)
         var t = Transcript(); t.append(events)

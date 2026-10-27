@@ -262,18 +262,14 @@ struct Transcript: Equatable, Sendable {
     private(set) var events: [Event] = []
     private(set) var cursor = 0
     private var seen: Set<Int> = []
-    private var presentation = TranscriptBlockBuilder()
-
-    /// Rows already folded as lines arrived, so a new line does not rebuild the conversation's history.
-    var blocks: [TranscriptBlock] { presentation.blocks }
 
     static func == (a: Transcript, b: Transcript) -> Bool { a.events == b.events && a.cursor == b.cursor }
 
     init() {}
     /// Appends every event of a JSON array not already held (the first copy of a sequence wins), sorted by sequence,
-    /// and advances the cursor. Returns whether the visible rows changed; anything that is not an array adds nothing.
+    /// and advances the cursor. Returns the new suffix, or the whole range after reordering; nil when nothing was added.
     @discardableResult
-    mutating func append(_ value: JSON) -> Bool {
+    mutating func append(_ value: JSON) -> Range<Int>? {
         let before = events.count
         var needsSort = false
         for item in value.items {
@@ -281,17 +277,11 @@ struct Transcript: Equatable, Sendable {
             if let last = events.last, e.seq < last.seq { needsSort = true }
             events.append(e)
         }
-        guard events.count != before else { return false }
+        guard events.count != before else { return nil }
         if needsSort { events.sort { $0.seq < $1.seq } }
         let last = events.last?.seq ?? 0
         if last > cursor { cursor = last }
-        if needsSort {
-            // A poll can fill a gap behind the live cursor; its insertion may change existing folded runs.
-            presentation = TranscriptBlockBuilder()
-            presentation.append(events[...])
-            return true
-        }
-        return presentation.append(events[before...])
+        return (needsSort ? 0 : before)..<events.count
     }
     var json: JSON { .array(events.map(\.raw)) }
 }

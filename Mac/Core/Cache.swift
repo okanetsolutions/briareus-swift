@@ -14,7 +14,7 @@ final class DiskCache: @unchecked Sendable {
         let value: JSON
         init(_ value: JSON) { self.value = value }
     }
-    /// A bounded copy of decoded documents avoids rereading and parsing every project's sessions for each live update.
+    /// Decoded documents avoid repeated parsing, with an estimated 8 MB budget including JSON's allocation overhead.
     private let documents = NSCache<NSString, Document>()
     /// Bumped by every save and removal of a key, so a write overtaken meanwhile is dropped.
     private var revision: [String: Int] = [:]
@@ -24,6 +24,11 @@ final class DiskCache: @unchecked Sendable {
     init(directory: URL, protection: Data.WritingOptions = .completeFileProtection) {
         self.directory = directory; self.protection = protection
         documents.totalCostLimit = 8 * 1024 * 1024
+    }
+
+    /// Parsed enums, strings and dictionary/array allocations can occupy several times their serialized bytes.
+    static func documentCost(_ byteCount: Int) -> Int {
+        byteCount <= Int.max / 8 ? byteCount * 8 : Int.max
     }
 
     /// The file name a key maps to; no path separators or dots.
@@ -58,7 +63,7 @@ final class DiskCache: @unchecked Sendable {
         if let saved = pending[key] { return saved }
         if let saved = documents.object(forKey: key as NSString) { return saved.value }
         guard let data = try? Data(contentsOf: url(key)), let value = JSON.parse(data) else { return nil }
-        documents.setObject(Document(value), forKey: key as NSString, cost: data.count)
+        documents.setObject(Document(value), forKey: key as NSString, cost: Self.documentCost(data.count))
         return value
     }
     /// Saves a document off the calling thread: a board's answer runs to hundreds of kilobytes, and turning it into text
@@ -81,9 +86,9 @@ final class DiskCache: @unchecked Sendable {
             documents.removeObject(forKey: key as NSString)
             if let existing = try? Data(contentsOf: u), existing == data {
                 try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: u.path)
-                documents.setObject(Document(value), forKey: key as NSString, cost: data.count)
+                documents.setObject(Document(value), forKey: key as NSString, cost: Self.documentCost(data.count))
             } else {
-                if write(data, to: u) { documents.setObject(Document(value), forKey: key as NSString, cost: data.count) }
+                if write(data, to: u) { documents.setObject(Document(value), forKey: key as NSString, cost: Self.documentCost(data.count)) }
             }
         }
     }

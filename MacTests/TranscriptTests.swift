@@ -9,6 +9,12 @@ final class TranscriptTests: XCTestCase {
         return value
     }
 
+    @discardableResult
+    private func append(_ value: JSON, to transcript: inout Transcript, using builder: TranscriptBlockBuilder) -> Bool {
+        let changed = transcript.append(value)
+        return builder.update(transcript.events, changed: changed)
+    }
+
     func testIncrementalFoldingMatchesWholeReadsAtEveryBatchBoundary() {
         let input = [line(1, "user", "Start"), line(2, "info", "Cloning"), line(3, "cmd", "install"),
                      line(4, "status"), line(5, "setup", "Ready"), line(6, "info", "Session started"),
@@ -25,79 +31,111 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(transcriptBlocks(events), expected)
         for split in 0...input.count {
             var transcript = Transcript()
-            transcript.append(.array(Array(input[..<split])))
-            transcript.append(.array(Array(input[split...])))
-            XCTAssertEqual(transcript.blocks, expected, "Split at \(split)")
+            let builder = TranscriptBlockBuilder()
+            append(.array(Array(input[..<split])), to: &transcript, using: builder)
+            append(.array(Array(input[split...])), to: &transcript, using: builder)
+            XCTAssertEqual(Array(builder.blocks), expected, "Split at \(split)")
             XCTAssertEqual(transcript.cursor, 20)
         }
         var streamed = Transcript()
+        let builder = TranscriptBlockBuilder()
         for (i, value) in input.enumerated() {
-            streamed.append(.array([value]))
-            XCTAssertEqual(streamed.blocks, transcriptBlocks(Array(events[...i])), "Line \(i)")
+            append(.array([value]), to: &streamed, using: builder)
+            XCTAssertEqual(Array(builder.blocks), transcriptBlocks(Array(events[...i])), "Line \(i)")
         }
     }
 
     func testInvisibleLinesAdvanceTheCursorWithoutChangingRows() {
         var transcript = Transcript()
-        XCTAssertTrue(transcript.append(.array([line(1, "tool")])))
-        let first = transcript.blocks
-        XCTAssertFalse(transcript.append(.array([line(2, "status", "working"), line(3, "future")])))
-        XCTAssertEqual(transcript.blocks, first)
+        let builder = TranscriptBlockBuilder()
+        XCTAssertTrue(append(.array([line(1, "tool")]), to: &transcript, using: builder))
+        let first = builder.blocks
+        XCTAssertFalse(append(.array([line(2, "status", "working"), line(3, "future")]), to: &transcript, using: builder))
+        XCTAssertEqual(builder.blocks, first)
         XCTAssertEqual(transcript.cursor, 3)
         XCTAssertEqual(transcript.events.count, 3)
-        XCTAssertTrue(transcript.append(.array([line(4, "tool")])))
-        XCTAssertEqual(transcript.blocks.map(\.seq), [1, 4], "Hidden events must still separate contiguous tool runs")
+        XCTAssertTrue(append(.array([line(4, "tool")]), to: &transcript, using: builder))
+        XCTAssertEqual(builder.blocks.map(\.seq), [1, 4], "Hidden events must still separate contiguous tool runs")
     }
 
     func testReplayAndMalformedEventsAddNoRowsAndKeepTheFirstCopy() {
         var transcript = Transcript()
+        let builder = TranscriptBlockBuilder()
         let original = line(4, "text", "Original")
-        transcript.append(.array([original]))
+        append(.array([original]), to: &transcript, using: builder)
         let saved = transcript
-        XCTAssertFalse(transcript.append(.array([line(4, "text", "Replay"), ["seq": 8], ["kind": "tool"], .null])))
-        XCTAssertFalse(transcript.append(["events": [line(9, "tool")]]))
+        XCTAssertFalse(append(.array([line(4, "text", "Replay"), ["seq": 8], ["kind": "tool"], .null]), to: &transcript, using: builder))
+        XCTAssertFalse(append(["events": [line(9, "tool")]], to: &transcript, using: builder))
         XCTAssertEqual(transcript, saved)
-        XCTAssertEqual(transcript.blocks, [.event(Event(original)!)])
+        XCTAssertEqual(Array(builder.blocks), [.event(Event(original)!)])
     }
 
     func testLateInsertionRebuildsRunsAndPreservesSnapshots() {
         var transcript = Transcript()
-        transcript.append(.array([line(2, "tool"), line(6, "tool")]))
+        let builder = TranscriptBlockBuilder()
+        append(.array([line(2, "tool"), line(6, "tool")]), to: &transcript, using: builder)
         let before = transcript
-        XCTAssertTrue(transcript.append(.array([line(4, "status")])))
-        XCTAssertEqual(transcript.blocks.map(\.seq), [2, 6])
-        XCTAssertEqual(before.blocks.count, 1)
+        let beforeRows = builder.blocks
+        XCTAssertTrue(append(.array([line(4, "status")]), to: &transcript, using: builder))
+        XCTAssertEqual(builder.blocks.map(\.seq), [2, 6])
+        XCTAssertEqual(beforeRows.count, 1)
+        XCTAssertEqual(Array(beforeRows), transcriptBlocks(before.events))
         XCTAssertEqual(before.events.map(\.seq), [2, 6])
         XCTAssertEqual(transcript.cursor, 6)
-        XCTAssertTrue(transcript.append(.array([line(1, "info", "Cloning"), line(3, "info", "Session started") ])))
+        XCTAssertTrue(append(.array([line(1, "info", "Cloning"), line(3, "info", "Session started")]), to: &transcript, using: builder))
         XCTAssertEqual(transcript.events.map(\.seq), [1, 2, 3, 4, 6])
-        XCTAssertEqual(transcript.blocks, transcriptBlocks(transcript.events))
+        XCTAssertEqual(Array(builder.blocks), transcriptBlocks(transcript.events))
     }
 
     func testUnorderedBatchesAndRestoredTranscriptsHaveTheSameRows() {
         var transcript = Transcript()
+        let builder = TranscriptBlockBuilder()
         let input = [line(8, "result"), line(2, "tool"), line(6, "text", "Answer"), line(2, "text", "Duplicate")]
-        transcript.append(.array(input))
+        append(.array(input), to: &transcript, using: builder)
         XCTAssertEqual(transcript.events.map(\.seq), [2, 6, 8])
         XCTAssertEqual(transcript.events[0].kind, "tool")
         var restored = Transcript()
-        restored.append(transcript.json)
+        var restoredBuilder = TranscriptBlockBuilder()
+        append(transcript.json, to: &restored, using: restoredBuilder)
         XCTAssertEqual(restored, transcript)
-        XCTAssertEqual(restored.blocks, transcript.blocks)
+        XCTAssertEqual(restoredBuilder.blocks, builder.blocks)
         // Resetting after Clear or a full refresh must also reset deduplication and folding state.
         restored = Transcript()
-        restored.append(.array([line(2, "info", "New setup")]))
-        XCTAssertEqual(restored.blocks, [.preparation([Event(line(2, "info", "New setup"))!])])
+        restoredBuilder = TranscriptBlockBuilder()
+        append(.array([line(2, "info", "New setup")]), to: &restored, using: restoredBuilder)
+        XCTAssertEqual(Array(restoredBuilder.blocks), [.preparation([Event(line(2, "info", "New setup"))!])])
     }
 
     func testLongLiveConversationKeepsHistoryAndGroupsOnlyAdjacentSteps() {
         var transcript = Transcript()
+        let builder = TranscriptBlockBuilder()
         for seq in 1...4_000 {
-            transcript.append(.array([line(seq, seq.isMultiple(of: 3) ? "tool" : "text", "Line \(seq)")]))
+            append(.array([line(seq, seq.isMultiple(of: 3) ? "tool" : "text", "Line \(seq)")]), to: &transcript, using: builder)
         }
         XCTAssertEqual(transcript.cursor, 4_000)
         XCTAssertEqual(transcript.events.count, 4_000)
-        XCTAssertEqual(transcript.blocks.count, 4_000)
-        XCTAssertEqual(transcript.blocks, transcriptBlocks(transcript.events))
+        XCTAssertEqual(builder.blocks.count, 4_000)
+        XCTAssertEqual(Array(builder.blocks), transcriptBlocks(transcript.events))
+    }
+
+    func testSnapshotsKeepTheirTailWhileRunsGrowAndHistoryExpands() {
+        var transcript = Transcript()
+        let builder = TranscriptBlockBuilder()
+        let input = [line(1, "user", "Start"), line(2, "cmd", "setup"), line(3, "stdout", "Ready"),
+                     line(4, "info", "Session started"), line(5, "tool"), line(6, "tool_error"), line(7, "result")]
+        var snapshots: [TranscriptRows] = [builder.blocks]
+        for value in input {
+            append(.array([value]), to: &transcript, using: builder)
+            snapshots.append(builder.blocks)
+        }
+        for (count, snapshot) in snapshots.enumerated() {
+            let expected = transcriptBlocks(input.prefix(count).compactMap(Event.init))
+            XCTAssertEqual(Array(snapshot), expected, "Snapshot before line \(count + 1)")
+            XCTAssertEqual(Array(snapshot.reversed()), Array(expected.reversed()))
+        }
+        XCTAssertNotEqual(snapshots[2], snapshots[3], "Growing a folded run must invalidate the equatable column")
+        XCTAssertNotEqual(snapshots[5], snapshots[6])
+        XCTAssertTrue(transcriptAnswered(builder.blocks))
+        XCTAssertFalse(transcriptAnswered(snapshots[6]))
     }
 }

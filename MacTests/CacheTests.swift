@@ -16,6 +16,12 @@ final class CacheTests: XCTestCase {
         (try? Data(contentsOf: directory.appendingPathComponent(DiskCache.fileName(key)))).flatMap(JSON.parse)
     }
 
+    func testDecodedDocumentCostAllowsForAllocationOverheadWithoutOverflow() {
+        XCTAssertEqual(DiskCache.documentCost(1024 * 1024), 8 * 1024 * 1024)
+        XCTAssertEqual(DiskCache.documentCost(0), 0)
+        XCTAssertEqual(DiskCache.documentCost(Int.max), Int.max)
+    }
+
     func testReadsSeeASaveBeforeItIsWritten() {
         cache.store(["n": 1], "k")
         XCTAssertEqual(cache.value("k"), ["n": 1])

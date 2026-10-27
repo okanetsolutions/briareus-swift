@@ -8,7 +8,7 @@ import SwiftUI
 /// lay it out again.
 struct ConversationTranscript: View, Equatable {
     @Binding var atBottom: Bool
-    var blocks: [TranscriptBlock]
+    var blocks: TranscriptRows
     var session: Session
     var expanded: Set<Int>
     var loaded: Bool
