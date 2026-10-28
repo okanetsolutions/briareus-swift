@@ -170,7 +170,7 @@ struct FindingsScreen: View {
                     HStack(spacing: 6) {
                         Text(PhoneFindings.countLine(held)).font(.caption.weight(.medium)).foregroundStyle(Theme.warn)
                         if !takes { Text("· somebody else’s").font(.caption).foregroundStyle(.secondary) }
-                        if held["stale"].isSet { Text("· branch moved").font(.caption).foregroundStyle(Theme.danger) }
+                        if held["stale"].isSet { Text(triageStaleMessage(held)).font(.caption).foregroundStyle(Theme.danger) }
                     }
                 }
                 Spacer(minLength: 0)

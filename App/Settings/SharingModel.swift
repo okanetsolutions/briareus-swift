@@ -19,7 +19,7 @@ final class SharingModel: ObservableObject {
     var available: Bool { Store.shared.supports("shares") && Store.shared.supports("users") && !kinds.isEmpty }
     var kinds: [ShareKind] { ShareKind.allCases.filter { Store.shared.supports($0.operation) } }
     var dirty: Bool { form.dirty }
-    var canSave: Bool { available && loaded && !resourceID.isEmpty && dirty && !busy && !uncertain && Store.shared.supports("update_shares") }
+    var canSave: Bool { form.canSave(resourceID: resourceID, available: available, loaded: loaded, supported: Store.shared.supports("update_shares"), busy: busy, uncertain: uncertain) }
 
     func load() async {
         guard available, !busy, !dirty else { return }
@@ -49,7 +49,7 @@ final class SharingModel: ObservableObject {
         form.select(kind.members(shares, resourceID: id))
     }
     func toggle(_ user: SharingUser) {
-        guard Store.shared.supports("update_shares"), !busy, !uncertain else { return }
+        guard SettingsWritePolicy.allows(supported: Store.shared.supports("update_shares"), busy: busy, uncertain: uncertain) else { return }
         form.toggle(user.id)
     }
     func membership(_ user: SharingUser) -> ShareMembership { form.membership(for: user.id) }
@@ -65,7 +65,7 @@ final class SharingModel: ObservableObject {
                 let update = try SharingUpdate(answer, kind: requested, resourceID: id, previous: shares)
                 form.select(update.members); shares = update.shares
             } catch {
-                uncertain = !((error as? APIError)?.isRefusal ?? false)
+                uncertain = SettingsWritePolicy.isUncertain(error)
                 if !error.isCancellation { self.error = errorText(error) }
             }
         }

@@ -3,6 +3,101 @@ import XCTest
 @testable import BriareusMacCore
 
 final class ClientUpdatesTests: XCTestCase {
+    func testSharedWritePolicyBlocksDuplicatesUncertainOutcomesAndUnsupportedRoutes() {
+        for supported in [false, true] {
+            for busy in [false, true] {
+                for uncertain in [false, true] {
+                    XCTAssertEqual(SettingsWritePolicy.allows(supported: supported, busy: busy, uncertain: uncertain), supported && !busy && !uncertain)
+                }
+            }
+        }
+        XCTAssertFalse(SettingsWritePolicy.isUncertain(APIError(.http, status: 403)))
+        for error in [APIError(.http, status: 502), APIError(.network), APIError(.cancelled), APIError(.nonJSON)] {
+            XCTAssertTrue(SettingsWritePolicy.isUncertain(error))
+        }
+        XCTAssertTrue(SettingsWritePolicy.isUncertain(CancellationError()))
+    }
+    func testPersonalConnectionRecoveryKeepsAddressAndClearsSecret() throws {
+        var form = PersonalConnectionFormState()
+        let saved = try XCTUnwrap(PersonalConnectionStatus(["connected": false]))
+        form.adopt(saved, preservingEdits: false)
+        form.url = "http://typed.local:8123"; form.token = "secret"
+        XCTAssertTrue(form.canSave(supported: true, busy: false, uncertain: false))
+        XCTAssertFalse(form.canSave(supported: false, busy: false, uncertain: false))
+        XCTAssertFalse(form.canSave(supported: true, busy: true, uncertain: false))
+        XCTAssertFalse(form.canSave(supported: true, busy: false, uncertain: true))
+        form.checkOutcome()
+        form.adopt(saved, preservingEdits: true)
+        XCTAssertEqual(form.url, "http://typed.local:8123")
+        XCTAssertTrue(form.token.isEmpty)
+        XCTAssertFalse(form.canSave)
+        XCTAssertFalse(form.canDisconnect(supported: true))
+        form.adopt(try XCTUnwrap(PersonalConnectionStatus(["connected": true])), preservingEdits: true)
+        XCTAssertTrue(form.canDisconnect(supported: true))
+        XCTAssertFalse(form.canDisconnect(supported: false))
+    }
+    func testSharingSaveRequiresAnEditableLoadedResourceAndChanges() {
+        var form = SharingFormState()
+        XCTAssertFalse(form.canSave(resourceID: "1", available: true, loaded: true, supported: true, busy: false, uncertain: false))
+        form.toggle(2)
+        XCTAssertTrue(form.canSave(resourceID: "1", available: true, loaded: true, supported: true, busy: false, uncertain: false))
+        XCTAssertFalse(form.canSave(resourceID: "", available: true, loaded: true, supported: true, busy: false, uncertain: false))
+        XCTAssertFalse(form.canSave(resourceID: "1", available: false, loaded: true, supported: true, busy: false, uncertain: false))
+        XCTAssertFalse(form.canSave(resourceID: "1", available: true, loaded: false, supported: true, busy: false, uncertain: false))
+        XCTAssertFalse(form.canSave(resourceID: "1", available: true, loaded: true, supported: false, busy: false, uncertain: false))
+        XCTAssertFalse(form.canSave(resourceID: "1", available: true, loaded: true, supported: true, busy: true, uncertain: false))
+        XCTAssertFalse(form.canSave(resourceID: "1", available: true, loaded: true, supported: true, busy: false, uncertain: true))
+    }
+    func testMonitoringSerializesReadsAndWritesAndRetainsConfigurationOnToggle() throws {
+        XCTAssertTrue(SSHMonitoringPolicy.canLoad(loading: false, busy: false, afterWrite: false))
+        XCTAssertFalse(SSHMonitoringPolicy.canLoad(loading: false, busy: true, afterWrite: false))
+        XCTAssertTrue(SSHMonitoringPolicy.canLoad(loading: false, busy: true, afterWrite: true))
+        XCTAssertFalse(SSHMonitoringPolicy.canLoad(loading: true, busy: true, afterWrite: true))
+        XCTAssertTrue(SSHMonitoringPolicy.canWrite(serverID: 1, supported: true, loading: false, busy: false, uncertain: false))
+        XCTAssertFalse(SSHMonitoringPolicy.canWrite(serverID: nil, supported: true, loading: false, busy: false, uncertain: false))
+        XCTAssertFalse(SSHMonitoringPolicy.canWrite(serverID: 1, supported: true, loading: true, busy: false, uncertain: false))
+        XCTAssertFalse(SSHMonitoringPolicy.canWrite(serverID: 1, supported: true, loading: false, busy: true, uncertain: false))
+        XCTAssertFalse(SSHMonitoringPolicy.canWrite(serverID: 1, supported: true, loading: false, busy: false, uncertain: true))
+        XCTAssertFalse(SSHMonitoringPolicy.canWrite(serverID: 1, supported: false, loading: false, busy: false, uncertain: false))
+        XCTAssertFalse(SSHMonitoringAction.toggle.clearsCredential)
+        XCTAssertTrue(SSHMonitoringAction.issue.clearsCredential)
+        XCTAssertTrue(SSHMonitoringAction.revoke.clearsCredential)
+        XCTAssertEqual(try SSHMonitoringAction.toggle.credential(from: [:], current: "configuration"), "configuration")
+        XCTAssertNil(try SSHMonitoringAction.revoke.credential(from: [:], current: nil))
+        let answer: JSON = ["endpoint": "https://host.test/telemetry", "token": "secret"]
+        XCTAssertEqual(JSON.parse(try XCTUnwrap(SSHMonitoringAction.issue.credential(from: answer, current: nil))), answer)
+        XCTAssertThrowsError(try SSHMonitoringAction.issue.credential(from: [:], current: nil))
+    }
+    func testRemoteTilesDistinguishMissingReadingsFromMeasuredZero() {
+        let missing = SSHResourceHistory.tiles(["cpu": [:], "memory": [:], "disks": [["mount": "/"]]])
+        let zero = SSHResourceHistory.tiles(["cpu": ["cores": 0, "usagePercent": 0], "memory": ["usedBytes": 0, "totalBytes": 0, "swapUsedBytes": 0, "swapTotalBytes": 0], "uptimeSeconds": 0, "disks": [["mount": "/", "usedBytes": 0, "totalBytes": 0]]])
+        for id in ["cpu", "memory", "uptime", "swap", "disk:/"] {
+            XCTAssertNotEqual(missing.first { $0.id == id }?.value, zero.first { $0.id == id }?.value)
+            XCTAssertNil(missing.first { $0.id == id }?.fraction)
+        }
+        for id in ["cpu", "memory", "swap", "disk:/"] {
+            XCTAssertNotEqual(missing.first { $0.id == id }?.detail, zero.first { $0.id == id }?.detail)
+        }
+        let partial = SSHResourceHistory.tiles(["memory": ["usedBytes": 512]])
+        XCTAssertEqual(partial.first { $0.id == "memory" }?.value, StatsFormat.bytes(512))
+        XCTAssertEqual(partial.first { $0.id == "memory" }?.detail, missing.first { $0.id == "memory" }?.detail)
+    }
+    func testIsolatedRemoteReadingsRemainPlottableWithoutJoiningGaps() throws {
+        let history = try XCTUnwrap(SSHResourceHistory(["serverId": 1, "samples": [
+            ["at": 60000, "metrics": nil],
+            ["at": 120000, "metrics": ["cpu": ["usagePercent": 0]]],
+            ["at": 180000, "metrics": nil],
+        ]]))
+        let chart = history.charts[0]
+        XCTAssertTrue(chart.plots)
+        XCTAssertEqual(chart.series[0].isolatedPoints.map(\.value), [0])
+        XCTAssertFalse(history.charts[1].plots)
+        var series = chart.series[0]
+        series.points += [.init(at: Date(timeIntervalSince1970: 240), value: 10, segment: 2),
+                          .init(at: Date(timeIntervalSince1970: 300), value: 20, segment: 2)]
+        XCTAssertEqual(series.isolatedPoints.map(\.value), [0])
+        XCTAssertEqual(series.points.map(\.segment), [1, 2, 2])
+    }
     private var assessment: JSON {
         ["externalFeedback": true, "standalone": true, "mine": false, "prNumber": 42,
          "findings": [["key": "a", "title": "Check authorization", "recommendation": "fix",

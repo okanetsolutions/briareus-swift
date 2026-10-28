@@ -53,6 +53,28 @@ struct ClientUpdatesCheck {
         personal.token = "not-resubmitted"; personal.save()
         precondition(store.calls.count == count)
 
+        // Both integrations preserve the typed address when reconciling a failed write.
+        for kind in PersonalConnectionKind.allCases {
+            store.respond = { name, _ in
+                if name == kind.read { return ["connected": false] }
+                throw APIError(.http, status: 502)
+            }
+            let connection = PersonalConnectionModel(kind: kind)
+            await connection.load()
+            connection.url = "http://typed.local:8123"; connection.token = "secret"
+            connection.save()
+            await settled { connection.busy }
+            precondition(connection.uncertain && connection.token.isEmpty)
+            let beforeCheck = store.calls.count
+            connection.checkOutcome()
+            await settled { store.calls.count == beforeCheck }
+            await settled { connection.busy }
+            precondition(!connection.uncertain && connection.url == "http://typed.local:8123")
+            precondition(connection.token.isEmpty)
+            connection.token = "corrected-secret"
+            precondition(connection.canSave)
+        }
+
         store.calls = []
         store.respond = { name, args in
             switch name {
@@ -79,11 +101,18 @@ struct ClientUpdatesCheck {
         precondition(sharing.picked.isEmpty)
 
         store.calls = []
+        var monitoringEnabled = true
+        var releaseToggle: CheckedContinuation<JSON, Error>?
         store.respond = { name, _ in
             switch name {
-            case "ssh_monitoring": return ["servers": [["id": 123, "label": "Host", "repo": "o/r", "enabled": true, "monitoringEnabled": true, "stale": true]]]
+            case "ssh_monitoring": return ["servers": [["id": 123, "label": "Host", "repo": "o/r", "enabled": true, "monitoringEnabled": .bool(monitoringEnabled), "stale": true]]]
             case "ssh_resources": return ["serverId": 123, "intervalSeconds": 60, "samples": []]
             case "ssh_monitor_token": return ["serverId": 123, "endpoint": "https://example.test/telemetry", "token": "one-time-token", "intervalSeconds": 60]
+            case "update_ssh_server":
+                let answer = try await withCheckedThrowingContinuation { releaseToggle = $0 }
+                monitoringEnabled.toggle()
+                return answer
+            case "revoke_ssh_monitor_token": return [:]
             default: preconditionFailure("Unexpected monitoring request")
             }
         }
@@ -93,6 +122,28 @@ struct ClientUpdatesCheck {
         await settled { monitor.busy }
         precondition(monitor.credential?.contains("one-time-token") == true)
         precondition(store.calls.filter { $0.0 == "ssh_monitor_token" }.count == 1)
+        let configuration = monitor.credential
+        for enabled in [false, true] {
+            releaseToggle = nil
+            monitor.toggleMonitoring()
+            await settled { releaseToggle == nil }
+            precondition(monitor.credential == configuration)
+            let reads = store.calls.filter { $0.0 == "ssh_monitoring" }.count
+            // This is the poll that used to start a stale read and consume the post-write reload.
+            await monitor.load()
+            precondition(store.calls.filter { $0.0 == "ssh_monitoring" }.count == reads)
+            releaseToggle?.resume(returning: [:])
+            await settled { monitor.busy }
+            precondition(monitor.server?.monitoring == enabled)
+            precondition(store.calls.filter { $0.0 == "ssh_monitoring" }.count == reads + 1)
+            precondition(monitor.credential == configuration)
+        }
+        monitor.revokeToken()
+        precondition(monitor.credential == nil)
+        await settled { monitor.busy }
+        monitor.issueToken()
+        await settled { monitor.busy }
+        precondition(monitor.credential == configuration)
         monitor.hideCredential(); precondition(monitor.credential == nil)
         store.respond = { _, _ in throw APIError(.network) }
         monitor.issueToken()

@@ -40,6 +40,10 @@ private struct StatsLines: View {
                         .foregroundStyle(Theme.series(s.slot))
                         .interpolationMethod(.monotone)
                 }
+                ForEach(s.isolatedPoints, id: \.at) { p in
+                    PointMark(x: .value("Time", p.at), y: .value(s.label, p.value))
+                        .foregroundStyle(Theme.series(s.slot))
+                }
             }
         }
         .chartLegend(.hidden)

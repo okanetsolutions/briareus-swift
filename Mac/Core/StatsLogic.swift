@@ -279,6 +279,15 @@ struct StatsSeries: Equatable, Sendable, Identifiable {
     /// The colour slot of BriareusChart the line is drawn in.
     var slot: Int
 
+    /// Remote telemetry keeps isolated readings visible across outages.
+    var marksIsolatedReadings = false
+
+    /// A segment with no neighbour needs a point mark to make its reading visible.
+    var isolatedPoints: [Point] {
+        guard marksIsolatedReadings else { return [] }
+        let counts = Dictionary(grouping: points, by: \.segment).mapValues(\.count)
+        return points.filter { counts[$0.segment] == 1 }
+    }
     /// The axis label of a value of this series.
     func axis(_ value: Double) -> String { unit == .percent ? StatsFormat.percent(value) : StatsFormat.bytes(value) + (unit == .bytesPerSecond ? "/s" : "") }
     /// The last value, as the legend names it.
@@ -290,8 +299,8 @@ struct StatsChart: Equatable, Sendable, Identifiable {
     var id: String
     var title: String
     var series: [StatsSeries]
-    /// Fewer than two points draw no line; the screen says the history is still starting.
-    var plots: Bool { series.contains { $0.points.count > 1 } }
+    /// Remote telemetry can draw a point before a line can form.
+    var plots: Bool { series.contains { $0.points.count > 1 || !$0.isolatedPoints.isEmpty } }
 }
 
 extension SessionStatsReading {

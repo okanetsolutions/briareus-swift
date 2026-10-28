@@ -16,9 +16,9 @@ final class PersonalConnectionModel: ObservableObject {
     init(kind: PersonalConnectionKind) { self.kind = kind }
     var available: Bool { Store.shared.supports(kind.read) }
     var canConnect: Bool { Store.shared.supports(kind.connect) }
-    var canDisconnect: Bool { status?.connected == true && Store.shared.supports(kind.disconnect) }
+    var canDisconnect: Bool { form.canDisconnect(supported: Store.shared.supports(kind.disconnect)) }
     var dirty: Bool { form.dirty }
-    var canSave: Bool { form.canSave && canConnect && !busy && !uncertain }
+    var canSave: Bool { form.canSave(supported: canConnect, busy: busy, uncertain: uncertain) }
 
     func load() async {
         guard available else { loaded = true; return }
@@ -41,7 +41,7 @@ final class PersonalConnectionModel: ObservableObject {
         catch { self.error = errorText(error) }
     }
     func disconnect() {
-        guard canDisconnect, !busy, !uncertain else { return }
+        guard SettingsWritePolicy.allows(supported: canDisconnect, busy: busy, uncertain: uncertain) else { return }
         write(kind.disconnect)
     }
     private func write(_ operation: String, body: JSON = [:]) {
@@ -53,11 +53,11 @@ final class PersonalConnectionModel: ObservableObject {
                 guard let status = PersonalConnectionStatus(answer) else { throw APIError(.nonJSON) }
                 form.adopt(status, preservingEdits: false)
             } catch {
-                uncertain = !((error as? APIError)?.isRefusal ?? false)
+                uncertain = SettingsWritePolicy.isUncertain(error)
                 if !error.isCancellation { self.error = errorText(error) }
             }
         }
     }
     func discard() { form.discard() }
-    func checkOutcome() { discard(); uncertain = false; Task { await load() } }
+    func checkOutcome() { form.checkOutcome(); uncertain = false; Task { await load() } }
 }

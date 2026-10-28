@@ -1,6 +1,25 @@
 // Remote host telemetry: preserve missing readings, freshness and gaps in the rolling history.
 import Foundation
 
+enum SSHMonitoringAction: String, Sendable {
+    case issue = "ssh_monitor_token", revoke = "revoke_ssh_monitor_token", toggle = "update_ssh_server"
+    var clearsCredential: Bool { self != .toggle }
+    func credential(from answer: JSON, current: String?) throws -> String? {
+        if self == .issue { return try MonitorCredential(answer).configuration }
+        return current
+    }
+}
+
+enum SSHMonitoringPolicy {
+    /// Polling cannot start during a write; only that write's reconciliation may read while it is busy.
+    static func canLoad(loading: Bool, busy: Bool, afterWrite: Bool) -> Bool {
+        !loading && (!busy || afterWrite)
+    }
+    static func canWrite(serverID: Double?, supported: Bool, loading: Bool, busy: Bool, uncertain: Bool) -> Bool {
+        serverID != nil && !loading && SettingsWritePolicy.allows(supported: supported, busy: busy, uncertain: uncertain)
+    }
+}
+
 struct MonitorCredential: Sendable {
     let configuration: String
     init(_ answer: JSON) throws {
@@ -53,21 +72,22 @@ struct SSHResourceHistory: Equatable, Sendable {
 
     static func tiles(_ metrics: JSON) -> [StatTile] {
         guard metrics.isObject else { return [] }
+        func bytes(_ reading: JSON) -> String { reading.number.map(StatsFormat.bytes) ?? "—" }
         var tiles = [
             StatTile(id: "cpu", label: "CPU", value: StatsFormat.percent(metrics["cpu"]["usagePercent"].number),
-                     detail: "\(metrics["cpu"]["cores"].int ?? 0) cores", fraction: metrics["cpu"]["usagePercent"].number.map { $0 / 100 }),
-            StatTile(id: "memory", label: "Memory", value: StatsFormat.bytes(metrics["memory"]["usedBytes"].number ?? 0),
-                     detail: "of \(StatsFormat.bytes(metrics["memory"]["totalBytes"].number ?? 0))", fraction: metrics["memory"]["usedPercent"].number.map { $0 / 100 }),
+                     detail: metrics["cpu"]["cores"].int.map { "\($0) cores" } ?? "—", fraction: metrics["cpu"]["usagePercent"].number.map { $0 / 100 }),
+            StatTile(id: "memory", label: "Memory", value: bytes(metrics["memory"]["usedBytes"]),
+                     detail: "of \(bytes(metrics["memory"]["totalBytes"]))", fraction: metrics["memory"]["usedPercent"].number.map { $0 / 100 }),
             StatTile(id: "load", label: "Load average", value: StatsFormat.load(metrics["cpu"]["loadAverage"].items.compactMap(\.number)),
                      detail: "1, 5 and 15 minutes", fraction: nil),
-            StatTile(id: "uptime", label: "Uptime", value: StatsFormat.uptime(metrics["uptimeSeconds"].number ?? 0), detail: "since boot", fraction: nil),
-            StatTile(id: "swap", label: "Swap", value: StatsFormat.bytes(metrics["memory"]["swapUsedBytes"].number ?? 0),
-                     detail: "of \(StatsFormat.bytes(metrics["memory"]["swapTotalBytes"].number ?? 0))", fraction: nil),
+            StatTile(id: "uptime", label: "Uptime", value: StatsFormat.uptime(metrics["uptimeSeconds"].number), detail: "since boot", fraction: nil),
+            StatTile(id: "swap", label: "Swap", value: bytes(metrics["memory"]["swapUsedBytes"]),
+                     detail: "of \(bytes(metrics["memory"]["swapTotalBytes"]))", fraction: nil),
         ]
         for disk in metrics["disks"].items {
             let mount = disk["mount"].string ?? "Disk"
-            tiles.append(StatTile(id: "disk:\(mount)", label: mount, value: StatsFormat.bytes(disk["usedBytes"].number ?? 0),
-                                  detail: "of \(StatsFormat.bytes(disk["totalBytes"].number ?? 0))", fraction: disk["usedPercent"].number.map { $0 / 100 }))
+            tiles.append(StatTile(id: "disk:\(mount)", label: mount, value: bytes(disk["usedBytes"]),
+                                  detail: "of \(bytes(disk["totalBytes"]))", fraction: disk["usedPercent"].number.map { $0 / 100 }))
         }
         for network in metrics["network"].items {
             let name = network["name"].string ?? "Interface"
@@ -90,7 +110,7 @@ struct SSHResourceHistory: Equatable, Sendable {
             points.append(.init(at: Date(timeIntervalSince1970: at / 1000), value: v, segment: segment))
             previous = at
         }
-        return StatsSeries(id: id, label: label, unit: unit, points: points, slot: slot)
+        return StatsSeries(id: id, label: label, unit: unit, points: points, slot: slot, marksIsolatedReadings: true)
     }
 
     var charts: [StatsChart] {

@@ -135,7 +135,7 @@ final class SettingsModel: ObservableObject {
         switch screen {
         case .projectSettings, .providerSettings, .dbServerSettings, .sshServerSettings, .forgeAccountSettings, .slackWorkspaceSettings,
              .mcpServerSettings, .envoyerAccountSettings: return true
-        case .meetingSettings, .mailSettings, .serverSettings, .templatesSettings, .personalConnection, .sharing: return true
+        case .meetingSettings, .mailSettings, .serverSettings, .templatesSettings, .personalConnection, .sharing, .sshMonitoring: return true
         default: return false
         }
     }

@@ -49,6 +49,12 @@ struct PersonalConnectionFormState: Equatable, Sendable {
     var status: PersonalConnectionStatus?
     var dirty: Bool { !token.isEmpty || url != (status?.url ?? "") }
     var canSave: Bool { status != nil && !token.cTrimmed.isEmpty }
+    func canSave(supported: Bool, busy: Bool, uncertain: Bool) -> Bool {
+        canSave && SettingsWritePolicy.allows(supported: supported, busy: busy, uncertain: uncertain)
+    }
+    func canDisconnect(supported: Bool) -> Bool { status?.connected == true && supported }
+    /// Reconciliation clears secrets but keeps the address so a failed connection can be corrected.
+    mutating func checkOutcome() { token = "" }
     mutating func adopt(_ status: PersonalConnectionStatus, preservingEdits: Bool) {
         let preserve = preservingEdits && dirty
         self.status = status

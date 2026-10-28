@@ -23,9 +23,9 @@ final class SSHMonitoringModel: ObservableObject {
     var canToggle: Bool { server != nil && Store.shared.supports("update_ssh_server") }
     var title: String { server?.title ?? "SSH monitoring" }
 
-    func load() async {
+    func load(afterWrite: Bool = false) async {
         guard available else { loaded = true; return }
-        guard !loading else { return }
+        guard SSHMonitoringPolicy.canLoad(loading: loading, busy: busy, afterWrite: afterWrite) else { return }
         loading = true
         defer { loading = false }
         do {
@@ -53,28 +53,28 @@ final class SSHMonitoringModel: ObservableObject {
             try? await Task.sleep(for: .seconds(60))
         }
     }
-    func issueToken() { write("ssh_monitor_token") }
-    func revokeToken() { write("revoke_ssh_monitor_token") }
+    func issueToken() { write(.issue) }
+    func revokeToken() { write(.revoke) }
     func toggleMonitoring() {
         guard let server else { return }
-        write("update_ssh_server", extra: server.monitoringEdit)
+        write(.toggle, extra: server.monitoringEdit)
     }
-    private func write(_ operation: String, extra: JSON = [:]) {
-        guard let serverID, !busy, !loading, !uncertain, Store.shared.supports(operation) else { return }
-        busy = true; error = nil; credential = nil
+    private func write(_ action: SSHMonitoringAction, extra: JSON = [:]) {
+        let operation = action.rawValue
+        guard let serverID, SSHMonitoringPolicy.canWrite(serverID: serverID, supported: Store.shared.supports(operation), loading: loading, busy: busy, uncertain: uncertain) else { return }
+        busy = true; error = nil
+        if action.clearsCredential { credential = nil }
         var args = extra; args["id"] = .number(serverID)
         Task {
             defer { busy = false }
             do {
                 let answer = try await Store.shared.call(operation, args)
-                if operation == "ssh_monitor_token" {
-                    credential = try MonitorCredential(answer).configuration
-                }
-                await load()
+                credential = try action.credential(from: answer, current: credential)
+                await load(afterWrite: true)
             } catch {
                 guard !error.isCancellation else { uncertain = true; return }
                 self.error = errorText(error)
-                uncertain = !((error as? APIError)?.isRefusal ?? false)
+                uncertain = SettingsWritePolicy.isUncertain(error)
             }
         }
     }

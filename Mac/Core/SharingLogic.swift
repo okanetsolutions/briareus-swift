@@ -69,6 +69,10 @@ struct SharingFormState: Equatable, Sendable {
     var picked: Set<Int> = []
     var original: Set<Int> = []
     var dirty: Bool { picked != original }
+    func canSave(resourceID: String, available: Bool, loaded: Bool, supported: Bool, busy: Bool, uncertain: Bool) -> Bool {
+        available && loaded && !resourceID.isEmpty && dirty
+            && SettingsWritePolicy.allows(supported: supported, busy: busy, uncertain: uncertain)
+    }
     mutating func select(_ members: Set<Int>) { original = members; picked = members }
     mutating func toggle(_ id: Int) {
         if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
