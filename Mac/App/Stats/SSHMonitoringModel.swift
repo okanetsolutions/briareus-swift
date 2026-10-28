@@ -24,7 +24,8 @@ final class SSHMonitoringModel: ObservableObject {
     var title: String { server?.title ?? "SSH monitoring" }
 
     func load() async {
-        guard available, !loading else { loaded = true; return }
+        guard available else { loaded = true; return }
+        guard !loading else { return }
         loading = true
         defer { loading = false }
         do {

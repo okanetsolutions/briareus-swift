@@ -14,7 +14,7 @@ struct PersonalConnectionScreen: View {
                     if let status = model.status { Text(status.summary) }
                     if !model.loaded { ProgressView() }
                     if let error = model.error { ErrorNotice(message: error) }
-                    Button("Refresh status") { Task { await model.load() } }.disabled(model.busy || model.dirty)
+                    Button("Refresh status") { Task { await model.load() } }.disabled(model.busy)
                 } footer: { Text(model.kind.explanation) }
                 if model.canConnect {
                     Section("Connection") {

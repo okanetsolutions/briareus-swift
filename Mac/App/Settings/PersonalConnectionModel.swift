@@ -21,7 +21,8 @@ final class PersonalConnectionModel: ObservableObject {
     var canSave: Bool { form.canSave && canConnect && !busy && !uncertain }
 
     func load() async {
-        guard available, !busy else { loaded = true; return }
+        guard available else { loaded = true; return }
+        guard !busy else { return }
         busy = true
         defer { busy = false }
         do {

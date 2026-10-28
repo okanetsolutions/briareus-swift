@@ -101,6 +101,17 @@ struct ClientUpdatesCheck {
         let writes = store.calls.count
         monitor.issueToken()
         precondition(store.calls.count == writes)
+        // An overlapping refresh must not turn the first pending load into an empty loaded screen.
+        var release: CheckedContinuation<JSON, Error>?
+        store.respond = { _, _ in try await withCheckedThrowingContinuation { release = $0 } }
+        let slow = SSHMonitoringModel()
+        let firstLoad = Task { await slow.load() }
+        await settled { release == nil }
+        await slow.load()
+        precondition(slow.loading && !slow.loaded)
+        release?.resume(returning: ["servers": []])
+        await firstLoad.value
+        precondition(slow.loaded && !slow.loading)
         store.offered.subtract(["connect_github", "update_shares", "ssh_monitor_token"])
         precondition(!personal.canConnect && !sharing.canSave && !monitor.canIssue)
         let readOnlyCalls = store.calls.count

@@ -12,6 +12,7 @@ final class ConnectionSettingsModel: ObservableObject {
     }
     private var store: Store { Store.shared }
     func run(_ action: ConnectionAction) {
+        guard !busy else { return }
         busy = true
         error = nil
         Task {

@@ -16,7 +16,7 @@ struct PersonalConnectionScreen: View {
                         if let status = model.status { Text(status.summary).font(Theme.bodySemibold) }
                         if !model.loaded { LoadingNote() }
                         if let error = model.error { NoticeBox(message: error) }
-                        Button("Refresh status") { Task { await model.load() } }.dashButton(.bordered).disabled(model.busy || model.dirty)
+                        Button("Refresh status") { Task { await model.load() } }.dashButton(.bordered).disabled(model.busy)
                         if model.canConnect { fields }
                         if model.uncertain {
                             NoticeBox(message: "The request’s outcome is unknown. Read the connection status before trying again.")
