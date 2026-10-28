@@ -1,0 +1,173 @@
+// Exercise real feature models with controlled responses; no network or credentials leave this process.
+import Foundation
+
+@MainActor
+final class Store {
+    static let shared = Store()
+    var offered = Set(APIRoute.all.map(\.name))
+    var calls: [(String, JSON)] = []
+    var respond: (String, JSON) async throws -> JSON = { _, _ in [:] }
+    func supports(_ name: String) -> Bool { offered.contains(name) }
+    func call(_ name: String, _ args: JSON = [:]) async throws -> JSON {
+        calls.append((name, args)); return try await respond(name, args)
+    }
+}
+func errorText(_ error: Error) -> String { String(describing: error) }
+extension Error {
+    var isCancellation: Bool { (self as? APIError)?.kind == .cancelled || self is CancellationError }
+}
+
+@main
+struct ClientUpdatesCheck {
+    @MainActor
+    static func settled(_ busy: () -> Bool) async {
+        for _ in 0..<1000 {
+            if !busy() { return }
+            await Task.yield()
+        }
+        preconditionFailure("Model did not settle")
+    }
+    @MainActor
+    static func main() async throws {
+        let store = Store.shared
+        store.respond = { name, _ in
+            switch name {
+            case "my_github": return ["connected": false]
+            case "connect_github": return ["connected": true, "login": "alice"]
+            default: preconditionFailure("Unexpected personal connection request")
+            }
+        }
+        let personal = PersonalConnectionModel(kind: .github)
+        await personal.load()
+        precondition(personal.status?.connected == false)
+        personal.token = "one-time-token"
+        personal.save(); personal.save()
+        await settled { personal.busy }
+        precondition(personal.status?.identity == "alice" && personal.token.isEmpty)
+        precondition(store.calls.filter { $0.0 == "connect_github" }.count == 1)
+        store.respond = { _, _ in throw APIError(.network, message: "Connection lost") }
+        personal.token = "replacement-token"; personal.save()
+        await settled { personal.busy }
+        precondition(personal.uncertain && personal.token.isEmpty)
+        let count = store.calls.count
+        personal.token = "not-resubmitted"; personal.save()
+        precondition(store.calls.count == count)
+
+        // Both integrations preserve the typed address when reconciling a failed write.
+        for kind in PersonalConnectionKind.allCases {
+            store.respond = { name, _ in
+                if name == kind.read { return ["connected": false] }
+                throw APIError(.http, status: 502)
+            }
+            let connection = PersonalConnectionModel(kind: kind)
+            await connection.load()
+            connection.url = "http://typed.local:8123"; connection.token = "secret"
+            connection.save()
+            await settled { connection.busy }
+            precondition(connection.uncertain && connection.token.isEmpty)
+            let beforeCheck = store.calls.count
+            connection.checkOutcome()
+            await settled { store.calls.count == beforeCheck }
+            await settled { connection.busy }
+            precondition(!connection.uncertain && connection.url == "http://typed.local:8123")
+            precondition(connection.token.isEmpty)
+            connection.token = "corrected-secret"
+            precondition(connection.canSave)
+        }
+
+        store.calls = []
+        store.respond = { name, args in
+            switch name {
+            case "users": return ["users": [["id": 1, "name": "Admin", "role": "admin"], ["id": 2, "name": "Member", "role": "member"]]]
+            case "shares": return ["shares": [["kind": "project", "id": "5", "userId": 2]]]
+            case "settings_projects": return ["projects": [["id": 5, "repo": "o/r"], ["id": 6, "repo": "o/other"]]]
+            case "update_shares": return args
+            default: preconditionFailure("Unexpected sharing request")
+            }
+        }
+        let sharing = SharingModel()
+        await sharing.load()
+        precondition(sharing.loaded && sharing.picked == [2])
+        sharing.toggle(sharing.users[1])
+        precondition(sharing.dirty && sharing.picked.isEmpty)
+        sharing.selectResource("6")
+        precondition(sharing.resourceID == "5")
+        sharing.save(); sharing.save()
+        await settled { sharing.busy }
+        precondition(!sharing.dirty && sharing.picked.isEmpty)
+        precondition(store.calls.filter { $0.0 == "update_shares" }.count == 1)
+        precondition(store.calls.last?.1 == ["kind": "project", "id": "5", "userIds": []])
+        sharing.selectResource("6"); sharing.selectResource("5")
+        precondition(sharing.picked.isEmpty)
+
+        store.calls = []
+        var monitoringEnabled = true
+        var releaseToggle: CheckedContinuation<JSON, Error>?
+        store.respond = { name, _ in
+            switch name {
+            case "ssh_monitoring": return ["servers": [["id": 123, "label": "Host", "repo": "o/r", "enabled": true, "monitoringEnabled": .bool(monitoringEnabled), "stale": true]]]
+            case "ssh_resources": return ["serverId": 123, "intervalSeconds": 60, "samples": []]
+            case "ssh_monitor_token": return ["serverId": 123, "endpoint": "https://example.test/telemetry", "token": "one-time-token", "intervalSeconds": 60]
+            case "update_ssh_server":
+                let answer = try await withCheckedThrowingContinuation { releaseToggle = $0 }
+                monitoringEnabled.toggle()
+                return answer
+            case "revoke_ssh_monitor_token": return [:]
+            default: preconditionFailure("Unexpected monitoring request")
+            }
+        }
+        let monitor = SSHMonitoringModel(serverID: 123)
+        await monitor.load()
+        monitor.issueToken(); monitor.issueToken()
+        await settled { monitor.busy }
+        precondition(monitor.credential?.contains("one-time-token") == true)
+        precondition(store.calls.filter { $0.0 == "ssh_monitor_token" }.count == 1)
+        let configuration = monitor.credential
+        for enabled in [false, true] {
+            releaseToggle = nil
+            monitor.toggleMonitoring()
+            await settled { releaseToggle == nil }
+            precondition(monitor.credential == configuration)
+            let reads = store.calls.filter { $0.0 == "ssh_monitoring" }.count
+            // This is the poll that used to start a stale read and consume the post-write reload.
+            await monitor.load()
+            precondition(store.calls.filter { $0.0 == "ssh_monitoring" }.count == reads)
+            releaseToggle?.resume(returning: [:])
+            await settled { monitor.busy }
+            precondition(monitor.server?.monitoring == enabled)
+            precondition(store.calls.filter { $0.0 == "ssh_monitoring" }.count == reads + 1)
+            precondition(monitor.credential == configuration)
+        }
+        monitor.revokeToken()
+        precondition(monitor.credential == nil)
+        await settled { monitor.busy }
+        monitor.issueToken()
+        await settled { monitor.busy }
+        precondition(monitor.credential == configuration)
+        monitor.hideCredential(); precondition(monitor.credential == nil)
+        store.respond = { _, _ in throw APIError(.network) }
+        monitor.issueToken()
+        await settled { monitor.busy }
+        precondition(monitor.uncertain)
+        let writes = store.calls.count
+        monitor.issueToken()
+        precondition(store.calls.count == writes)
+        // An overlapping refresh must not turn the first pending load into an empty loaded screen.
+        var release: CheckedContinuation<JSON, Error>?
+        store.respond = { _, _ in try await withCheckedThrowingContinuation { release = $0 } }
+        let slow = SSHMonitoringModel()
+        let firstLoad = Task { await slow.load() }
+        await settled { release == nil }
+        await slow.load()
+        precondition(slow.loading && !slow.loaded)
+        release?.resume(returning: ["servers": []])
+        await firstLoad.value
+        precondition(slow.loaded && !slow.loading)
+        store.offered.subtract(["connect_github", "update_shares", "ssh_monitor_token"])
+        precondition(!personal.canConnect && !sharing.canSave && !monitor.canIssue)
+        let readOnlyCalls = store.calls.count
+        personal.save(); sharing.save(); monitor.issueToken()
+        precondition(store.calls.count == readOnlyCalls)
+        print("Client update model checks passed")
+    }
+}

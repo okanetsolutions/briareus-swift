@@ -297,8 +297,7 @@ struct ProjectSettingsScreen: View {
         switch model.tab {
         case .project:
             Section { field(.repo); field(.label) }.listRowBackground(Theme.row)
-            // Switching a project off keeps it, and its settings, without a session starting on it.
-            checkSection(.enabled)
+            checkSection(.enabled); checkSection(.printing)
             Section { field(.localDir); field(.board) }.listRowBackground(Theme.row)
             Section { field(.setup); field(.php) } header: { Text("Setup") } footer: {
                 Text("This project's own prompt wording is kept on the server; saving here keeps it as it is.")

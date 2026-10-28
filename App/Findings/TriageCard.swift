@@ -1,54 +1,6 @@
-// A review round held on a conversation, as a card: each finding with its severity, place and words, a verdict and a
-// comment on the user's own pull request (Reply and Delete on somebody else's), a note for the fix session, Save comments
-// and Complete. The Findings tab shows it in a sheet and the conversation inline; both share what was typed.
+// A held review or feedback assessment, with manual verdicts.
 import SwiftUI
 
-/// What was picked and typed on a round's card before it was sent, kept while the app runs so a card closed and opened
-/// again (or seen from the conversation and from the Findings tab) shows the same; and the lines a completion leaves once
-/// its card is gone.
-@MainActor
-final class TriageDrafts: ObservableObject {
-    static let shared = TriageDrafts()
-
-    struct Round: Equatable {
-        var picked: [String: String] = [:]
-        var reasons: [String: String] = [:]
-        var note: String?
-    }
-    /// What a completion came back with, for the Findings tab once the card is gone.
-    struct Outcome: Identifiable, Equatable {
-        var id = UUID()
-        var sessionID: String
-        var title: String
-        var text: String
-        var danger: Bool
-    }
-
-    @Published private var rounds: [String: Round] = [:]
-    @Published var outcomes: [Outcome] = []
-
-    static func key(_ session: Session, _ triage: JSON) -> String { "\(session.id)#\(triage["round"].truncatedInt ?? 0)" }
-    func round(_ key: String) -> Round { rounds[key] ?? Round() }
-    func update(_ key: String, _ change: (inout Round) -> Void) {
-        var r = round(key)
-        change(&r)
-        rounds[key] = r
-    }
-    func drop(_ key: String) { rounds[key] = nil }
-    func report(_ outcome: Outcome) {
-        outcomes.removeAll { $0.sessionID == outcome.sessionID }
-        outcomes.append(outcome)
-    }
-}
-
-/// A finding's severity pill colour: CRIT and HIGH red, MED amber, LOW grey.
-func triageSeverityColor(_ severity: String?) -> Color {
-    switch findingSeverityLabel(severity) {
-    case "CRIT", "HIGH": return Theme.danger
-    case "LOW": return .secondary
-    default: return Theme.warn
-    }
-}
 
 /// Opens an https link in the browser; anything else is refused.
 @MainActor func openTriageLink(_ url: String?) {
@@ -89,7 +41,7 @@ struct TriageCard: View {
         return VStack(alignment: .leading, spacing: 12) {
             header(triage, key: key, takes: takes, canComplete: canComplete, empty: findings.isEmpty)
             if triage["stale"].isSet {
-                Label("The branch moved after this round was reviewed: some of these may already be fixed. Completing with nothing to fix reviews the new commits instead of closing the loop.",
+                Label(triageStaleMessage(triage),
                       systemImage: "arrow.triangle.branch")
                     .font(.caption).foregroundStyle(Theme.danger)
             }
@@ -114,7 +66,7 @@ struct TriageCard: View {
             Button(takes && fixes > 0 ? "Start the fix session" : "Complete") { complete(triage, key: key) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(Findings.completePrompt(mine: takes, fixes: fixes, pr: pr).message)
+            Text(Findings.completePrompt(mine: takes, fixes: fixes, pr: pr, externalFeedback: triage["externalFeedback"].is(true)).message)
         }
         .alert("Delete this finding from the review?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { f in
             Button("Delete from the review", role: .destructive) { delete(f) }
@@ -173,6 +125,7 @@ struct TriageCard: View {
             if let body = f["body"].nonEmpty ?? f["description"].nonEmpty ?? f["detail"].nonEmpty {
                 MarkdownText(body).font(.callout)
             }
+            if let details = FeedbackAssessmentDetails(f) { FeedbackAssessmentView(details: details) }
             if let advice = Findings.parkedAdvice(f) { Text(advice).font(.caption).foregroundStyle(.secondary) }
             if let fkey, store.canManage {
                 if takes {
@@ -248,7 +201,7 @@ struct TriageCard: View {
         Button { confirming = true } label: {
             HStack(spacing: 8) {
                 if writing == .complete { ProgressView().tint(.white) }
-                Text(writing == .complete ? "Completing…" : triageCompleteTitle(takesVerdicts: takes, fixes: fixes))
+                Text(writing == .complete ? "Completing…" : triageCompleteTitle(takesVerdicts: takes, fixes: fixes, externalFeedback: triage["externalFeedback"].is(true)))
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity).padding(.vertical, 4)

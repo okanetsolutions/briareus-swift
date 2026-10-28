@@ -79,7 +79,7 @@ enum ProjectTab: Int, CaseIterable, Sendable {
 
 enum ProjectField: Int, CaseIterable, Sendable {
     case repo, label, enabled, localDir, board
-    case setup, php
+    case setup, php, printing
     case dbName, dbExt, dbPool, dbRestore
     case reviewAuthor, publish, autoLoop, babysit, testSheet, testRun, qaNotes, sheetSteps, feedbackSteps
     case budget, isSelf
@@ -95,6 +95,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
             hint: "This machine's own checkout of the repo. A session started in Local mode works directly in it: no clone, no setup steps, no pooled database, and the tree is used exactly as it stands. Leave empty to keep Local mode off for this project.", mono: true)
         case .board: return SettingsField(key: "projectBoard", kind: .board, label: "GitHub Projects board", cue: "https://github.com/orgs/acme/projects/1/views/2",
             hint: "The board the project's ▦ Board tab shows: its address on GitHub, with the view whose filter and columns it follows. The server's GitHub token needs Projects: read. Leave empty for no Board tab.", mono: true)
+        case .printing: return SettingsField(key: "printToolsEnabled", kind: .bool, label: "Allow sessions to print on the server’s printers", hint: "Gives interactive sessions access to the server’s CUPS printers; off by default.")
         case .setup: return SettingsField(key: "setupCommands", kind: .list, label: "Setup commands",
             hint: "One shell command per line, run in the checkout in order before the session starts. The first failure aborts the session.", rows: 6, mono: true)
         case .php: return SettingsField(key: "phpBinDir", kind: .text, label: "PHP bin directory", cue: "/usr/bin (or ~/.phpenv/versions/8.4/bin)",
@@ -109,7 +110,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .reviewAuthor: return SettingsField(key: "reviewAuthor", kind: .text, label: "PR author", cue: "github-username", mono: true)
         case .publish: return SettingsField(key: "reviewPublishInstructions", kind: .area, label: "Publish steps",
             hint: "Sent to the agent as its own turn after a ⌕ Code review: this text and nothing else. Leave empty to run no turn after the review.", rows: 4)
-        case .autoLoop: return SettingsField(key: "autonomousReviewLoop", kind: .bool, label: "Autonomous review loop: fix every finding and review again")
+        case .autoLoop: return SettingsField(key: "autonomousReviewLoop", kind: .bool, label: "Autonomous review loop: fix verified worthwhile findings")
         case .babysit: return SettingsField(key: "babysitPrs", kind: .bool, label: "Babysit pull requests: start the errand each open one needs")
         case .testSheet: return SettingsField(key: "reviewTestSheet", kind: .bool, label: "Write a test sheet when the 🎬 QA errand is started")
         case .testRun: return SettingsField(key: "reviewTestRun", kind: .bool, label: "Execute the test sheet and record a video of each scenario")
@@ -137,9 +138,9 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .enabled where !on:
             return "Inactive: no session can be started on it and it is left out of the project lists; its settings are kept for when it is switched back on."
         case .autoLoop where on:
-            return "Every finding of a session's review-loop round, low severity and parked ones too, goes to ⚙ Implement feedback on its own, and the fix is pushed and reviewed again until a round comes back clean and code-approved. The loop's round limit and repeated-findings check still stop one that cannot converge. Sessions still need their review loop switched on; a standalone ⌕ Code review keeps its manual findings."
+            return "Independently verified worthwhile findings in a session’s review-loop round are fixed and reviewed again; optional findings do not prolong the loop, and findings without an assessment wait for manual triage. The loop's round limit and repeated-findings check still stop one that cannot converge. Sessions still need their review loop switched on; a standalone ⌕ Code review keeps its manual findings."
         case .babysit where on:
-            return "Every 15 minutes the server starts, once per head commit, the first errand each open non-draft pull request needs: 🔀 Solve conflicts, else 🧪 Fix failing checks, else a ⌕ Code review when the board recommends one. It runs on the code review's runtime and skips pull requests labelled blocked or do-not-merge and those with a session open. With a PR author set, conflicts and checks are fixed only on that author's pull requests."
+            return "Every 15 minutes the server starts, once per head commit, the first errand each open non-draft pull request needs: 🔀 Solve conflicts, else 🧪 Fix failing checks, else a ⌕ Code review when the board recommends one. It runs on the code review's runtime and skips pull requests labelled blocked or do-not-merge and those with a session open. With a PR author set, conflicts and checks are fixed only on that author’s pull requests, and new developer feedback is assessed for manual Findings decisions before fixes start."
         case .isSelf:
             return "Tick it on the repository whose code is running right now, and on no other. An orchestrator on any project that finds a flaw in the tooling running it (a briefing, a worker tool, a loop) can then send a fix worker here, review loop armed, and merge its pull request once the loop approves and the checks are green. The running server keeps its code until you redeploy."
         default:
@@ -149,7 +150,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
     /// The project and how a checkout of it is set up share the first tab.
     var tab: ProjectTab {
         switch self {
-        case .repo, .label, .enabled, .localDir, .board, .setup, .php: return .project
+        case .repo, .label, .enabled, .localDir, .board, .setup, .php, .printing: return .project
         case .dbName, .dbExt, .dbPool, .dbRestore: return .database
         case .reviewAuthor, .publish, .autoLoop, .babysit, .testSheet, .testRun, .qaNotes, .sheetSteps, .feedbackSteps: return .review
         case .budget, .isSelf: return .orchestrator

@@ -8,6 +8,7 @@ struct ServerStatsScreen: View {
     /// The page's width, for how many tiles fit across.
     @State private var width: CGFloat = 0
     @StateObject private var model = ServerStatsModel()
+    @ObservedObject private var store = Store.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,6 +16,9 @@ struct ServerStatsScreen: View {
                        buttons: [HeaderButton(glyph: "arrow.clockwise", tip: "Read the figures again") { Task { await model.load() } }])
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
+                    if store.supports("ssh_monitoring") {
+                        Button("Registered SSH servers") { Navigator.shared.push(.sshMonitoring(serverID: nil)) }.dashButton(.bordered)
+                    }
                     content
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

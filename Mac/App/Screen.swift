@@ -55,6 +55,9 @@ enum Screen: Hashable, Identifiable {
     case sessionStats(session: JSON)
     /// The Server dashboard: the machine, the Briareus process, its disks and the open sessions.
     case serverStats
+    case sshMonitoring(serverID: Double?)
+    case personalConnection(PersonalConnectionKind)
+    case sharing
     /// Every registered SSH server in a folder per project, and the open SSH sessions.
     case sshServers
 
@@ -89,6 +92,9 @@ enum Screen: Hashable, Identifiable {
         case .mailWake(let session): return "mail-wake:\(session["id"].string ?? "")"
         case .sessionStats(let session): return "session-stats:\(session["id"].string ?? "")"
         case .serverStats: return "server-stats"
+        case .sshMonitoring(let id): return "ssh-monitoring:\(id.map { String($0) } ?? "all")"
+        case .personalConnection(let kind): return "personal:\(kind.rawValue)"
+        case .sharing: return "sharing"
         case .sshServers: return "ssh-servers"
         }
     }

@@ -65,9 +65,9 @@ enum Voice {
 
     ## Reviews and feedback
     run_errand starts what the board's buttons start on a pull request: review runs the code review, \
-    implement-feedback fixes the findings marked fix, fix-checks fixes failing checks, solve-conflicts resolves \
+    implement-feedback first assesses incoming feedback for manual Findings decisions; completing that assessment fixes only findings explicitly marked fix, fix-checks fixes failing checks, solve-conflicts resolves \
     conflicts. A pull request's findings are read with list_findings; the user says yes (fix), no (dismissed) or \
-    optional to each, recorded one by one with decide_finding, then implement-feedback fixes the yeses. A review \
+    optional to each, recorded one by one with decide_finding, then complete the held assessment to start fixes for the yeses. A review \
     round a conversation holds (waiting_findings) is read with read_review_round and completed with \
     complete_review_round, with the keys the user said yes and no to. Read the findings briefly, one at a time when the \
     user is deciding, and never decide one the user did not.
@@ -400,13 +400,13 @@ enum VoiceTool: String, CaseIterable, Sendable {
             description = "The review findings left on one of the project's pull requests: each one's key, severity, place, what it says, the user's verdict (yes to fix, no, or optional) and whether it is fixed."
             add("number", "integer", "The pull request's number.")
         case .decideFinding:
-            description = "Records the user's yes or no on one finding of a pull request: fix (yes, implement it), dismissed (no) or optional. Only on the user's own word; run_errand implement-feedback then fixes the ones marked fix."
+            description = "Records the user's yes or no on one finding of a pull request: fix (yes, implement it), dismissed (no) or optional. Only on the user's own word; run_errand implement-feedback starts an assessment for manual Findings decisions; completing that assessment starts only selected fixes."
             add("number", "integer", "The pull request's number.")
             add("key", "string", "The finding's key, from list_findings.")
             properties["decision"] = ["type": "string", "enum": ["fix", "dismissed", "optional"], "description": "fix for yes, dismissed for no, optional to leave it to the implementer."]
             required.append("decision")
         case .runErrand:
-            description = "Starts an errand on one of the project's pull requests, as the board's buttons do: review (run the code review and publish it), implement-feedback (fix the findings marked fix and have the fixes reviewed), fix-checks (fix failing CI checks) or solve-conflicts (merge the base in and resolve the conflicts)."
+            description = "Starts an errand on one of the project's pull requests, as the board's buttons do: review (run the code review and publish it), implement-feedback (assess feedback for manual Findings decisions; fixes start only after completing those decisions), fix-checks (fix failing CI checks) or solve-conflicts (merge the base in and resolve the conflicts)."
             add("number", "integer", "The pull request's number.")
             properties["errand"] = ["type": "string", "enum": .array(Voice.errands.map { .string($0) }), "description": "Which errand."]
             required.append("errand")
@@ -727,6 +727,9 @@ extension Voice {
         }
         out["verdict"] = .string(["fix": "yes, fix it", "dismissed": "no", "optional": "optional"][verdict] ?? "not decided")
         if f["fixed"].is(true) { out["fixed"] = true }
+        if f["assessment"].isObject {
+            out["assessment"] = f["assessment"]; out["recommendation"] = f["recommendation"]; out["source_feedback"] = f["sourceBody"]
+        }
         return out
     }
     /// The label a reviewer sets once the code is approved.

@@ -6,6 +6,7 @@ import SwiftUI
 
 struct ServerStatsScreen: View {
     @StateObject private var model = ServerStatsModel()
+    @EnvironmentObject private var store: Store
     @Environment(\.navigate) private var navigate
 
     var body: some View {
@@ -21,6 +22,9 @@ struct ServerStatsScreen: View {
                                    description: Text("This server does not report its resources."))
         } else if let server = model.server {
             List {
+                if store.supports("ssh_monitoring") {
+                    Button("Registered SSH servers") { navigate(.sshMonitoring(serverID: nil)) }
+                }
                 Section {
                     if let error = model.error { ErrorNotice(message: error) }
                     StatTiles(tiles: server.tiles).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)

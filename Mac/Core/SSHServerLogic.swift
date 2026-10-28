@@ -160,7 +160,8 @@ struct SSHServerFormState: Equatable, Sendable {
 
     func body() -> Result<JSON, FormProblem> {
         var body: JSON = row.isObject ? row : [:]
-        for k in ["id", "hasDbCredentials", "dbUsername", "dbPassword", "password", "sudoPassword", "hasPassword", "hasSudoPassword"] {
+        // Monitoring is edited on its own screen; a stale server form must not undo a token rotation or pause.
+        for k in ["monitoringEnabled", "id", "hasDbCredentials", "dbUsername", "dbPassword", "password", "sudoPassword", "hasPassword", "hasSudoPassword"] {
             body.remove(k)
         }
         for f in SSHServerField.on(.server) where !f.isWriteOnly {

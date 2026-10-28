@@ -35,9 +35,13 @@ private struct StatsLines: View {
         Chart {
             ForEach(chart.series) { s in
                 ForEach(s.points, id: \.at) { p in
-                    LineMark(x: .value("Time", p.at), y: .value(s.label, p.value), series: .value("Series", s.label))
+                    LineMark(x: .value("Time", p.at), y: .value(s.label, p.value), series: .value("Series", "\(s.id):\(p.segment)"))
                         .foregroundStyle(Theme.series(s.slot))
                         .interpolationMethod(.monotone)
+                }
+                ForEach(s.isolatedPoints, id: \.at) { p in
+                    PointMark(x: .value("Time", p.at), y: .value(s.label, p.value))
+                        .foregroundStyle(Theme.series(s.slot))
                 }
             }
         }

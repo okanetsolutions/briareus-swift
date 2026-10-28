@@ -65,12 +65,16 @@ struct ProjectView: View {
             .listRowBackground(Theme.row)
         }
         let list = shown
-        let active = list.filter(\.isActive)
+        let groups = ConversationGroups(list)
+        let active = groups.active
+        if !groups.pinned.isEmpty {
+            Section("Pinned") { ForEach(groups.pinned, id: \.id) { row($0) } }.listRowBackground(Theme.row)
+        }
         if !active.isEmpty {
             Section("Active") { ForEach(active, id: \.id) { row($0) } }.listRowBackground(Theme.row)
         }
         Section {
-            ForEach(list.filter { !$0.isActive }, id: \.id) { row($0) }
+            ForEach(groups.recent, id: \.id) { row($0) }
             if feed.sessionsLoaded && list.isEmpty {
                 Text(search.isEmpty ? (feed.sessions.isEmpty ? "No conversations here yet." : "No open conversations.") : "No matching conversations.")
                     .foregroundStyle(.secondary)
@@ -309,55 +313,5 @@ private struct FindingsCountIcon: View {
                 Text(String(count)).font(.caption2.weight(.bold).monospacedDigit()).foregroundStyle(.white)
                     .padding(.horizontal, 4).frame(minWidth: 15, minHeight: 15).background(Theme.warn, in: Capsule())
             }
-    }
-}
-
-/// A conversation in a list: its mark, its title, and a line of provider, branch, state and age; a ⚑ while a review
-/// round waits on it.
-struct ConversationRowLabel: View {
-    let session: Session
-    var working = false
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            ConversationMark(session: session).frame(width: 16)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(session.displayTitle).font(.body.weight(.medium)).lineLimit(2)
-                    .foregroundStyle(session.isClosed ? .secondary : .primary)
-                Text(session.conversationRowDetail()).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            if working { ProgressView().controlSize(.small) }
-            if session.heldRound != nil {
-                Image(systemName: "flag.fill").font(.caption).foregroundStyle(Theme.warn).accessibilityLabel("Findings waiting")
-            }
-        }
-        .padding(.vertical, 3)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(session.pullBadge ?? "")
-    }
-}
-
-/// A pull request takes the status dot's place, coloured by its state and checks, as Claude's list shows it; a
-/// conversation at work keeps its pulsing dot.
-struct ConversationMark: View {
-    let session: Session
-    var body: some View {
-        if let tone = session.pullTone, !session.isActive {
-            Image(systemName: "arrow.triangle.pull").font(.caption.weight(.semibold)).foregroundStyle(Self.color(tone))
-                .accessibilityHidden(true)
-        } else {
-            StatusDot(status: session.conversationState == "waiting" ? "queued" : session.status)
-                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
-        }
-    }
-    /// Purple once merged, grey when closed unmerged or a draft; while open, the checks' colour.
-    static func color(_ tone: String) -> Color {
-        switch tone {
-        case "merged": return .purple
-        case "closed", "draft": return .secondary
-        case "failing": return Theme.danger
-        case "pending": return Theme.warn
-        default: return Theme.ok
-        }
     }
 }

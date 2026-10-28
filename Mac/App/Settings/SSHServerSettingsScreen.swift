@@ -35,6 +35,9 @@ struct SSHServerSettingsScreen: View {
                 model.tab = SSHServerTab(rawValue: t) ?? .server
                 model.scrollToken += 1
             }
+            if state.id != 0 && store.supports("ssh_monitoring") {
+                Button("Resources and monitoring") { Navigator.shared.push(.sshMonitoring(serverID: state.id)) }.dashButton(.bordered)
+            }
             if let error = model.error { NoticeBox(message: error).padding(.bottom, 16) }
             switch model.tab {
             case .server: serverTab
