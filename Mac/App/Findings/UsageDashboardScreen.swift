@@ -3,18 +3,17 @@ import SwiftUI
 
 struct UsageScreen: View {
     @StateObject private var usage = UsageModel.kept()
-    @StateObject private var server = ServerStatsModel()
+    @StateObject private var server = UsageModel.kept().server
     @ObservedObject private var store = Store.shared
-    @State private var selection: UsageDashboardTab = .usage
 
     private var tabs: [UsageDashboardTab] { UsageDashboardTab.available(supports: store.supports) }
     private var subtitle: String? {
-        guard selection == .usage, let reading = usage.shown else { return nil }
+        guard usage.selection == .usage, let reading = usage.shown else { return nil }
         return usage.query.subtitle(reading, options: usage.options ?? .null)
     }
     private var buttons: [HeaderButton] {
-        if selection != .usage {
-            guard selection.serverTab != .sshServers else { return [] }
+        if usage.selection != .usage {
+            guard usage.selection.serverTab != .sshServers else { return [] }
             return [HeaderButton(glyph: "arrow.clockwise", tip: "Refresh this tab") { Task { await server.load() } }]
         }
         guard store.supports("usage_all") else { return [] }
@@ -29,28 +28,28 @@ struct UsageScreen: View {
             PaneHeader(title: "\u{1F4CA} Usage", subtitle: subtitle, buttons: buttons)
             TabNav {
                 ForEach(tabs) { tab in
-                    TabNavItem(title: tab.title, active: selection == tab) { selection = tab }
-                        .accessibilityAddTraits(selection == tab ? .isSelected : [])
+                    TabNavItem(title: tab.title, active: usage.selection == tab) { usage.selection = tab }
+                        .accessibilityAddTraits(usage.selection == tab ? .isSelected : [])
                 }
             }.padding(.horizontal, Theme.paneMargin)
             ZStack {
                 UsageLedgerPanel(model: usage)
-                    .opacity(selection == .usage ? 1 : 0)
-                    .allowsHitTesting(selection == .usage)
-                    .accessibilityHidden(selection != .usage)
-                if selection != .usage {
+                    .opacity(usage.selection == .usage ? 1 : 0)
+                    .allowsHitTesting(usage.selection == .usage)
+                    .accessibilityHidden(usage.selection != .usage)
+                if usage.selection != .usage {
                     ServerStatsScreen(model: server, embedded: true)
                 }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in
-            if selection == .usage { usage.load() }
+            if usage.selection == .usage { usage.load() }
         }
-        .onChange(of: tabs) { _, offered in selection = selection.resolved(in: offered) }
+        .onChange(of: tabs) { _, offered in usage.selection = usage.selection.resolved(in: offered) }
         .onChange(of: server.tab) { _, tab in
-            if selection != .usage { selection = UsageDashboardTab.server(tab).resolved(in: tabs) }
+            if usage.selection != .usage { usage.selection = UsageDashboardTab.server(tab).resolved(in: tabs) }
         }
-        .onChange(of: selection) { _, tab in
+        .onChange(of: usage.selection) { _, tab in
             if let resource = tab.serverTab { server.tab = resource }
         }
     }
