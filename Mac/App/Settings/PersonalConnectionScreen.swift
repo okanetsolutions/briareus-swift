@@ -42,7 +42,7 @@ struct PersonalConnectionScreen: View {
             SecureField("Write-only access token", text: $model.token).textFieldStyle(.plain).modifier(FieldStyle())
             HStack {
                 Button(model.busy ? "Saving…" : "Save connection") { model.save() }.dashButton(.prominent).disabled(!model.canSave)
-                if model.dirty { Button("Discard changes") { model.discard() }.dashButton(.plain) }
+                if model.dirty { SettingsDiscardButton(action: model.discard) }
                 if model.canDisconnect { Button("Disconnect") { disconnect() }.dashButton(.destructive) }
             }
         }.disabled(model.busy || model.uncertain)

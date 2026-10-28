@@ -220,8 +220,12 @@ func triageTitle(_ triage: JSON) -> String {
     return title
 }
 /// A stale feedback assessment must be rerun; ordinary loop rounds can review the moved branch.
+enum TriageStaleResolution: Equatable, Sendable { case reviewMovedHead, discardAssessment }
+func triageStaleResolution(_ triage: JSON) -> TriageStaleResolution {
+    triage["externalFeedback"].is(true) ? .discardAssessment : .reviewMovedHead
+}
 func triageStaleMessage(_ triage: JSON) -> String {
-    triage["externalFeedback"].is(true)
+    triageStaleResolution(triage) == .discardAssessment
         ? "The pull request or source feedback changed. Run Implement feedback again before selecting fixes; completing with nothing to fix discards this assessment."
         : "The branch moved after this round was reviewed: some findings may already be fixed. Sending with nothing to fix reviews the new commits instead of closing the loop."
 }

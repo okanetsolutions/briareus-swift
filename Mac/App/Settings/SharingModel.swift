@@ -52,6 +52,7 @@ final class SharingModel: ObservableObject {
         guard Store.shared.supports("update_shares"), !busy, !uncertain else { return }
         form.toggle(user.id)
     }
+    func membership(_ user: SharingUser) -> ShareMembership { form.membership(for: user.id) }
     func discard() { form.discard() }
     func save() {
         guard canSave else { return }
@@ -61,10 +62,8 @@ final class SharingModel: ObservableObject {
             defer { busy = false }
             do {
                 let answer = try await Store.shared.call("update_shares", requested.body(resourceID: id, users: selection))
-                guard answer["kind"].string == requested.rawValue, answer["id"].string == id, let ids = answer["userIds"].array else { throw APIError(.nonJSON) }
-                form.select(Set(ids.compactMap(\.int)))
-                shares = .array(shares.items.filter { $0["kind"].string != requested.rawValue || $0["id"].string != id }
-                    + form.original.map { ["kind": .string(requested.rawValue), "id": .string(id), "userId": JSON($0)] })
+                let update = try SharingUpdate(answer, kind: requested, resourceID: id, previous: shares)
+                form.select(update.members); shares = update.shares
             } catch {
                 uncertain = !((error as? APIError)?.isRefusal ?? false)
                 if !error.isCancellation { self.error = errorText(error) }

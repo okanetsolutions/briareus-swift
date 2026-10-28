@@ -175,4 +175,38 @@ final class ClientUpdatesTests: XCTestCase {
         XCTAssertEqual(body["host"], "host.test")
     }
 
+    func testProjectConversationGroupsPutEveryPinBeforeUnpinnedWorkingSessions() {
+        let working = session("working", created: "2026-10-28T00:00:00Z", status: "running")
+        let recent = session("recent", created: "2026-10-28T00:00:00Z")
+        let oldPin = session("old-pin", created: "2026-01-01T00:00:00Z", pinned: "2026-10-27T00:00:00Z", status: "running")
+        let idlePin = session("idle-pin", created: "2026-01-01T00:00:00Z", pinned: "2026-10-28T00:00:00Z")
+        let groups = ConversationGroups([working, oldPin, recent, idlePin])
+        XCTAssertEqual(groups.pinned.map(\.id), ["idle-pin", "old-pin"])
+        XCTAssertEqual(groups.active.map(\.id), ["working"])
+        XCTAssertEqual(groups.recent.map(\.id), ["recent"])
+        XCTAssertEqual((groups.pinned + groups.active + groups.recent).count, 4)
+    }
+    func testStaleFeedbackDiscardsTheAssessmentWhileOrdinaryRoundsReviewTheNewHead() {
+        XCTAssertEqual(triageStaleResolution(["externalFeedback": true, "stale": true]), .discardAssessment)
+        XCTAssertEqual(triageStaleResolution(["standalone": true, "mine": true, "stale": true]), .reviewMovedHead)
+    }
+    func testSharingSaveReplacesOnlyOneResourceAndRejectsMismatchedEchoes() throws {
+        let previous: JSON = [["kind": "project", "id": "5", "userId": 2], ["kind": "sshServer", "id": "5", "userId": 3], ["kind": "project", "id": "6", "userId": 4]]
+        let update = try SharingUpdate(["kind": "project", "id": "5", "userIds": [7]], kind: .project, resourceID: "5", previous: previous)
+        XCTAssertEqual(update.members, [7])
+        XCTAssertEqual(ShareKind.project.members(update.shares, resourceID: "5"), [7])
+        XCTAssertEqual(ShareKind.sshServer.members(update.shares, resourceID: "5"), [3])
+        XCTAssertEqual(ShareKind.project.members(update.shares, resourceID: "6"), [4])
+        let removed = try SharingUpdate(["kind": "project", "id": "5", "userIds": []], kind: .project, resourceID: "5", previous: update.shares)
+        XCTAssertTrue(ShareKind.project.members(removed.shares, resourceID: "5").isEmpty)
+        XCTAssertEqual(removed.shares.count, 2)
+        let invalidResponses: [JSON] = [["kind": "sshServer", "id": "5", "userIds": [1]], ["kind": "project", "id": "6", "userIds": [1]], ["kind": "project", "id": "5", "userIds": [-1]], ["kind": "project", "id": "5", "userIds": ["invalid"]]]
+        for bad in invalidResponses {
+            XCTAssertThrowsError(try SharingUpdate(bad, kind: .project, resourceID: "5", previous: previous))
+        }
+        var form = SharingFormState(); form.select([7])
+        XCTAssertEqual(form.membership(for: 7), .shared)
+        XCTAssertEqual(form.membership(for: 3), .notShared)
+    }
+
 }

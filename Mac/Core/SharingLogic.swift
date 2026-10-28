@@ -74,4 +74,25 @@ struct SharingFormState: Equatable, Sendable {
         if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
     }
     mutating func discard() { picked = original }
+    func membership(for userID: Int) -> ShareMembership { picked.contains(userID) ? .shared : .notShared }
+}
+
+enum ShareMembership: Equatable, Sendable {
+    case shared, notShared
+    var title: String { self == .shared ? "Shared" : "Not shared" }
+}
+
+/// A save replaces only the addressed resource's grants and retains grants on every other resource.
+struct SharingUpdate: Equatable, Sendable {
+    let members: Set<Int>
+    let shares: JSON
+    init(_ answer: JSON, kind: ShareKind, resourceID: String, previous: JSON) throws {
+        guard answer["kind"].string == kind.rawValue, answer["id"].string == resourceID,
+              let ids = answer["userIds"].array else { throw APIError(.nonJSON) }
+        let parsed = ids.compactMap(\.int)
+        guard parsed.count == ids.count, parsed.allSatisfy({ $0 > 0 }) else { throw APIError(.nonJSON) }
+        members = Set(parsed)
+        let kept = previous.items.filter { $0["kind"].string != kind.rawValue || $0["id"].string != resourceID }
+        shares = .array(kept + members.sorted().map { ["kind": .string(kind.rawValue), "id": .string(resourceID), "userId": JSON($0)] })
+    }
 }

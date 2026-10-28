@@ -41,7 +41,7 @@ struct TriageCard: View {
         return VStack(alignment: .leading, spacing: 12) {
             header(triage, key: key, takes: takes, canComplete: canComplete, empty: findings.isEmpty)
             if triage["stale"].isSet {
-                Label("The branch moved after this round was reviewed: some of these may already be fixed. Completing with nothing to fix reviews the new commits instead of closing the loop.",
+                Label(triageStaleMessage(triage),
                       systemImage: "arrow.triangle.branch")
                     .font(.caption).foregroundStyle(Theme.danger)
             }

@@ -65,12 +65,16 @@ struct ProjectView: View {
             .listRowBackground(Theme.row)
         }
         let list = shown
-        let active = list.filter(\.isActive)
+        let groups = ConversationGroups(list)
+        let active = groups.active
+        if !groups.pinned.isEmpty {
+            Section("Pinned") { ForEach(groups.pinned, id: \.id) { row($0) } }.listRowBackground(Theme.row)
+        }
         if !active.isEmpty {
             Section("Active") { ForEach(active, id: \.id) { row($0) } }.listRowBackground(Theme.row)
         }
         Section {
-            ForEach(list.filter { !$0.isActive }, id: \.id) { row($0) }
+            ForEach(groups.recent, id: \.id) { row($0) }
             if feed.sessionsLoaded && list.isEmpty {
                 Text(search.isEmpty ? (feed.sessions.isEmpty ? "No conversations here yet." : "No open conversations.") : "No matching conversations.")
                     .foregroundStyle(.secondary)

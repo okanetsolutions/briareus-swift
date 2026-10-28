@@ -22,18 +22,8 @@ struct SharingScreen: View {
                     if !model.loaded && !model.busy { Button("Retry") { Task { await model.load() } } }
                 } footer: { Text("Admins already have access. Removing a member’s grant takes effect on all their tokens.") }
                 if model.loaded {
-                    Section("Shared with") {
-                        if model.resources.isEmpty { Text("No resources of this type.") }
-                        else if model.users.isEmpty { Text("No users are available.") }
-                        else {
-                            ForEach(model.users) { user in
-                                Toggle(isOn: Binding(get: { model.picked.contains(user.id) }, set: { _ in model.toggle(user) })) {
-                                    VStack(alignment: .leading) { Text(user.name); Text(user.detail).font(.caption).foregroundStyle(.secondary) }
-                                }.disabled(model.busy || model.uncertain || !store.supports("update_shares"))
-                            }
-                        }
-                    }
-                    if model.dirty { Button("Discard changes") { model.discard() }.disabled(model.busy) }
+                    SharingMembers(model: model)
+                    if model.dirty { SettingsDiscardButton(enabled: !model.busy, action: model.discard) }
                 }
                 if model.uncertain {
                     Section {
@@ -45,7 +35,7 @@ struct SharingScreen: View {
         }
         .task(id: model.kind) { await model.load() }
         .modifier(SettingsFormChrome(title: "Sharing", dirty: model.dirty, discardMessage: "Discard the unsaved sharing changes?",
-                                     saveTitle: "Save", canSave: model.canSave, saving: model.busy, onSave: { confirming = true }))
+                                     saveTitle: "Save", canSave: model.canSave, saving: model.busy, onSave: { confirming = true }, showsSave: store.supports("update_shares")))
         .alert("Replace this resource’s sharing grants?", isPresented: $confirming) {
             Button("Save grants") { model.save() }
             Button("Cancel", role: .cancel) {}

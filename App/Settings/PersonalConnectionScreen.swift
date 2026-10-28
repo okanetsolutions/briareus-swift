@@ -23,7 +23,7 @@ struct PersonalConnectionScreen: View {
                         }
                         SecureField("Access token", text: $model.token).textInputAutocapitalization(.never).autocorrectionDisabled()
                         Button(model.busy ? "Saving…" : "Save connection") { model.save() }.disabled(!model.canSave)
-                        if model.dirty { Button("Discard changes") { model.discard() }.disabled(model.busy) }
+                        if model.dirty { SettingsDiscardButton(enabled: !model.busy, action: model.discard) }
                         if model.canDisconnect { Button("Disconnect", role: .destructive) { disconnecting = true }.disabled(model.busy || model.uncertain) }
                     }
                     .disabled(model.busy || model.uncertain)
@@ -44,6 +44,6 @@ struct PersonalConnectionScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: { Text(model.kind.explanation) }
         .modifier(SettingsFormChrome(title: model.kind.title, dirty: model.dirty, discardMessage: "Discard the unsaved connection details?",
-                                     saveTitle: "Save", canSave: model.canSave, saving: model.busy, onSave: model.save))
+                                     saveTitle: "Save", canSave: model.canSave, saving: model.busy, onSave: model.save, showsSave: model.canConnect))
     }
 }

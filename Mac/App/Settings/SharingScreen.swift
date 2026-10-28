@@ -31,19 +31,10 @@ struct SharingScreen: View {
             if model.busy { LoadingNote() }
             if !model.loaded && !model.busy { Button("Retry") { Task { await model.load() } }.dashButton(.bordered) }
             if model.loaded {
-                SectionTitle(title: "Shared with")
-                if model.resources.isEmpty { EmptyNote(title: "No resources of this type.") }
-                else if model.users.isEmpty { EmptyNote(title: "No users are available.") }
-                else {
-                    ForEach(model.users) { user in
-                        Toggle(isOn: Binding(get: { model.picked.contains(user.id) }, set: { _ in model.toggle(user) })) {
-                            Text("\(user.name) · \(user.detail)").font(Theme.body)
-                        }.disabled(model.busy || model.uncertain || !store.supports("update_shares"))
-                    }
-                }
+                SharingMembers(model: model)
                 HStack {
-                    Button("Save grants") { save() }.dashButton(.prominent).disabled(!model.canSave)
-                    if model.dirty { Button("Discard changes") { model.discard() }.dashButton(.plain).disabled(model.busy) }
+                    if store.supports("update_shares") { Button("Save grants") { save() }.dashButton(.prominent).disabled(!model.canSave) }
+                    if model.dirty { SettingsDiscardButton(enabled: !model.busy, action: model.discard) }
                 }
             }
             if model.uncertain {

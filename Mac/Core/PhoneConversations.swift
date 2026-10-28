@@ -47,6 +47,18 @@ extension Session {
 
 // MARK: - The list
 
+/// Pins lead the project's list even when an unpinned conversation is working.
+struct ConversationGroups: Equatable, Sendable {
+    let pinned: [Session]
+    let active: [Session]
+    let recent: [Session]
+    init(_ sessions: [Session]) {
+        pinned = sessions.filter(\.isPinned).orderedByPins()
+        active = sessions.filter { !$0.isPinned && $0.isActive }
+        recent = sessions.filter { !$0.isPinned && !$0.isActive }
+    }
+}
+
 /// The conversations a project's list shows: closed ones only when asked for, and those whose title holds the search.
 func conversationsShown(_ sessions: [Session], search: String, showClosed: Bool) -> [Session] {
     let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
