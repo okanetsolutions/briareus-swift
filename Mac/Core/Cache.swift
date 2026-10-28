@@ -10,6 +10,12 @@ final class DiskCache: @unchecked Sendable {
     private let lock = NSLock()
     /// Saves waiting for the writer, by key: a read sees them at once, and only the newest of a key is written.
     private var pending: [String: JSON] = [:]
+    private final class Document {
+        let value: JSON
+        init(_ value: JSON) { self.value = value }
+    }
+    /// Decoded documents avoid repeated parsing, with an estimated 8 MB budget including JSON's allocation overhead.
+    private let documents = NSCache<NSString, Document>()
     /// Bumped by every save and removal of a key, so a write overtaken meanwhile is dropped.
     private var revision: [String: Int] = [:]
     private var epoch = 0
@@ -17,6 +23,12 @@ final class DiskCache: @unchecked Sendable {
 
     init(directory: URL, protection: Data.WritingOptions = .completeFileProtection) {
         self.directory = directory; self.protection = protection
+        documents.totalCostLimit = 8 * 1024 * 1024
+    }
+
+    /// Parsed enums, strings and dictionary/array allocations can occupy several times their serialized bytes.
+    static func documentCost(_ byteCount: Int) -> Int {
+        byteCount <= Int.max / 8 ? byteCount * 8 : Int.max
     }
 
     /// The file name a key maps to; no path separators or dots.
@@ -49,8 +61,10 @@ final class DiskCache: @unchecked Sendable {
     func value(_ key: String) -> JSON? {
         lock.lock(); defer { lock.unlock() }
         if let saved = pending[key] { return saved }
-        guard let data = try? Data(contentsOf: url(key)) else { return nil }
-        return JSON.parse(data)
+        if let saved = documents.object(forKey: key as NSString) { return saved.value }
+        guard let data = try? Data(contentsOf: url(key)), let value = JSON.parse(data) else { return nil }
+        documents.setObject(Document(value), forKey: key as NSString, cost: Self.documentCost(data.count))
+        return value
     }
     /// Saves a document off the calling thread: a board's answer runs to hundreds of kilobytes, and turning it into text
     /// and comparing it with the file took the main thread with it on every poll. Reads see it at once.
@@ -69,10 +83,12 @@ final class DiskCache: @unchecked Sendable {
             lock.lock(); defer { lock.unlock() }
             guard revision[key] == mine else { return }
             pending[key] = nil
+            documents.removeObject(forKey: key as NSString)
             if let existing = try? Data(contentsOf: u), existing == data {
                 try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: u.path)
+                documents.setObject(Document(value), forKey: key as NSString, cost: Self.documentCost(data.count))
             } else {
-                _ = write(data, to: u)
+                if write(data, to: u) { documents.setObject(Document(value), forKey: key as NSString, cost: Self.documentCost(data.count)) }
             }
         }
     }
@@ -94,6 +110,7 @@ final class DiskCache: @unchecked Sendable {
     func append(_ values: [JSON], _ key: String) -> Bool {
         guard !values.isEmpty else { return true }
         lock.lock(); defer { lock.unlock() }
+        documents.removeObject(forKey: key as NSString)
         guard ensureDirectory() else { return false }
         let text = values.map { $0.serialized() + "\n" }.joined()
         let u = url(key)
@@ -107,12 +124,14 @@ final class DiskCache: @unchecked Sendable {
     func replace(_ values: [JSON], _ key: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
         pending[key] = nil; _ = bump(key)
+        documents.removeObject(forKey: key as NSString)
         return write(Data(values.map { $0.serialized() + "\n" }.joined().utf8), to: url(key))
     }
 
     func remove(_ key: String) {
         lock.lock(); defer { lock.unlock() }
         pending[key] = nil; _ = bump(key)
+        documents.removeObject(forKey: key as NSString)
         try? FileManager.default.removeItem(at: url(key))
     }
     func removeAll() {
@@ -120,11 +139,13 @@ final class DiskCache: @unchecked Sendable {
         // A save still waiting is dropped with the rest: its revision no longer matches.
         for key in pending.keys { _ = bump(key) }
         pending = [:]
+        documents.removeAllObjects()
         try? FileManager.default.removeItem(at: directory)
     }
     /// Drops entries nothing has written for a while, such as transcripts of conversations never reopened.
     func prune(olderThan age: TimeInterval, now: Date = Date()) {
         lock.lock(); defer { lock.unlock() }
+        documents.removeAllObjects()
         let fm = FileManager.default
         guard let names = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
         for u in names {

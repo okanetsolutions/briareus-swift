@@ -15,7 +15,7 @@ func isSafeWebURL(_ url: String?) -> Bool {
 /// instead of every one each time the agent adds a line.
 struct TranscriptColumn: View, Equatable {
     unowned let model: ConversationModel
-    var blocks: [TranscriptBlock]
+    var blocks: TranscriptRows
     var session: Session
     var expanded: Set<Int>
     var decisions: [String: String]

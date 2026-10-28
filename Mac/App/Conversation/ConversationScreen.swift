@@ -29,8 +29,9 @@ final class ConversationModel: ObservableObject {
     @Published private(set) var snapshot: Session?
     var session: Session { snapshot ?? initial }
 
-    @Published private(set) var transcript = Transcript()
-    @Published private(set) var blocks: [TranscriptBlock] = []
+    private(set) var transcript = Transcript()
+    private var presentation = TranscriptBlockBuilder()
+    var blocks: TranscriptRows { presentation.blocks }
     @Published private(set) var loaded = false
     @Published private(set) var busy = false
     @Published private(set) var loading = false
@@ -91,7 +92,7 @@ final class ConversationModel: ObservableObject {
             // Saved events show at once and move the cursor, so only what happened since is downloaded.
             restored = true
             let saved = Store.shared.cache.lines(cacheKey)
-            if !saved.isEmpty { transcript.append(.array(saved)); rebuild() }
+            if !saved.isEmpty { append(.array(saved)) }
         }
         // A transcript saved before messages showed their time has none; it is read again once to get them.
         if !retimed && transcriptNeedsRetime(transcript.events) { full = true }
@@ -102,13 +103,11 @@ final class ConversationModel: ObservableObject {
             loading = false
             if let next = Session(answer["session"]) { snapshot = next }
             let events = answer["events"]
-            if full { transcript = Transcript() }
-            transcript.append(events)
+            append(events, full: full)
             error = nil; loaded = true
             let cache = Store.shared.cache
             if full || unsaved { unsaved = !cache.replace(transcript.json.items, cacheKey) }
             else if events.count > 0 { unsaved = !cache.append(events.items, cacheKey) }
-            rebuild()
             showPanel()
         } catch {
             loading = false
@@ -119,9 +118,11 @@ final class ConversationModel: ObservableObject {
         if pendingFull { pendingFull = false; Task { await self.refresh(full: true) } }
         return failure
     }
-    private func rebuild() {
-        let next = transcriptBlocks(transcript.events)
-        if next != blocks { blocks = next }
+    private func append(_ events: JSON, full: Bool = false) {
+        objectWillChange.send()
+        if full { transcript = Transcript(); presentation = TranscriptBlockBuilder() }
+        let changed = transcript.append(events)
+        presentation.update(transcript.events, changed: changed)
     }
 
     /// Whether the session's event stream is flowing, so polling only checks in now and then.
@@ -162,10 +163,9 @@ final class ConversationModel: ObservableObject {
         }
         // A transcript line, unnamed; one already held (read by a poll meanwhile) adds nothing.
         let before = transcript.events.count
-        transcript.append(.array([j]))
+        append(.array([j]))
         guard transcript.events.count != before else { return }
         if !unsaved { unsaved = !Store.shared.cache.append([j], cacheKey) }
-        rebuild()
     }
 
     /// Polls while the screen is up: every 2 seconds while the agent works, every 7 otherwise, with the Windows client's

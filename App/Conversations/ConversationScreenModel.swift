@@ -22,8 +22,9 @@ final class ConversationScreenModel: ObservableObject {
     @Published private(set) var snapshot: Session?
     var session: Session { snapshot ?? initial }
 
-    @Published private(set) var transcript = Transcript()
-    @Published private(set) var blocks: [TranscriptBlock] = []
+    private(set) var transcript = Transcript()
+    private var presentation = TranscriptBlockBuilder()
+    var blocks: TranscriptRows { presentation.blocks }
     @Published private(set) var loaded = false
     @Published private(set) var busy = false
     @Published private(set) var loading = false
@@ -77,7 +78,7 @@ final class ConversationScreenModel: ObservableObject {
             // Saved events show at once and move the cursor, so only what happened since is downloaded.
             restored = true
             let saved = Store.shared.cache.lines(cacheKey)
-            if !saved.isEmpty { transcript.append(.array(saved)); rebuild() }
+            if !saved.isEmpty { append(.array(saved)) }
         }
         // A transcript saved before messages showed their time has none; it is read again once to get them.
         if !retimed && transcriptNeedsRetime(transcript.events) { full = true }
@@ -88,13 +89,11 @@ final class ConversationScreenModel: ObservableObject {
             loading = false
             if let next = Session(answer["session"]), next != snapshot { snapshot = next }
             let events = answer["events"]
-            if full { transcript = Transcript() }
-            transcript.append(events)
+            append(events, full: full)
             error = nil; loaded = true
             let cache = Store.shared.cache
             if full || unsaved { unsaved = !cache.replace(transcript.json.items, cacheKey) }
             else if events.count > 0 { unsaved = !cache.append(events.items, cacheKey) }
-            rebuild()
         } catch {
             loading = false
             if error.isCancellation { return APIError(.cancelled) }
@@ -104,9 +103,12 @@ final class ConversationScreenModel: ObservableObject {
         if pendingFull { pendingFull = false; Task { await self.refresh(full: true) } }
         return failed
     }
-    private func rebuild() {
-        let next = transcriptBlocks(transcript.events)
-        if next != blocks { blocks = next }
+    /// Publish before mutating our own buffers; publishing the transcript value would copy all its history per line.
+    private func append(_ events: JSON, full: Bool = false) {
+        objectWillChange.send()
+        if full { transcript = Transcript(); presentation = TranscriptBlockBuilder() }
+        let changed = transcript.append(events)
+        presentation.update(transcript.events, changed: changed)
     }
 
     /// Whether the session's event stream is flowing, so polling only checks in now and then.
@@ -129,10 +131,9 @@ final class ConversationScreenModel: ObservableObject {
         case .line(let line)?:
             // A line already held (read by a poll meanwhile) adds nothing.
             let before = transcript.events.count
-            transcript.append(.array([line]))
+            append(.array([line]))
             guard transcript.events.count != before else { return }
             if !unsaved { unsaved = !Store.shared.cache.append([line], cacheKey) }
-            rebuild()
         case nil: return
         }
     }
