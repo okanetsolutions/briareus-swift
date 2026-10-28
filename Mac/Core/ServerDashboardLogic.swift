@@ -24,6 +24,11 @@ enum ServerDashboardTab: String, CaseIterable, Hashable, Identifiable, Sendable 
         }
     }
 
+    /// Keep a supported selection, otherwise use the first offered panel; no catalog has no selection.
+    func resolved(in tabs: [Self]) -> Self? {
+        tabs.contains(self) ? self : tabs.first
+    }
+
     static func available(supports: (String) -> Bool) -> [Self] {
         allCases.filter { tab in
             supports(tab.operation ?? "ssh_monitoring")

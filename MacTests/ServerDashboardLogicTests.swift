@@ -12,6 +12,13 @@ final class ServerDashboardLogicTests: XCTestCase {
         XCTAssertNil(ServerDashboardTab.sshServers.operation)
     }
 
+    func testUnavailableSelectionFallsBackToAnOfferedTab() {
+        let offered: [ServerDashboardTab] = [.sessions, .sshServers]
+        XCTAssertEqual(ServerDashboardTab.sshServers.resolved(in: offered), .sshServers)
+        XCTAssertEqual(ServerDashboardTab.overview.resolved(in: offered), .sessions)
+        XCTAssertNil(ServerDashboardTab.overview.resolved(in: []))
+    }
+
     func testTabsFollowTheTokenCatalog() {
         XCTAssertEqual(ServerDashboardTab.available { _ in false }, [])
         XCTAssertEqual(ServerDashboardTab.available { $0 == "server_stats" }, [.overview, .history, .disks])

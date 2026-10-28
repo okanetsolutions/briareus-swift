@@ -84,7 +84,7 @@ final class ServerStatsModel: ObservableObject {
     }
 
     func follow() async {
-        if !tabs.contains(tab), let first = tabs.first { tab = first; return }
+        if let supported = tab.resolved(in: tabs), supported != tab { tab = supported; return }
         guard tab.operation != nil else { return }
         while !Task.isCancelled {
             await load()
