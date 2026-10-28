@@ -1,5 +1,4 @@
-// The board across the device's projects: its pull requests, issues and Review List tabs with repository identity, search,
-// and partial reads shared by both apps.
+// The board across the device's projects: its lists, regular board filters and partial reads shared by both apps.
 import Foundation
 
 /// Background reads keep cached board rows in place; initial loads and user refreshes show progress.
@@ -9,7 +8,13 @@ func boardShowsLoading(loaded: Bool, refreshing: Bool) -> Bool { !loaded || refr
 enum GlobalBoardTab: Hashable, CaseIterable, Sendable {
     case pulls, issues, review
 
-    var searchPrompt: String { self == .issues ? "Search all issues" : "Search all pull requests" }
+    var filterKinds: [FilterKind] {
+        switch self {
+        case .pulls: return [.author, .reviewer, .label]
+        case .issues: return [.author, .assignee, .label]
+        case .review: return []
+        }
+    }
     var loadingText: String { self == .issues ? "Loading issues…" : "Loading pull requests…" }
     /// The symbol an empty tab shows, the one the project board's rows use.
     var symbol: String { self == .issues ? "smallcircle.filled.circle" : "arrow.triangle.pull" }
@@ -55,15 +60,17 @@ struct GlobalPullRow: Identifiable, Equatable, Sendable {
     let pull: PullSummary
     let stack: StackPosition?
     let repoKey: String
-    let searchText: String
     var id: String { "\(repoKey)#\(pull.number)" }
+
+    var boardRow: BoardRow {
+        var row = BoardRow(pull)
+        row.stackPosition = stack?.position ?? row.stackPosition
+        return row
+    }
 
     init(project: Project, pull: PullSummary, stack: StackPosition?) {
         self.project = project; self.pull = pull; self.stack = stack
         repoKey = project.repo.lowercased()
-        let fields = [project.repo, project.title, "#\(pull.number)", pull.title, pull.branch, pull.author ?? ""]
-            + pull.assignees + pull.reviewers.map(\.user) + pull.labels.map(\.name)
-        searchText = fields.joined(separator: " ").lowercased()
     }
 }
 
@@ -73,15 +80,11 @@ struct GlobalIssueRow: Identifiable, Equatable, Sendable {
     let issue: IssueSummary
     let raw: JSON
     let repoKey: String
-    let searchText: String
     var id: String { "\(repoKey)#\(issue.number)" }
 
     init(project: Project, issue: IssueSummary, raw: JSON) {
         self.project = project; self.issue = issue; self.raw = raw
         repoKey = project.repo.lowercased()
-        let fields = [project.repo, project.title, "#\(issue.number)", issue.title, issue.author ?? ""]
-            + issue.assignees + issue.labels.map(\.name)
-        searchText = fields.joined(separator: " ").lowercased()
     }
 }
 
@@ -171,19 +174,19 @@ struct GlobalPullsState: Equatable, Sendable {
     }
 
     /// What an empty tab says: a refused or failed read before the filters, and the Review List asks for a login when
-    /// neither a saved one nor the author of any project the picker shows decides whose review it waits on.
+    /// neither a saved one nor the author of any project decides whose review it waits on.
     func emptyTitle(_ tab: GlobalBoardTab, filter: GlobalPullsFilter, me: String?) -> String {
-        let filtered = filter.isOn
+        let filtered = filter[tab].isOn
         switch tab {
         case .pulls:
             if hasErrors { return "Pull requests could not all be loaded" }
             return filtered ? "No pull requests match the filters" : "No open pull requests"
         case .issues:
-            if hasErrors || !filter.issueRefusals(in: self).isEmpty { return "Issues could not all be loaded" }
+            if hasErrors || !issueRefusals.isEmpty { return "Issues could not all be loaded" }
             return filtered ? "No issues match the filters" : "No open issues"
         case .review:
             if hasErrors { return "Pull requests could not all be loaded" }
-            if (me ?? "").isEmpty && !projects.contains(where: { $0.author != nil && filter.shows($0.project) }) {
+            if (me ?? "").isEmpty && !projects.contains(where: { $0.author != nil }) {
                 return "Set your GitHub login"
             }
             return filtered ? "No pull requests match the filters" : "Nothing is waiting on your review"
@@ -204,53 +207,56 @@ struct GlobalPullsState: Equatable, Sendable {
     }
 }
 
+/// The same filters as a project's board, independent for pulls and issues; Review List stays unfiltered.
 struct GlobalPullsFilter: Equatable, Sendable {
-    var query = ""
-    /// Empty means every project, independently of the per-project board filters.
-    var repo = ""
-    var isOn: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !repo.isEmpty }
+    var pulls = BoardFilter()
+    var issues = BoardFilter()
 
-    /// Keep the picker's exact tag while present; a removed project returns to All projects without losing search.
-    func reconciled(in state: GlobalPullsState) -> GlobalPullsFilter {
-        var filter = self
-        filter.repo = state.projects.first { foldEqual($0.project.repo, repo) }?.project.repo ?? ""
-        return filter
+    init() {}
+    init(saved: JSON) {
+        pulls = BoardFilter(saved: saved["pulls"])
+        issues = BoardFilter(saved: saved["issues"])
+    }
+    var saved: JSON { ["pulls": pulls.saved, "issues": issues.saved] }
+
+    subscript(tab: GlobalBoardTab) -> BoardFilter {
+        get {
+            switch tab {
+            case .pulls: return pulls
+            case .issues: return issues
+            case .review: return BoardFilter()
+            }
+        }
+        set {
+            switch tab {
+            case .pulls: pulls = newValue
+            case .issues: issues = newValue
+            case .review: break
+            }
+        }
     }
 
     func rows(in state: GlobalPullsState) -> [GlobalPullRow] {
-        state.rows.filter { passes($0.repoKey, $0.searchText) }
+        state.rows.filter { pulls.passes($0.boardRow) }
     }
-
     func issueRows(in state: GlobalPullsState) -> [GlobalIssueRow] {
-        state.issueRows.filter { passes($0.repoKey, $0.searchText) }
+        state.issueRows.filter { issues.passes(BoardRow($0.issue)) }
+    }
+    func reviewRows(in state: GlobalPullsState, me: String?) -> [GlobalPullRow] { state.reviewRows(me: me) }
+
+    /// Counts for the active tab's regular board pickers, across every project.
+    func optionsRows(in state: GlobalPullsState, tab: GlobalBoardTab) -> [BoardRow] {
+        switch tab {
+        case .pulls: return state.rows.map(\.boardRow)
+        case .issues: return state.issueRows.map { BoardRow($0.issue) }
+        case .review: return []
+        }
     }
 
-    func reviewRows(in state: GlobalPullsState, me: String?) -> [GlobalPullRow] {
-        state.reviewRows(me: me).filter { passes($0.repoKey, $0.searchText) }
-    }
-
-    /// The refusals of the projects the picker shows; the search does not hide them.
-    func issueRefusals(in state: GlobalPullsState) -> [GlobalIssueRefusal] {
-        state.issueRefusals.filter { shows($0.project) }
-    }
-
-    /// The truncation notes of the projects the picker shows; the search does not hide them.
-    func issueTruncations(in state: GlobalPullsState) -> [GlobalIssueTruncation] {
-        state.issueTruncations.filter { shows($0.project) }
-    }
-
-    /// Whether the project picker includes this project.
-    func shows(_ project: Project) -> Bool { repo.isEmpty || foldEqual(project.repo, repo) }
-
-    /// Every tab's rows under this filter; the default filter gives the totals the tabs are labelled with.
+    /// Notices stay visible even when none of a project's rows match the filters.
     func board(in state: GlobalPullsState, me: String?) -> GlobalBoardRows {
         GlobalBoardRows(pulls: rows(in: state), issues: issueRows(in: state), review: reviewRows(in: state, me: me),
-                        issueRefusals: issueRefusals(in: state), issueTruncations: issueTruncations(in: state))
-    }
-
-    private func passes(_ rowRepo: String, _ searchText: String) -> Bool {
-        let words = query.lowercased().split(whereSeparator: \.isWhitespace)
-        return (repo.isEmpty || repo.lowercased() == rowRepo) && words.allSatisfy { searchText.contains($0) }
+                        issueRefusals: state.issueRefusals, issueTruncations: state.issueTruncations)
     }
 }
 

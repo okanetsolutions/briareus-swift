@@ -400,29 +400,10 @@ struct BoardScreen: View {
             buttons.append(BoardEdits.reviewLoginButton(asking: { model.dialogOpen = $0 }) { model.objectWillChange.send() })
             buttons.append(refresh)
         default:
-            // The pickers, as the Windows client's selects, and ⟳. C gives them no glyph; the SF Symbol stands in only when the
-            // header is too narrow for labels, where C would draw an empty square.
-            let f = model.filter
-            buttons.append(HeaderButton(glyph: "line.3.horizontal.decrease", label: "\(f.author.isEmpty ? "All authors" : f.author) ▾",
-                                        enabled: model.loaded) { model.pick(.author) })
-            if model.tab == .pulls {
-                buttons.append(HeaderButton(glyph: "person.crop.circle.badge.checkmark", label: "\(f.reviewer.isEmpty ? "All reviewers" : f.reviewer) ▾",
-                                            enabled: model.loaded) { model.pick(.reviewer) })
-            }
-            if model.tab == .issues {
-                let a = f.assignee.isEmpty ? "All assignees" : f.assignee == BoardFilter.noAssignee ? "No assignee" : f.assignee
-                buttons.append(HeaderButton(glyph: "person.crop.circle", label: "\(a) ▾", enabled: model.loaded) { model.pick(.assignee) })
-            }
-            buttons.append(HeaderButton(glyph: "tag", label: "\(f.label.isEmpty ? "All labels" : f.label) ▾",
-                                        enabled: model.loaded) { model.pick(.label) })
-            if model.tab == .pulls {
-                buttons.append(HeaderButton(glyph: "square.stack.3d.up", label: f.hideLaterStacked ? "Show later stacked PRs" : "Hide later stacked PRs",
-                                            tip: "Hide or show stacked pull requests after position 1; keep standalone pull requests visible",
-                                            enabled: model.loaded) { model.toggleLaterStacked() })
-                buttons.append(HeaderButton(glyph: ChecksState.failed.symbol, label: f.hideFailingChecks ? "Show failing checks" : "Hide failing checks",
-                                            tip: "Hide or show pull requests whose checks failed; keep those passing, still running or without checks",
-                                            enabled: model.loaded) { model.toggleFailingChecks() })
-            }
+            buttons += BoardFilterControls.headerButtons(
+                filter: model.filter, kinds: model.tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label],
+                stacked: model.tab == .pulls, enabled: model.loaded, pick: model.pick,
+                toggleLaterStacked: model.toggleLaterStacked, toggleFailingChecks: model.toggleFailingChecks)
             buttons.append(refresh)
         }
         // 🎙 Meet: the meeting assistant, on this project, on every tab; a meeting about it leads the line with its time,

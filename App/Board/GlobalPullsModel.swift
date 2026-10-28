@@ -6,7 +6,7 @@ import Foundation
 @MainActor
 final class GlobalPullsModel: ObservableObject {
     @Published private(set) var state: GlobalPullsState {
-        didSet { filter = filter.reconciled(in: state) }
+        didSet { refilter() }
     }
     @Published var filter = GlobalPullsFilter() {
         didSet { refilter() }
@@ -23,12 +23,21 @@ final class GlobalPullsModel: ObservableObject {
     init() {
         reader = GlobalPullsReader(saved: { Store.shared.cache.value($0) })
         state = reader.state
+        filter = GlobalPullsFilter(saved: Store.shared.cache.value("global-board-filters") ?? .null)
         refilter()
         reconcileActions()
     }
 
     var emptyTitle: String { state.emptyTitle(tab, filter: filter, me: GitHubLogin.current) }
-    func clearFilters() { filter = GlobalPullsFilter() }
+    var currentFilter: BoardFilter {
+        get { filter[tab] }
+        set {
+            filter[tab] = newValue
+            Store.shared.cache.store(filter.saved, "global-board-filters")
+        }
+    }
+    var filterRows: [BoardRow] { filter.optionsRows(in: state, tab: tab) }
+    func clearFilters() { currentFilter = BoardFilter() }
 
     /// The saved GitHub login changed, and with it the Review List.
     func loginChanged() { refilter() }
