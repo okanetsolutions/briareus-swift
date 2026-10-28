@@ -37,9 +37,10 @@ struct GlobalPullsScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if model.tab != .review {
-                    BoardFilterMenu(filter: $model.currentFilter, rows: model.filterRows,
+                    let rows = model.filterRows
+                    BoardFilterMenu(filter: $model.currentFilter, rows: rows,
                                     kinds: model.tab.filterKinds, stacked: model.tab == .pulls)
-                        .disabled(model.filterRows.isEmpty && !model.currentFilter.isOn)
+                        .disabled(rows.isEmpty && !model.currentFilter.isOn)
                 }
             }
         }

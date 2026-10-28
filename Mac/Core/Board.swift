@@ -303,6 +303,11 @@ enum FilterKind: Int, CaseIterable, Sendable {
     }
 }
 
+/// The pickers shared by project and global boards, in their display order.
+func boardFilterKinds(pulls: Bool) -> [FilterKind] {
+    pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label]
+}
+
 struct FilterOption: Equatable, Sendable {
     /// Folded, as the filter keeps its pick.
     var value: String

@@ -9,11 +9,7 @@ enum GlobalBoardTab: Hashable, CaseIterable, Sendable {
     case pulls, issues, review
 
     var filterKinds: [FilterKind] {
-        switch self {
-        case .pulls: return [.author, .reviewer, .label]
-        case .issues: return [.author, .assignee, .label]
-        case .review: return []
-        }
+        self == .review ? [] : boardFilterKinds(pulls: self == .pulls)
     }
     var loadingText: String { self == .issues ? "Loading issues…" : "Loading pull requests…" }
     /// The symbol an empty tab shows, the one the project board's rows use.

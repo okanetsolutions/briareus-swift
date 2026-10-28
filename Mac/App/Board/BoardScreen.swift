@@ -401,7 +401,7 @@ struct BoardScreen: View {
             buttons.append(refresh)
         default:
             buttons += BoardFilterControls.headerButtons(
-                filter: model.filter, kinds: model.tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label],
+                filter: model.filter, kinds: boardFilterKinds(pulls: model.tab == .pulls),
                 stacked: model.tab == .pulls, enabled: model.loaded, pick: model.pick,
                 toggleLaterStacked: model.toggleLaterStacked, toggleFailingChecks: model.toggleFailingChecks)
             buttons.append(refresh)
