@@ -39,6 +39,7 @@ final class ProjectsModel: ObservableObject {
     private var generation = 0
     private var observers: [NSObjectProtocol] = []
     private var signOut: AnyCancellable?
+    private var recountTask: Task<Void, Never>?
 
     private init() {
         if let saved = Store.shared.cache.value("projects") { adopt(saved); recount() }
@@ -71,20 +72,32 @@ final class ProjectsModel: ObservableObject {
 
     func adopt(_ answer: JSON) {
         guard let list = Project.parseList(answer) else { return }
-        raw = answer
-        projects = list
-        loaded = true
+        if raw != answer { raw = answer }
+        if projects != list { projects = list }
+        if !loaded { loaded = true }
     }
 
     private func reset() {
         generation += 1
+        recountTask?.cancel(); recountTask = nil
         allSessions = AllSessions(sessions: [], projects: []); sessionsLoaded = false; sessionsError = nil
         projects = []; raw = .null; findingsWaiting = 0; counts = [:]; busy = [:]; overview = SessionOverview([])
         loaded = false; error = nil; openProject = nil; showingAllSessions = false
     }
 
+    /// Catch-up delivers every session separately; rebuild the cross-project lists once per burst.
+    func scheduleRecount() {
+        guard recountTask == nil else { return }
+        recountTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+            self?.recount()
+        }
+    }
+
     /// projects_count: what the saved lists say about each project's conversations, and the ⚑ count across them.
     func recount() {
+        recountTask?.cancel(); recountTask = nil
         var counts: [String: Int] = [:], busy: [String: Bool] = [:]
         var waiting = 0
         var all: [Session] = []
@@ -125,7 +138,7 @@ final class ProjectsModel: ObservableObject {
         }
         guard mine == generation else { return nil }
         adopt(answer)
-        error = nil
+        if error != nil { error = nil }
         Store.shared.cache.store(answer, "projects")
         recount()
         // The approvals agents wait on count on the ⚑ too.
@@ -158,12 +171,9 @@ final class ProjectsModel: ObservableObject {
     /// then asks the server again in case the list changed in other ways too.
     func forget(repo: String?, id: String?) {
         guard let repo, !repo.isEmpty, let id, !id.isEmpty else { return }
-        let key = "sessions:\(repo)"
-        if let saved = Store.shared.cache.value(key), let items = Session.parseList(saved) {
-            Store.shared.cache.store(Session.json(items.filter { $0.id != id }), key)
-        }
+        _ = Store.shared.cache.removeSession(id, repo: repo)
         Store.shared.cache.remove("transcript:\(id)")
-        recount()
+        scheduleRecount()
         guard let open = openProject, open.project.repo == repo else { return }
         open.drop(id)
         Task { await open.load() }
@@ -216,7 +226,7 @@ final class SessionFeed: ObservableObject {
         switch SessionsEvent(event, j) {
         case .session(let s)?:
             guard let repo = s.repo else { return }
-            _ = cache.upsertSession(s, repo: repo)
+            if cache.upsertSession(s, repo: repo) != nil { ProjectsModel.shared.scheduleRecount() }
             post(.sessionLive, ["repo": repo, "session": s.raw])
         case .deleted(let id)?:
             for p in ProjectsModel.shared.projects {
@@ -227,6 +237,5 @@ final class SessionFeed: ObservableObject {
             }
         case nil: return
         }
-        ProjectsModel.shared.recount()
     }
 }
