@@ -5,6 +5,18 @@
 import Foundation
 
 struct PullRecord {
+    enum MergeBlocker: Equatable, Sendable {
+        case notOpen, draft, missingCommit
+
+        var message: String {
+            switch self {
+            case .notOpen: return "This pull request is no longer open."
+            case .draft: return "This pull request is now a draft."
+            case .missingCommit: return "The server did not say which commit to merge."
+            }
+        }
+    }
+
     let number: Int
     /// The `pull` answer's `pr`; null until it has come.
     var pr: JSON
@@ -37,7 +49,14 @@ struct PullRecord {
         return (head, base)
     }
     /// Merge is offered on an open pull request read at a known head and base, and not on a draft.
-    var mergeable: Bool { readAt != nil && !pr["draft"].is(true) }
+    var mergeable: Bool { mergeBlocker == nil }
+    /// A fresh read may refuse a merge that the board's older summary offered.
+    var mergeBlocker: MergeBlocker? {
+        guard pr["state"].string == "open" else { return .notOpen }
+        guard !pr["draft"].is(true) else { return .draft }
+        guard readAt != nil else { return .missingCommit }
+        return nil
+    }
     var branchUpdatable: Bool { readAt != nil }
     /// Errands start on an open pull request with a branch.
     var takesErrands: Bool { isOpen && pr["headRef"].string != nil }

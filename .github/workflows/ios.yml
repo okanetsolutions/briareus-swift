@@ -30,6 +30,14 @@ jobs:
         run: |
           swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/ProjectFeed.swift scripts/check_project_feed.swift -o "$RUNNER_TEMP/check-project-feed"
           "$RUNNER_TEMP/check-project-feed"
+      - name: Check global pull reads and catalog throttling
+        run: |
+          swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift Mac/App/Board/BoardModel+Reading.swift Mac/App/Board/GlobalPullsModel.swift scripts/check_global_pulls.swift -o "$RUNNER_TEMP/check-global-pulls"
+          "$RUNNER_TEMP/check-global-pulls"
+      - name: Check phone global board progress during slow auxiliary reads
+        run: |
+          swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/ProjectFeed.swift App/Board/GlobalPullsModel.swift scripts/check_phone_global_pulls.swift -o "$RUNNER_TEMP/check-phone-global-pulls"
+          "$RUNNER_TEMP/check-phone-global-pulls"
   structure:
     name: Structure guardrails
     runs-on: ubuntu-latest

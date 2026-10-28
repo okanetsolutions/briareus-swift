@@ -270,12 +270,20 @@ final class GlobalPullsReader {
     private var waiting: [CheckedContinuation<Void, Never>] = []
     private var freshGeneration = 0
     private var lastFreshError: APIError?
+    private var boardRevisions: [String: Int] = [:]
     private var refreshCount = 0
 
     init(saved: (String) -> JSON?) {
         if let answer = saved("projects"), let projects = Project.parseList(answer) {
             state.replaceProjects(projects, saved: { saved("pulls:\($0)") })
         }
+    }
+
+    /// A row action refreshed one project's board; update every tab without waiting for the next poll.
+    func adopt(_ board: JSON, repo: String) throws {
+        guard let index = state.projects.firstIndex(where: { foldEqual($0.project.repo, repo) }) else { return }
+        try state.projects[index].adopt(board)
+        boardRevisions[repo.lowercased(), default: 0] += 1
     }
 
     /// A nil board means its shared cooldown is still running; retain its rows and report that updates are delayed.
@@ -330,12 +338,16 @@ final class GlobalPullsReader {
             return loadError
         }
         for index in state.projects.indices {
+            let repo = state.projects[index].project.repo
+            let revision = boardRevisions[repo.lowercased(), default: 0]
             do {
                 try Task.checkCancellation()
                 guard current() else { throw CancellationError() }
-                let answer = try await read(state.projects[index].project.repo)
+                let answer = try await read(repo)
                 try Task.checkCancellation()
                 guard current() else { throw CancellationError() }
+                // A row action may have refreshed this repository while its poll was in flight.
+                guard revision == boardRevisions[repo.lowercased(), default: 0] else { continue }
                 if let answer { try state.projects[index].adopt(answer) }
                 else if let error = cooldownError(state.projects[index].project.repo) { throw error }
                 else if state.projects[index].error == nil { state.projects[index].error = APIError(.http, status: 429) }
@@ -345,7 +357,7 @@ final class GlobalPullsReader {
                     loadError = failed(error, current: current())
                     return loadError
                 }
-                state.projects[index].error = error
+                if revision == boardRevisions[repo.lowercased(), default: 0] { state.projects[index].error = error }
             }
             changed(state)
         }
