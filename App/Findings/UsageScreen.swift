@@ -6,8 +6,8 @@
 import Charts
 import SwiftUI
 
-struct UsageScreen: View {
-    @StateObject private var model = UsageModel()
+struct UsageLedgerPanel: View {
+    @ObservedObject var model: UsageModel
     @ObservedObject private var store = Store.shared
     @ObservedObject private var projects = ProjectsModel.shared
     @Environment(\.navigate) private var navigate
@@ -44,7 +44,6 @@ struct UsageScreen: View {
             }
             ToolbarItem(placement: .topBarTrailing) { filterMenu }
         }
-        ToolbarItem(placement: .topBarTrailing) { OpenInWindowButton(page: .usage) }
     }
 
     /// One submenu per filter: All, then the window's choices; the project and model pickers tick several.

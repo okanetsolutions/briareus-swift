@@ -15,6 +15,16 @@ struct SSHMonitoringScreen: View {
     }
 
     var body: some View {
+        Group {
+            if embedded { serverList }
+            else { serverList.navigationTitle(model.title) }
+        }
+        .task { await model.follow() }
+        .refreshable { await model.load() }
+        .onDisappear { model.hideCredential() }
+    }
+
+    private var serverList: some View {
         List {
             if let error = model.error { ErrorNotice(message: error) }
             if !model.available {
@@ -45,10 +55,6 @@ struct SSHMonitoringScreen: View {
                 SSHMonitorControls(model: model)
             }
         }
-        .navigationTitle(embedded ? "Server" : model.title)
-        .task { await model.follow() }
-        .refreshable { await model.load() }
-        .onDisappear { model.hideCredential() }
     }
     private func open(_ id: Double) {
         if let selectServer { selectServer(id) }

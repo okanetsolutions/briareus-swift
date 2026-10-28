@@ -3,20 +3,28 @@ import SwiftUI
 
 struct ServerStatsScreen: View {
     @State private var width: CGFloat = 0
-    @StateObject private var model = ServerStatsModel()
+    @StateObject private var model: ServerStatsModel
+    private let embedded: Bool
     @State private var monitoredServerID: Double?
     @ObservedObject private var store = Store.shared
 
+    init(model: ServerStatsModel? = nil, embedded: Bool = false) {
+        _model = StateObject(wrappedValue: model ?? ServerStatsModel())
+        self.embedded = embedded
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            PaneHeader(title: "\u{25A4} Server", subtitle: model.server.map { "\($0.host.cpus) cores \u{00B7} \($0.openSessions) open sessions" },
-                       buttons: model.tab == .sshServers ? [] : [HeaderButton(glyph: "arrow.clockwise", tip: "Refresh this tab") { Task { await model.load() } }])
-            TabNav {
-                ForEach(model.tabs) { tab in
-                    TabNavItem(title: tab.title, active: model.tab == tab) { model.tab = tab }
-                        .accessibilityAddTraits(model.tab == tab ? .isSelected : [])
-                }
-            }.padding(.horizontal, Theme.paneMargin)
+            if !embedded {
+                PaneHeader(title: "\u{25A4} Server", subtitle: model.server.map { "\($0.host.cpus) cores \u{00B7} \($0.openSessions) open sessions" },
+                           buttons: model.tab == .sshServers ? [] : [HeaderButton(glyph: "arrow.clockwise", tip: "Refresh this tab") { Task { await model.load() } }])
+                TabNav {
+                    ForEach(model.tabs) { tab in
+                        TabNavItem(title: tab.title, active: model.tab == tab) { model.tab = tab }
+                            .accessibilityAddTraits(model.tab == tab ? .isSelected : [])
+                    }
+                }.padding(.horizontal, Theme.paneMargin)
+            }
             if model.tabs.isEmpty {
                 EmptyNote(title: "This server does not report its resources.")
             } else if model.tab == .sshServers {

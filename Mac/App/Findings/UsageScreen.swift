@@ -8,36 +8,19 @@ private typealias MeasuredFont = FDKit.MeasuredFont
 
 // MARK: - Screen
 
-struct UsageScreen: View {
-    @StateObject private var model = UsageModel.kept()
+struct UsageLedgerPanel: View {
+    @ObservedObject var model: UsageModel
     @ObservedObject private var store = Store.shared
     @State private var width: CGFloat = 0
 
-    private var subtitle: String? {
-        guard let u = model.shown else { return nil }
-        return model.query.subtitle(u, options: model.options ?? .null)
-    }
-    private var buttons: [HeaderButton] {
-        guard store.supports("usage_all") else { return [] }
-        return [
-            HeaderButton(glyph: Glyph.symbol(0xE787), label: "\(model.query.periodLabel) \u{25BE}", tip: "The window every number on this page is over") {
-                model.pickPeriod()
-            },
-            HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the usage ledger again", enabled: !model.loading) { model.load() },
-        ]
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            PaneHeader(title: "\u{1F4CA} Usage", subtitle: subtitle, buttons: buttons)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Color.clear.frame(height: 14)
-                    content
-                }
-                .padding(.horizontal, Theme.paneMargin)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                Color.clear.frame(height: 14)
+                content
             }
+            .padding(.horizontal, Theme.paneMargin)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await poll(every: 60) { await model.tick() } }
         .onDisappear { model.stop() }

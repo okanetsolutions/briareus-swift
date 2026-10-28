@@ -35,6 +35,7 @@ struct SSHMonitoringScreen: View {
         }
         .task { await model.follow() }
         .onDisappear { model.hideCredential() }
+        .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await model.load() } }
     }
     @ViewBuilder private var content: some View {
         if let error = model.error { NoticeBox(message: error) }

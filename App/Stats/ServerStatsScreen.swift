@@ -2,14 +2,20 @@
 import SwiftUI
 
 struct ServerStatsScreen: View {
-    @StateObject private var model = ServerStatsModel()
+    @StateObject private var model: ServerStatsModel
+    private let embedded: Bool
     @State private var monitoredServerID: Double?
     @EnvironmentObject private var store: Store
     @Environment(\.navigate) private var navigate
 
+    init(model: ServerStatsModel? = nil, embedded: Bool = false) {
+        _model = StateObject(wrappedValue: model ?? ServerStatsModel())
+        self.embedded = embedded
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            ServerDashboardTabs(tabs: model.tabs, selection: $model.tab)
+            if !embedded { DashboardTabStrip(tabs: model.tabs, selection: $model.tab, title: { $0.title }) }
             if model.tabs.isEmpty {
                 ContentUnavailableView("Not Reported", systemImage: "gauge.with.dots.needle.33percent",
                                        description: Text("This server does not report its resources."))
@@ -24,7 +30,7 @@ struct ServerStatsScreen: View {
                 .refreshable { await model.load() }
             }
         }
-        .navigationTitle("Server")
+        .navigationTitle(embedded ? "Usage" : "Server")
         .task(id: model.tab) { await model.follow() }
     }
 
@@ -55,34 +61,6 @@ struct ServerStatsScreen: View {
             case .sessions, .sshServers: EmptyView()
             }
         } else if model.error == nil { ProgressView() }
-    }
-}
-
-/// Scrollable system buttons keep every tab readable at large text sizes and on narrow phones.
-private struct ServerDashboardTabs: View {
-    var tabs: [ServerDashboardTab]
-    @Binding var selection: ServerDashboardTab
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(tabs) { tab in
-                        Button { selection = tab } label: {
-                            Text(tab.title).font(.subheadline.weight(selection == tab ? .semibold : .regular))
-                                .padding(.horizontal, 12).frame(minHeight: 44)
-                                .background(selection == tab ? Theme.accent.opacity(0.12) : Color.clear, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(selection == tab ? Theme.accent : Theme.muted)
-                        .accessibilityAddTraits(selection == tab ? .isSelected : [])
-                        .id(tab)
-                    }
-                }.padding(.horizontal).padding(.vertical, 6)
-            }
-            .scrollIndicators(.hidden)
-            .onChange(of: selection) { _, tab in proxy.scrollTo(tab, anchor: .center) }
-        }
-        .background(.bar)
     }
 }
 

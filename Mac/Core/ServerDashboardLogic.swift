@@ -1,7 +1,7 @@
 // The Server page's tabs and the reads each visible panel needs, shared by both apps.
 import Foundation
 
-enum ServerDashboardTab: String, CaseIterable, Identifiable, Sendable {
+enum ServerDashboardTab: String, CaseIterable, Hashable, Identifiable, Sendable {
     case overview, history, disks, sessions, sshServers
 
     var id: String { rawValue }
