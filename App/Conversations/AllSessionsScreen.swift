@@ -35,11 +35,14 @@ private struct AllSessionsRows: View {
     let list: AllSessions
     let loaded: Bool
     let failed: Bool
+    /// How many conversations are drawn; Show more adds a page.
+    @State private var limit = conversationPageSize
 
     var body: some View {
         let rows = list.shown
+        let page = conversationPage(rows, limit: limit)
         Section {
-            ForEach(rows, id: \.id) { session in
+            ForEach(page.rows, id: \.id) { session in
                 DestinationLink(destination: .conversation(id: session.id, session: session.raw)) {
                     VStack(alignment: .leading, spacing: 4) {
                         ConversationRowLabel(session: session)
@@ -48,6 +51,7 @@ private struct AllSessionsRows: View {
                     .accessibilityElement(children: .combine)
                 }
             }
+            if page.hidden > 0 { ShowMoreRow(hidden: page.hidden) { limit += conversationPageSize } }
             if loaded && rows.isEmpty {
                 ContentUnavailableView(list.emptyState.title, systemImage: "bubble.left.and.text.bubble.right")
             }

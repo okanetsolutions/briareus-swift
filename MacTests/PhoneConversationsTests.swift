@@ -59,6 +59,27 @@ final class PhoneConversationsTests: XCTestCase {
         XCTAssertEqual(conversationsShown(list, search: " LOGIN ", showClosed: true).map(\.id), ["a", "b"])
         XCTAssertEqual(conversationsShown([session(["id": "d"])], search: "new", showClosed: false).map(\.id), ["d"])
     }
+    func testPageStopsAtTheLimitAndCountsTheRest() {
+        let list = (0..<5).map { session(["id": .string("s\($0)")]) }
+        let page = conversationPage(list, limit: 3)
+        XCTAssertEqual(page.rows.map(\.id), ["s0", "s1", "s2"])
+        XCTAssertEqual(page.hidden, 2)
+        XCTAssertEqual(conversationPage(list, limit: 9).hidden, 0)
+        XCTAssertEqual(conversationPage(list, limit: -1).rows.count, 0)
+        XCTAssertEqual(conversationPage(list, limit: -1).hidden, 5)
+    }
+    func testGroupsLimitOnlyRecentAndSelectOnlyWhatIsDrawn() {
+        let pinned = session(["id": "pin", "pinnedAt": "2026-10-28T00:00:00Z"])
+        let working = session(["id": "work", "status": "running"])
+        let recent = (0..<4).map { session(["id": .string("r\($0)")]) }
+        let groups = ConversationGroups([pinned, working] + recent, limit: 1)
+        XCTAssertEqual(groups.pinned.map(\.id), ["pin"])
+        XCTAssertEqual(groups.active.map(\.id), ["work"])
+        XCTAssertEqual(groups.recent.map(\.id), ["r0"])
+        XCTAssertEqual(groups.hidden, 3)
+        XCTAssertEqual(groups.drawnIDs, ["pin", "work", "r0"])
+        XCTAssertEqual(ConversationGroups([pinned, working] + recent).hidden, 0)
+    }
     func testBulkCloseTakesOnlyOpenConversations() {
         let list = [session(["id": "a", "status": "running"]), session(["id": "b", "status": "closed"]),
                     session(["id": "c", "status": "failed"]), session(["id": "d", "status": "idle"])]

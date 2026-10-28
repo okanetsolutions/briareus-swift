@@ -26,7 +26,7 @@ final class BoardPullActionsModel: ObservableObject {
 
     func checked() { errands.checked(); mergeNote = nil }
 
-    func runs(on number: Int) -> BoardPullRuns { BoardPullRuns(feed.sessions, number: number) }
+    func runs(on number: Int) -> BoardPullRuns { feed.pullRuns[number] ?? BoardPullRuns() }
 
     /// Read the current head before merging: a list summary never authorizes a different commit.
     func merge(_ pull: PullSummary, reload: (@MainActor () async -> Void)? = nil) {

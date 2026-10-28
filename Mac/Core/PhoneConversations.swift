@@ -48,15 +48,21 @@ extension Session {
 // MARK: - The list
 
 /// Pins lead the project's list even when an unpinned conversation is working.
+/// Pinned and working ones are always drawn whole; the rest stop at `limit`, the others left for Show more.
 struct ConversationGroups: Equatable, Sendable {
     let pinned: [Session]
     let active: [Session]
     let recent: [Session]
-    init(_ sessions: [Session]) {
+    /// The recent conversations past the limit, not drawn.
+    let hidden: Int
+    init(_ sessions: [Session], limit: Int = .max) {
         pinned = sessions.filter(\.isPinned).orderedByPins()
         active = sessions.filter { !$0.isPinned && $0.isActive }
-        recent = sessions.filter { !$0.isPinned && !$0.isActive }
+        let page = conversationPage(sessions.filter { !$0.isPinned && !$0.isActive }, limit: limit)
+        recent = Array(page.rows); hidden = page.hidden
     }
+    /// The ids of every row drawn, which is all Select All picks: never a conversation the user cannot see.
+    var drawnIDs: Set<String> { Set((pinned + active + recent).map(\.id)) }
 }
 
 /// The conversations a project's list shows: closed ones only when asked for, and those whose title holds the search.
@@ -65,6 +71,16 @@ func conversationsShown(_ sessions: [Session], search: String, showClosed: Bool)
     return sessions.filter { s in
         (showClosed || s.status != "closed") && (needle.isEmpty || s.displayTitle.localizedCaseInsensitiveContains(needle))
     }
+}
+
+/// How many rows a long conversation list draws at first and adds per Show more: drawing and diffing every closed
+/// conversation on each live update is what made the lists slow.
+let conversationPageSize = 50
+
+/// The first `limit` rows of a list, and how many it leaves for Show more.
+func conversationPage(_ sessions: [Session], limit: Int) -> (rows: ArraySlice<Session>, hidden: Int) {
+    let rows = sessions.prefix(max(0, limit))
+    return (rows, sessions.count - rows.count)
 }
 
 /// Still holding a workspace and a database: the only kind a Close has anything to release.
