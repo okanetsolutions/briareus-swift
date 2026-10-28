@@ -55,6 +55,7 @@ struct Discovery: Sendable {
 /// One route the server lists: its method, its path with `{...}` for each parameter, and the least permission that may call it.
 struct Route: Equatable, Sendable {
     var method: String, path: String, access: String
+    var bodyFields: [String] = []
 
     /// Reads the server's OpenAPI document (`paths`, with `x-briareus-access` on each operation) or a saved list of routes.
     static func parse(_ value: JSON) -> [Route]? {
@@ -62,7 +63,7 @@ struct Route: Equatable, Sendable {
             var out: [Route] = []
             for entry in saved {
                 guard let m = entry["method"].string, let p = entry["path"].string, let a = entry["access"].string else { return nil }
-                out.append(Route(method: m, path: p, access: a))
+                out.append(Route(method: m, path: p, access: a, bodyFields: entry["bodyFields"].strings))
             }
             return out
         }
@@ -73,13 +74,19 @@ struct Route: Equatable, Sendable {
                 let op = paths[path]![method.lowercased()]
                 guard op.isObject else { continue }
                 // A route that says nothing about who may call it is the operator's.
-                out.append(Route(method: method, path: path, access: op["x-briareus-access"].string ?? "admin"))
+                out.append(Route(method: method, path: path, access: op["x-briareus-access"].string ?? "admin",
+                                 bodyFields: op["requestBody"]["content"]["application/json"]["schema"]["properties"].object.map { Array($0.keys).sorted() } ?? []))
             }
         }
         return out
     }
     static func json(_ routes: [Route]) -> JSON {
-        .array(routes.map { ["method": .string($0.method), "path": .string($0.path), "access": .string($0.access)] })
+        .array(routes.map { ["method": .string($0.method), "path": .string($0.path), "access": .string($0.access), "bodyFields": JSON($0.bodyFields)] })
+    }
+
+    static func supportsBodyField(_ routes: [Route], route: APIRoute) -> Bool {
+        guard let field = route.bodyField else { return true }
+        return routes.contains { $0.method == route.method && match($0.path, route.path) != nil && $0.bodyFields.contains(field) }
     }
 
     /// Segment by segment, a parameter standing for any one segment. Leading and trailing slashes do not count.

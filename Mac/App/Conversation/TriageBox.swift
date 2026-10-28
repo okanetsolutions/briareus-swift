@@ -39,7 +39,7 @@ struct TriageBox: View {
                 .buttonStyle(.plain)
                 .padding(.bottom, 8)
             }
-            Button(triageCompleteTitle(takesVerdicts: takes, fixes: fixes)) { model.completeTriage(fixes: fixes) }
+            Button(triageCompleteTitle(takesVerdicts: takes, fixes: fixes, externalFeedback: triage["externalFeedback"].is(true))) { model.completeTriage(fixes: fixes) }
                 .dashButton(.prominent).disabled(!enabled)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
@@ -66,6 +66,7 @@ struct TriageBox: View {
         if let location = findingLocation(f) {
             Text(location).font(Theme.monoCaption2).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.tail).padding(.top, 3)
         }
+        if let details = FeedbackAssessmentDetails(f) { FeedbackAssessmentView(details: details) }
         if let why = f["parkedWhy"].string {
             SelectableText(why, font: SelectableFont.system(12), color: Theme.muted).padding(.top, 3)
         }

@@ -35,6 +35,9 @@ struct ScreenView: View {
         case .mailWake(let session): MailWakeScreen(session: session)
         case .sessionStats(let session): SessionStatsScreen(session: session)
         case .serverStats: ServerStatsScreen()
+        case .sshMonitoring(let id): SSHMonitoringScreen(serverID: id)
+        case .personalConnection(let kind): PersonalConnectionScreen(kind: kind)
+        case .sharing: SharingScreen()
         case .sshServers: SSHServersScreen()
         }
     }

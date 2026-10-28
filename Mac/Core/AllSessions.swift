@@ -37,6 +37,7 @@ struct AllSessions: Equatable, Sendable {
     /// The open sessions, working ones first, then newest created; equal or missing dates use the session id for stability.
     var shown: [Session] {
         sessions.filter { !$0.isClosed }.sorted { lhs, rhs in
+            if lhs.pinnedAt != rhs.pinnedAt { return (lhs.pinnedAt ?? "") > (rhs.pinnedAt ?? "") }
             if lhs.isActive != rhs.isActive { return lhs.isActive }
             let left = boardDateEpoch(lhs.raw["createdAt"].string) ?? 0
             let right = boardDateEpoch(rhs.raw["createdAt"].string) ?? 0

@@ -214,12 +214,19 @@ func appendDictation(_ current: String, _ text: String) -> String {
 
 /// The round's title: "Round 2 findings · PR #70", or "Review findings".
 func triageTitle(_ triage: JSON) -> String {
+    if triage["externalFeedback"].is(true) { return "Feedback assessment · PR #\(heldRoundPRNumber(triage) ?? 0)" }
     var title = triage["round"].truncatedInt.map { "Round \($0) findings" } ?? "Review findings"
     if let pr = triage["prNumber"].truncatedInt { title += " \u{00B7} PR #\(pr)" }
     return title
 }
+/// A stale feedback assessment must be rerun; ordinary loop rounds can review the moved branch.
+func triageStaleMessage(_ triage: JSON) -> String {
+    triage["externalFeedback"].is(true)
+        ? "The pull request or source feedback changed. Run Implement feedback again before selecting fixes; completing with nothing to fix discards this assessment."
+        : "The branch moved after this round was reviewed: some findings may already be fixed. Sending with nothing to fix reviews the new commits instead of closing the loop."
+}
 /// A round takes verdicts unless the server says it is not this user's (`mine: false`).
-func triageTakesVerdicts(_ triage: JSON) -> Bool { triage["mine"].bool != false }
+func triageTakesVerdicts(_ triage: JSON) -> Bool { triage["externalFeedback"].is(true) || triage["mine"].bool != false }
 /// "file.ts:12", or nil without a file.
 func findingLocation(_ finding: JSON) -> String? {
     guard let file = finding["file"].string else { return nil }
@@ -227,8 +234,9 @@ func findingLocation(_ finding: JSON) -> String? {
     return file
 }
 /// The Complete button's title.
-func triageCompleteTitle(takesVerdicts: Bool, fixes: Int) -> String {
+func triageCompleteTitle(takesVerdicts: Bool, fixes: Int, externalFeedback: Bool = false) -> String {
     guard takesVerdicts else { return "Complete" }
+    if externalFeedback && fixes == 0 { return "Complete assessment · nothing to fix" }
     return fixes > 0 ? "Complete \u{00B7} send \(fixes) to be fixed" : "Complete \u{00B7} nothing to fix, approve and close"
 }
 /// The confirmation before completing.

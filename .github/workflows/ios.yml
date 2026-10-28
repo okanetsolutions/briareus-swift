@@ -38,6 +38,10 @@ jobs:
         run: |
           swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/ProjectFeed.swift App/Board/GlobalPullsModel.swift scripts/check_phone_global_pulls.swift -o "$RUNNER_TEMP/check-phone-global-pulls"
           "$RUNNER_TEMP/check-phone-global-pulls"
+      - name: Check personal connections, sharing and monitor credential lifecycle
+        run: |
+          swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/Settings/PersonalConnectionModel.swift App/Settings/SharingModel.swift App/Stats/SSHMonitoringModel.swift scripts/check_client_updates.swift -o "$RUNNER_TEMP/check-client-updates"
+          "$RUNNER_TEMP/check-client-updates"
   structure:
     name: Structure guardrails
     runs-on: ubuntu-latest

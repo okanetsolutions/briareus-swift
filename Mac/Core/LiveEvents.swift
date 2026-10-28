@@ -34,7 +34,17 @@ extension Array where Element == Session {
         } else {
             list.insert(s, at: 0)
         }
-        return list
+        return list.orderedByPins()
+    }
+    /// Pinned records lead after both live changes and cached reads; unpinned rows keep their existing order.
+    func orderedByPins() -> [Session] {
+        enumerated().sorted { a, b in
+            let left = a.element.pinnedAt ?? "", right = b.element.pinnedAt ?? ""
+            if left != right { return left > right }
+            let createdA = boardDateEpoch(a.element.raw["createdAt"].string) ?? 0
+            let createdB = boardDateEpoch(b.element.raw["createdAt"].string) ?? 0
+            return createdA == createdB ? a.offset < b.offset : createdA > createdB
+        }.map(\.element)
     }
     /// The list without a deleted session, or nil when it was not in it.
     func removing(_ id: String) -> [Session]? {

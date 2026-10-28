@@ -102,6 +102,11 @@ struct Session: Equatable, Sendable {
     var isActive: Bool { ["queued", "preparing", "running", "starting"].contains(status) }
     /// Closed: it takes no messages until it is reopened, and its rows are drawn dimmed.
     var isClosed: Bool { status == "closed" }
+    var pinnedAt: String? { raw["pinnedAt"].nonEmpty }
+    var isPinned: Bool { pinnedAt != nil }
+    var pinLabel: String { isPinned ? "Unpin session" : "Pin session" }
+    var pinSymbol: String { isPinned ? "pin.slash" : "pin" }
+    var pinBody: JSON { ["pinned": .bool(!isPinned)] }
     var liveInput: Bool { raw["liveInput"].is(true) }
     /// Background work the running turn still waits on: sub-agents, Monitors and background shell commands.
     var backgroundTasks: [BackgroundTask] { raw["backgroundTasks"].items.compactMap(BackgroundTask.init) }
@@ -193,7 +198,7 @@ func heldRoundPRNumber(_ held: JSON) -> Int? {
 }
 /// A hand-started review says whose pull request it is; a loop round is always the user's, and takes verdicts.
 func heldRoundIsMine(_ held: JSON) -> Bool {
-    if !held["standalone"].isSet { return true }
+    if held["externalFeedback"].is(true) || !held["standalone"].isSet { return true }
     return held["mine"].is(true)
 }
 /// What `complete_findings` answered, in the Windows client's words; `danger` is set when the verdicts led nowhere.

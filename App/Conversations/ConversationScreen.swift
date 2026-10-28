@@ -4,7 +4,6 @@
 // decision shows as a banner over the composer that opens its card. The session's shared browser opens over it all from
 // the menu, or from its 🌐 line over the transcript while it is on.
 import SwiftUI
-
 struct ConversationScreen: View {
     let sessionID: String
     let initial: JSON?
@@ -80,7 +79,7 @@ struct ConversationScreen: View {
         .fullScreenCover(isPresented: $showingBrowser) { SharedBrowserScreen(session: session.raw).environmentObject(store) }
     }
 
-    // MARK: Transcript
+    // Transcript
 
     private var content: some View {
         ScrollViewReader { proxy in
@@ -146,7 +145,7 @@ struct ConversationScreen: View {
         withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
     }
 
-    // MARK: Header
+    // Header
 
     /// The title with the state and runtime under it; a tap opens the details.
     private var heading: some View {
@@ -215,7 +214,7 @@ struct ConversationScreen: View {
         }
     }
 
-    // MARK: Review round
+    // Review round
 
     @ViewBuilder private var triageBanner: some View {
         if let triage = session.heldTriage, store.supports("complete_findings") {
@@ -256,7 +255,7 @@ struct ConversationScreen: View {
         .presentationDetents([.medium, .large])
     }
 
-    // MARK: Actions
+    // Actions
 
     /// Opens a voice call held to this conversation: what the user says for the agent is sent, and what it answers is
     /// read aloud. It needs a token that may write, as it messages and stops the agent.
@@ -306,6 +305,7 @@ struct ConversationScreen: View {
                 }
             }
             Section {
+                SessionPinButton(model: model)
                 if store.supports("rename") {
                     Button("Rename", systemImage: "pencil") { newTitle = s.displayTitle; renaming = true }.disabled(!can)
                 }

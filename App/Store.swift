@@ -49,6 +49,7 @@ final class Store: ObservableObject {
     func supports(_ call: String) -> Bool {
         guard let route = APIRoute.named(call), let device else { return false }
         return Route.allow(routes, method: route.method, path: route.path, permission: device.permission)
+            && Route.supportsBodyField(routes, route: route)
     }
     /// Files can go with a message (`message`, or `start_session` for a session's first prompt): the server takes uploads
     /// and that call, and this token may write.

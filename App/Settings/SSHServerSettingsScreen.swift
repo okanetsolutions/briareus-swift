@@ -52,6 +52,9 @@ struct SSHServerSettingsScreen: View {
                     Section { EmptyView() } footer: { subtitle }
                 }
                 SettingsErrorSection(error: model.error)
+                if state.id != 0 && store.supports("ssh_monitoring") {
+                    Section { DestinationLink(destination: .sshMonitoring(serverID: state.id)) { Label("Resources and monitoring", systemImage: "gauge.with.dots.needle.33percent") } }
+                }
                 switch state.offersDatabase ? model.tab : .server {
                 case .server: serverTab
                 case .database: databaseTab

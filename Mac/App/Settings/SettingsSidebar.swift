@@ -26,7 +26,7 @@ struct SettingsSidebar: View {
             .focusEffectDisabled()
             // Backspace and Escape leave Settings as ← Back to sessions does, so a form with changes is asked first.
             .onKeyPress(keys: [.escape, .delete]) { _ in back(); return .handled }
-            footer
+            SettingsSidebarFooter()
         }
         .background(Theme.sidebar)
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in model.refresh() }
@@ -37,6 +37,7 @@ struct SettingsSidebar: View {
     @ViewBuilder private var content: some View {
         // This computer's own settings come first: they need no Admin token.
         ThisComputerRows(selected: selected == Screen.meetingSettings.id)
+        ClientSettingsRows(selected: selected)
         // Mail under This computer, each mailbox a row as a project is (Windows #141).
         if MailSettingsModel.offered { MailSettingsRows(selected: selected) }
         let why = settingsUnavailable("settings_projects", path: "settings/projects", what: "Project settings", manage: "projects")
@@ -239,28 +240,6 @@ struct SettingsSidebar: View {
     }
 
     // MARK: Foot
-
-    /// The foot, as the Windows client's settings page has it: `Settings` and `⎋ Sign out`, 12px muted, above a border.
-    private var footer: some View {
-        VStack(spacing: 0) {
-            Rectangle().fill(Theme.line).frame(height: 1).padding(.horizontal, 10).padding(.top, 6)
-            HStack(spacing: 8) {
-                Text("Settings").font(Theme.caption).foregroundStyle(Theme.muted)
-                Spacer(minLength: 8)
-                Button(action: signOut) { Text("⎋ Sign out").font(Theme.caption) }.buttonStyle(HoverInkStyle())
-            }
-            .frame(height: 18)
-            .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 12)
-        }
-        .background(Theme.sidebar)
-    }
-
-    private func signOut() {
-        guard Dialogs.confirm("Sign out of this server?",
-                              "The device token and the saved conversations are removed from this computer. Revoke the token itself in web Settings.",
-                              continueLabel: "Sign out", destructive: true) else { return }
-        store.forget()
-    }
 
     /// The settings forms go with the sidebar that opened them, unless one keeps its unsaved changes.
     private func back() {

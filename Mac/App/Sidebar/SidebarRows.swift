@@ -98,6 +98,7 @@ struct SidebarSessionRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 7) {
                         mark
+                        if session.isPinned { Image(systemName: "pin.fill").font(Theme.caption).accessibilityLabel("Pinned") }
                         Text(session.displayTitle).font(Theme.subheadline).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
                         Spacer(minLength: 0)
                     }

@@ -144,6 +144,8 @@ struct APIRoute: Sendable {
     var set: String? = nil, filter: String? = nil, list: String? = nil
     /// Arguments of a write that go in its query string, not its body.
     var query: [String] = []
+    /// A new write field on an existing endpoint must be advertised before the control is offered.
+    var bodyField: String? = nil
 
     static func named(_ name: String) -> APIRoute? { table[name] }
 
@@ -151,6 +153,21 @@ struct APIRoute: Sendable {
     static let all: [APIRoute] = [
         // The token itself: revoking it signs this device out on the server (the iPhone app's Settings).
         .init(name: "revoke_token", method: "DELETE", path: "token"),
+        // Personal connections and server sharing; all writes remain governed by the route catalog.
+        .init(name: "my_github", method: "GET", path: "me/github"),
+        .init(name: "connect_github", method: "PUT", path: "me/github"),
+        .init(name: "disconnect_github", method: "DELETE", path: "me/github"),
+        .init(name: "my_home_assistant", method: "GET", path: "me/home-assistant"),
+        .init(name: "connect_home_assistant", method: "PUT", path: "me/home-assistant"),
+        .init(name: "disconnect_home_assistant", method: "DELETE", path: "me/home-assistant"),
+        .init(name: "users", method: "GET", path: "users"),
+        .init(name: "shares", method: "GET", path: "settings/shares"),
+        .init(name: "update_shares", method: "PUT", path: "settings/shares"),
+        // Registered hosts push telemetry independently of session resource sampling.
+        .init(name: "ssh_monitoring", method: "GET", path: "ssh/servers"),
+        .init(name: "ssh_resources", method: "GET", path: "ssh/servers/{id}/resources"),
+        .init(name: "ssh_monitor_token", method: "POST", path: "settings/ssh/servers/{id}/monitor-token"),
+        .init(name: "revoke_ssh_monitor_token", method: "DELETE", path: "settings/ssh/servers/{id}/monitor-token"),
         // Projects
         .init(name: "projects", method: "GET", path: "projects"),
         .init(name: "branches", method: "GET", path: "branches"),
@@ -211,6 +228,7 @@ struct APIRoute: Sendable {
         .init(name: "session_events", method: "GET", path: "sessions/{sessionId}/events"),
         // Every session of the token's projects followed on one connection (an event stream).
         .init(name: "events", method: "GET", path: "events"),
+        .init(name: "pin", method: "PATCH", path: "sessions/{sessionId}", bodyField: "pinned"),
         .init(name: "rename", method: "PATCH", path: "sessions/{sessionId}"),
         .init(name: "delete", method: "DELETE", path: "sessions/{sessionId}"),
         .init(name: "message", method: "POST", path: "sessions/{sessionId}/messages"),

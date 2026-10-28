@@ -63,6 +63,13 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 - The GitHub Projects board stays on the Mac app.
 - With an Admin token, lists the Laravel Forge servers the project may use from the project screen's menu, each with its sites, the project's own first. A site opens on its overview, its deploy script and its `.env`, which is read only on Show .env; both are edited and saved to Forge, and replacing the `.env` asks first.
 
+**Recent server features**
+
+- Pin or unpin a conversation from its actions; pinned conversations lead both project and All lists, including live updates.
+- Incoming feedback assessments show the original feedback, recommendation and verification evidence in Findings and conversations; verdicts can select fixes on another author’s PR, and completing an assessment without fixes does not approve the PR.
+- Settings → Accounts and access connects your own GitHub and Home Assistant, opens the admin Sharing form, and lists registered SSH hosts with current resources and rolling 24-hour history; monitoring credentials can be issued, rotated or revoked by admins, and missing samples remain gaps.
+- Project settings can opt interactive sessions into printing through the server’s CUPS printers.
+
 **Usage and Settings**
 
 - Shows what the projects spent over a window, by project, activity, provider and model, with the costliest sessions; an admin token sees every project's, others this month's for their own. Above it, every provider account's login and quota windows, as the Mac shows them.

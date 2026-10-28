@@ -274,8 +274,7 @@ struct ProjectSettingsScreen: View {
         switch model.tab {
         case .project:
             SettingsPair { field(.repo) } right: { field(.label) }
-            // Switching a project off keeps it, and its settings, without a session starting on it.
-            check(.enabled)
+            check(.enabled); check(.printing)
             Color.clear.frame(height: 4)
             field(.localDir)
             field(.board)

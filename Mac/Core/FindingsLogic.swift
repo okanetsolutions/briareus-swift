@@ -42,18 +42,19 @@ enum Findings {
     }
 
     /// The confirmation before Complete.
-    static func completePrompt(mine: Bool, fixes: Int, pr: Int) -> (title: String, message: String) {
+    static func completePrompt(mine: Bool, fixes: Int, pr: Int, externalFeedback: Bool = false) -> (title: String, message: String) {
         guard mine else { return ("Take this review off the queue?", "What it found stays on PR #\(pr) for its author.") }
         if fixes > 0 {
             return ("Start a paid fix session for \(fixes) finding\(plural(fixes))?",
                     "Every verdict and comment is recorded on PR #\(pr); what is marked fix goes to the fix session.")
         }
+        if externalFeedback { return ("Complete this assessment?", "Record the verdicts on PR #\(pr) and close the assessment without approving the pull request.") }
         return ("Complete with nothing to fix?", "Every verdict is recorded on PR #\(pr), which is approved and its loop closed.")
     }
     /// The Complete button's words on the user's own pull request.
-    static func completeLabel(fixes: Int, sending: Bool) -> String {
+    static func completeLabel(fixes: Int, sending: Bool, externalFeedback: Bool = false) -> String {
         if sending { return "Completing\u{2026}" }
-        return fixes > 0 ? "Complete \u{00B7} send \(fixes) to be fixed" : "Complete \u{00B7} nothing to fix, approve and close"
+        return triageCompleteTitle(takesVerdicts: true, fixes: fixes, externalFeedback: externalFeedback)
     }
     /// How a card is worked, under its title.
     static func howText(mine: Bool, manage: Bool, count n: Int) -> String {
@@ -67,7 +68,7 @@ enum Findings {
     }
     /// "round 3 · held since 10:42", or "code review" for a hand-started one.
     static func roundMeta(_ held: JSON, now: Date = Date()) -> String {
-        var s = held["standalone"].isSet ? "code review" : "round \(held["round"].int32 ?? 0)"
+        var s = held["externalFeedback"].is(true) ? "feedback assessment" : held["standalone"].isSet ? "code review" : "round \(held["round"].int32 ?? 0)"
         if let at = boardDateParse(held["heldAt"].string) { s += " \u{00B7} held since \(formatEventTime(at, now: now))" }
         return s
     }

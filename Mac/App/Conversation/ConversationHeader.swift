@@ -31,6 +31,9 @@ func conversationHeaderButtons(_ model: ConversationModel, store: Store) -> [Hea
             Navigator.shared.push(.sessionStats(session: s.raw))
         })
     }
+    if store.supports("pin") {
+        out.append(HeaderButton(glyph: s.pinSymbol, label: s.pinLabel, tip: s.pinLabel, enabled: can) { model.mutate("pin", s.pinBody) })
+    }
     if store.supports("cancel") && s.isActive {
         out.append(HeaderButton(glyph: Glyph.symbol(0xE71A), label: "\u{23F9} Stop", tip: "Stop", enabled: can) { model.confirmAndMutate("cancel") })
     }
