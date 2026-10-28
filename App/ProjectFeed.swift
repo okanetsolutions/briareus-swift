@@ -10,7 +10,11 @@ final class ProjectFeed: ObservableObject {
     static let sessionsEvery = 7.0, boardEvery = 60.0
 
     let repo: String
-    @Published private(set) var sessions: [Session] = []
+    @Published private(set) var sessions: [Session] = [] {
+        didSet { pullRuns = BoardPullRuns.byPull(sessions) }
+    }
+    /// Each pull request's conversations, counted once per change of the list rather than by every board row it draws.
+    private(set) var pullRuns: [Int: BoardPullRuns] = [:]
     /// True once the conversations were read, from what was saved or from the server.
     @Published private(set) var sessionsLoaded = false
     /// The board as the server sent it (`pulls` and `issues`), which is what is saved and what names the stacks.
@@ -43,7 +47,10 @@ final class ProjectFeed: ObservableObject {
 
     init(repo: String) {
         self.repo = repo
-        if let saved = Store.shared.cache.value("sessions:\(repo)").flatMap(Session.parseList) { sessions = saved; sessionsLoaded = true }
+        if let saved = Store.shared.cache.value("sessions:\(repo)").flatMap(Session.parseList) {
+            // An initializer's assignments skip `didSet`.
+            sessions = saved; sessionsLoaded = true; pullRuns = BoardPullRuns.byPull(saved)
+        }
         if let saved = Store.shared.cache.value("pulls:\(repo)") { board = saved; boardLoaded = true; parseBoard() }
     }
 

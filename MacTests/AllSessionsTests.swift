@@ -63,4 +63,14 @@ final class AllSessionsTests: XCTestCase {
         XCTAssertFalse(AllSessions(sessions: [], projects: []).busy)
         XCTAssertTrue(AllSessions(sessions: [], projects: []).shown.isEmpty)
     }
+
+    func testOrderFollowsChangedSessionsAndCountMatchesIt() {
+        var list = AllSessions(sessions: [session("a", repo: "r", created: "2026-01-01T00:00:00Z")], projects: [])
+        list.sessions.append(session("b", repo: "r", created: "2026-02-01T00:00:00Z"))
+        list.sessions.append(session("c", repo: "r", status: "closed"))
+        XCTAssertEqual(list.shown.map(\.id), ["b", "a"])
+        XCTAssertEqual(list.count, 2)
+        XCTAssertEqual(list, AllSessions(sessions: list.sessions, projects: []))
+        XCTAssertNotEqual(list, AllSessions(sessions: list.sessions, projects: [Project(repo: "r")]))
+    }
 }

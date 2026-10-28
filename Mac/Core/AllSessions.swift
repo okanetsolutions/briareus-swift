@@ -15,11 +15,20 @@ struct AllSessions: Equatable, Sendable {
 
     static let unavailableMessage = "Sessions are unavailable on this server or for this device."
 
-    var sessions: [Session]
+    var sessions: [Session] { didSet { shown = Self.ordered(sessions) } }
     var projects: [Project]
+    /// The open sessions, newest pins first, then working ones, then newest created; equal or missing dates use the
+    /// session id for stability. Sorted once per list, as every redraw of the lists and their counts reads it.
+    private(set) var shown: [Session]
+
+    init(sessions: [Session], projects: [Project]) {
+        self.sessions = sessions; self.projects = projects
+        shown = Self.ordered(sessions)
+    }
+    static func == (a: Self, b: Self) -> Bool { a.sessions == b.sessions && a.projects == b.projects }
 
     /// The open sessions the All list shows; closed ones are left out of the list and its count.
-    var count: Int { sessions.filter { !$0.isClosed }.count }
+    var count: Int { shown.count }
     var busy: Bool { sessions.contains(where: \.isActive) }
     /// Why the list has no rows: nothing exists, or every session is closed.
     var emptyState: EmptyState { sessions.isEmpty ? .noSessions : .allClosed }
@@ -34,14 +43,17 @@ struct AllSessions: Equatable, Sendable {
         projects.first { $0.repo == session.repo }?.title ?? session.repo ?? ""
     }
 
-    /// The open sessions, newest pins first, then working ones, then newest created; equal or missing dates use the session id for stability.
-    var shown: [Session] {
-        sessions.filter { !$0.isClosed }.sorted { lhs, rhs in
-            if lhs.pinnedAt != rhs.pinnedAt { return (lhs.pinnedAt ?? "") > (rhs.pinnedAt ?? "") }
-            if lhs.isActive != rhs.isActive { return lhs.isActive }
-            let left = boardDateEpoch(lhs.raw["createdAt"].string) ?? 0
-            let right = boardDateEpoch(rhs.raw["createdAt"].string) ?? 0
-            return left == right ? lhs.id < rhs.id : left > right
-        }
+    /// Each date is read once, not once per comparison.
+    private static func ordered(_ sessions: [Session]) -> [Session] {
+        sessions.filter { !$0.isClosed }
+            .map { s in
+                (session: s, pinned: s.pinnedAt ?? "", active: s.isActive, created: boardDateEpoch(s.raw["createdAt"].string) ?? 0)
+            }
+            .sorted { lhs, rhs in
+                if lhs.pinned != rhs.pinned { return lhs.pinned > rhs.pinned }
+                if lhs.active != rhs.active { return lhs.active }
+                return lhs.created == rhs.created ? lhs.session.id < rhs.session.id : lhs.created > rhs.created
+            }
+            .map(\.session)
     }
 }

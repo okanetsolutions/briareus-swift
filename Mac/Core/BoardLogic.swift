@@ -343,10 +343,23 @@ struct BoardPullRuns: Equatable, Sendable {
     let total: Int
     let active: Int
 
+    init(total: Int = 0, active: Int = 0) { self.total = total; self.active = active }
     init(_ sessions: [Session], number: Int) {
         let runs = sessions.filter { $0.pullNumber == number }
         total = runs.count
         active = runs.filter(\.isActive).count
+    }
+
+    /// Every pull request's runs in one pass over the conversations, so a board's rows look theirs up instead of each
+    /// scanning the whole list on every redraw.
+    static func byPull(_ sessions: [Session]) -> [Int: BoardPullRuns] {
+        var out: [Int: BoardPullRuns] = [:]
+        for s in sessions {
+            guard let n = s.pullNumber else { continue }
+            let was = out[n] ?? BoardPullRuns()
+            out[n] = BoardPullRuns(total: was.total + 1, active: was.active + (s.isActive ? 1 : 0))
+        }
+        return out
     }
 }
 

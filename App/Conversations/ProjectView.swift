@@ -8,11 +8,12 @@ struct ProjectView: View {
     let repo: String
     @EnvironmentObject private var store: Store
     @ObservedObject private var feed: ProjectFeed
-    @ObservedObject private var projects = ProjectsModel.shared
     @Environment(\.navigate) private var navigate
     @WindowOpener private var openInWindow
     @State private var search = ""
     @State private var showClosed = false
+    /// How many recent conversations are drawn; Show more adds a page.
+    @State private var limit = conversationPageSize
     @State private var composing = false
     @State private var error: String?
     @State private var actionError: String?
@@ -39,7 +40,8 @@ struct ProjectView: View {
         _feed = ObservedObject(wrappedValue: Store.shared.feed(repo))
     }
 
-    private var title: String { projects.project(repo)?.title ?? repo }
+    /// Read, not observed: the projects model changes with every live update, and redrawing the list for each was slow.
+    private var title: String { ProjectsModel.shared.project(repo)?.title ?? repo }
     private var editing: Bool { editMode.isEditing }
     private var shown: [Session] { conversationsShown(feed.sessions, search: search, showClosed: showClosed) }
     private var canSelect: Bool { store.canManage && (store.supports("close") || store.supports("delete")) && !feed.sessions.isEmpty }
@@ -65,7 +67,7 @@ struct ProjectView: View {
             .listRowBackground(Theme.row)
         }
         let list = shown
-        let groups = ConversationGroups(list)
+        let groups = ConversationGroups(list, limit: limit)
         let active = groups.active
         if !groups.pinned.isEmpty {
             Section("Pinned") { ForEach(groups.pinned, id: \.id) { row($0) } }.listRowBackground(Theme.row)
@@ -75,6 +77,7 @@ struct ProjectView: View {
         }
         Section {
             ForEach(groups.recent, id: \.id) { row($0) }
+            if groups.hidden > 0 { ShowMoreRow(hidden: groups.hidden) { limit += conversationPageSize } }
             if feed.sessionsLoaded && list.isEmpty {
                 Text(search.isEmpty ? (feed.sessions.isEmpty ? "No conversations here yet." : "No open conversations.") : "No matching conversations.")
                     .foregroundStyle(.secondary)
@@ -173,7 +176,7 @@ struct ProjectView: View {
     /// While selecting: Select All, and Close and Delete for the picked conversations.
     private var bulkBar: some View {
         let closable = bulkConversationTargets(feed.sessions, picked: picked, delete: false).count
-        let all = Set(shown.map(\.id))
+        let all = ConversationGroups(shown, limit: limit).drawnIDs
         return HStack(spacing: 16) {
             Button(picked.isSuperset(of: all) && !all.isEmpty ? "Deselect All" : "Select All") {
                 if picked.isSuperset(of: all) { picked.subtract(all) } else { picked.formUnion(all) }
@@ -299,19 +302,5 @@ struct ProjectView: View {
     private func leaveSelect() {
         withAnimation { editMode = .inactive }
         picked = []
-    }
-}
-
-/// The ⚑ with how many review rounds wait, the count inside the button's bounds: a navigation bar cuts off what hangs
-/// outside them.
-private struct FindingsCountIcon: View {
-    let count: Int
-    var body: some View {
-        Image(systemName: "flag")
-            .padding(.horizontal, 8).padding(.vertical, 6)
-            .overlay(alignment: .topTrailing) {
-                Text(String(count)).font(.caption2.weight(.bold).monospacedDigit()).foregroundStyle(.white)
-                    .padding(.horizontal, 4).frame(minWidth: 15, minHeight: 15).background(Theme.warn, in: Capsule())
-            }
     }
 }
