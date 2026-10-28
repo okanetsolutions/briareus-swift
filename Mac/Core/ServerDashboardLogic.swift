@@ -29,6 +29,15 @@ enum ServerDashboardTab: String, CaseIterable, Hashable, Identifiable, Sendable 
         tabs.contains(self) ? self : tabs.first
     }
 
+    /// Session failures and sampling belong to that panel, independently of server readings.
+    func error(server: String?, sessions: String?) -> String? {
+        self == .sessions ? sessions : server
+    }
+
+    func pollSeconds(server: HostStats?, sessions: HostStats?) -> Double {
+        statsPollSeconds(self == .sessions ? sessions : server)
+    }
+
     static func available(supports: (String) -> Bool) -> [Self] {
         allCases.filter { tab in
             supports(tab.operation ?? "ssh_monitoring")

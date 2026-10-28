@@ -5,7 +5,6 @@ struct ServerStatsScreen: View {
     @State private var width: CGFloat = 0
     @StateObject private var model: ServerStatsModel
     private let embedded: Bool
-    @State private var monitoredServerID: Double?
     @ObservedObject private var store = Store.shared
 
     init(model: ServerStatsModel? = nil, embedded: Bool = false) {
@@ -25,10 +24,10 @@ struct ServerStatsScreen: View {
                     }
                 }.padding(.horizontal, Theme.paneMargin)
             }
-            if model.tabs.isEmpty {
+            if !model.tabs.contains(model.tab) {
                 EmptyNote(title: "This server does not report its resources.")
             } else if model.tab == .sshServers {
-                RegisteredServersTab(serverID: $monitoredServerID)
+                RegisteredServersTab(serverID: $model.monitoredServerID)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
@@ -41,7 +40,7 @@ struct ServerStatsScreen: View {
                 }.id(model.tab)
             }
         }
-        .task(id: model.tab) { await model.follow() }
+        .task(id: model.tabs + [model.tab]) { await model.follow() }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await model.load() } }
     }
 

@@ -22,6 +22,11 @@ enum UsageDashboardTab: Hashable, Identifiable, Sendable {
         if case .server(let tab) = self { return tab }
         return nil
     }
+    /// A catalog change keeps a supported panel, otherwise returns to the ledger.
+    func resolved(in tabs: [Self]) -> Self {
+        tabs.contains(self) ? self : .usage
+    }
+
     static func available(supports: (String) -> Bool) -> [Self] {
         [.usage] + ServerDashboardTab.available(supports: supports).map(Self.server)
     }

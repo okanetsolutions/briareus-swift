@@ -12,14 +12,25 @@ struct UsageScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             DashboardTabStrip(tabs: tabs, selection: $selection, title: { $0.title })
-            if selection == .usage {
+            ZStack {
                 UsageLedgerPanel(model: usage)
-            } else {
-                ServerStatsScreen(model: server, embedded: true)
+                    .opacity(selection == .usage ? 1 : 0)
+                    .allowsHitTesting(selection == .usage)
+                    .accessibilityHidden(selection != .usage)
+                if selection != .usage {
+                    ServerStatsScreen(model: server, embedded: true)
+                }
             }
         }
         .navigationTitle("Usage")
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { OpenInWindowButton(page: .usage) } }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { OpenInWindowButton(page: .usage) }
+            UsageLedgerToolbar(model: usage, active: selection == .usage)
+        }
+        .onChange(of: tabs) { _, offered in selection = selection.resolved(in: offered) }
+        .onChange(of: server.tab) { _, tab in
+            if selection != .usage { selection = UsageDashboardTab.server(tab).resolved(in: tabs) }
+        }
         .onChange(of: selection) { _, tab in
             if let resource = tab.serverTab { server.tab = resource }
         }

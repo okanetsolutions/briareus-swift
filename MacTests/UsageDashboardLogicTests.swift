@@ -15,6 +15,14 @@ final class UsageDashboardLogicTests: XCTestCase {
         XCTAssertEqual(Set(tabs.map(\.id)).count, tabs.count)
     }
 
+    func testCatalogChangesKeepSupportedSelectionsAndReturnUnsupportedOnesToUsage() {
+        let offered = UsageDashboardTab.available { $0 == "sessions_stats" }
+        XCTAssertEqual(UsageDashboardTab.server(.sessions).resolved(in: offered), .server(.sessions))
+        XCTAssertEqual(UsageDashboardTab.server(.history).resolved(in: offered), .usage)
+        XCTAssertEqual(UsageDashboardTab.usage.resolved(in: offered), .usage)
+        XCTAssertEqual(UsageDashboardTab.server(.overview).resolved(in: [.usage]), .usage)
+    }
+
     func testSessionsOnlyTokenStillGetsItsResourcesBesideUsage() {
         XCTAssertEqual(UsageDashboardTab.available { $0 == "sessions_stats" }, [.usage, .server(.sessions)])
     }

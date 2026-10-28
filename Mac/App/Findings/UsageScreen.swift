@@ -24,7 +24,6 @@ struct UsageLedgerPanel: View {
         }
         .task { await poll(every: 60) { await model.tick() } }
         .onDisappear { model.stop() }
-        .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in model.load() }
     }
 
     @ViewBuilder private var content: some View {

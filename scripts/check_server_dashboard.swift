@@ -129,6 +129,43 @@ struct ServerDashboardCheck {
         precondition(model.tab == .sshServers && model.tabs == [.sshServers])
         await model.follow()
         precondition(store.calls.count == afterPoll)
+        // A catalog change during a read discards the old panel and ends its polling loop.
+        store.offered = ["server_stats", "sessions_stats", "ssh_monitoring"]
+        model.tab = .overview
+        model.monitoredServerID = 42
+        store.respond = { _ in server }
+        await model.load()
+        precondition(model.server != nil && !model.charts.isEmpty)
+        let beforeCatalogChange = store.calls.count
+        store.respond = { _ in
+            store.offered = ["sessions_stats", "ssh_monitoring"]
+            return server
+        }
+        await model.follow()
+        precondition(model.tab == .sessions && model.server == nil && model.charts.isEmpty && model.serverError == nil)
+        precondition(store.calls.count == beforeCatalogChange + 1)
+
+        store.respond = { _ in sessions }
+        await model.load()
+        precondition(model.sessionsLoaded && !model.rows.isEmpty)
+        store.respond = { _ in
+            store.offered = []
+            return sessions
+        }
+        await model.follow()
+        precondition(model.tabs.isEmpty && model.rows.isEmpty && !model.sessionsLoaded && model.sessionsError == nil)
+        let withoutCatalog = store.calls.count
+        await model.follow()
+        precondition(store.calls.count == withoutCatalog)
+
+        // Restoring a catalog resumes reads; changing panels leaves the chosen SSH host intact.
+        store.offered = ["server_stats", "ssh_monitoring"]
+        await model.follow()
+        precondition(model.tab == .overview && model.monitoredServerID == 42)
+        store.respond = { _ in server }
+        await model.load()
+        precondition(model.server?.openSessions == 2 && store.calls.count == withoutCatalog + 1)
+
         print("Server dashboard loading, failures, cancellation and tab reads passed")
     }
 }

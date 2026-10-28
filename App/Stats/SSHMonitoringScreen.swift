@@ -48,7 +48,10 @@ struct SSHMonitoringScreen: View {
                     if let at = server.measuredAt { LabeledContent("Last sample", value: at.formatted()) }
                     if server.tiles.isEmpty { Text("No metrics received yet.") }
                     StatTiles(tiles: server.tiles)
-                } header: { Text(server.repo) }
+                } header: {
+                    if embedded { Text(model.title) }
+                    Text(server.repo)
+                }
                 if model.history != nil {
                     Section("Last 24 hours") { ForEach(model.charts) { StatsChartView(chart: $0) } }
                 }

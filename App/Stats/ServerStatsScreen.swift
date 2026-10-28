@@ -4,7 +4,6 @@ import SwiftUI
 struct ServerStatsScreen: View {
     @StateObject private var model: ServerStatsModel
     private let embedded: Bool
-    @State private var monitoredServerID: Double?
     @EnvironmentObject private var store: Store
     @Environment(\.navigate) private var navigate
 
@@ -16,11 +15,11 @@ struct ServerStatsScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             if !embedded { DashboardTabStrip(tabs: model.tabs, selection: $model.tab, title: { $0.title }) }
-            if model.tabs.isEmpty {
+            if !model.tabs.contains(model.tab) {
                 ContentUnavailableView("Not Reported", systemImage: "gauge.with.dots.needle.33percent",
                                        description: Text("This server does not report its resources."))
             } else if model.tab == .sshServers {
-                RegisteredServersTab(serverID: $monitoredServerID)
+                RegisteredServersTab(serverID: $model.monitoredServerID)
             } else {
                 List {
                     if let error = model.error { ErrorNotice(message: error) }
@@ -31,7 +30,7 @@ struct ServerStatsScreen: View {
             }
         }
         .navigationTitle(embedded ? "Usage" : "Server")
-        .task(id: model.tab) { await model.follow() }
+        .task(id: model.tabs + [model.tab]) { await model.follow() }
     }
 
     @ViewBuilder private var content: some View {
@@ -56,7 +55,7 @@ struct ServerStatsScreen: View {
             case .disks:
                 Section("Storage") {
                     if server.diskTiles.isEmpty { Text("No disks are reported.").foregroundStyle(.secondary) }
-                    StatTiles(tiles: server.diskTiles).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                    else { StatTiles(tiles: server.diskTiles).listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
                 }
             case .sessions, .sshServers: EmptyView()
             }

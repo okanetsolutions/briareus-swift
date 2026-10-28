@@ -33,11 +33,22 @@ struct UsageScreen: View {
                         .accessibilityAddTraits(selection == tab ? .isSelected : [])
                 }
             }.padding(.horizontal, Theme.paneMargin)
-            if selection == .usage {
+            ZStack {
                 UsageLedgerPanel(model: usage)
-            } else {
-                ServerStatsScreen(model: server, embedded: true)
+                    .opacity(selection == .usage ? 1 : 0)
+                    .allowsHitTesting(selection == .usage)
+                    .accessibilityHidden(selection != .usage)
+                if selection != .usage {
+                    ServerStatsScreen(model: server, embedded: true)
+                }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in
+            if selection == .usage { usage.load() }
+        }
+        .onChange(of: tabs) { _, offered in selection = selection.resolved(in: offered) }
+        .onChange(of: server.tab) { _, tab in
+            if selection != .usage { selection = UsageDashboardTab.server(tab).resolved(in: tabs) }
         }
         .onChange(of: selection) { _, tab in
             if let resource = tab.serverTab { server.tab = resource }

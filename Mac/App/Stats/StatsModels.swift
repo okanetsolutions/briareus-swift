@@ -42,6 +42,7 @@ final class SessionStatsModel: ObservableObject {
 @MainActor
 final class ServerStatsModel: ObservableObject {
     @Published var tab: ServerDashboardTab = .overview
+    @Published var monitoredServerID: Double?
     @Published private(set) var server: ServerStats?
     @Published private(set) var rows: [StatsRow] = []
     @Published private(set) var charts: [StatsChart] = []
@@ -50,7 +51,7 @@ final class ServerStatsModel: ObservableObject {
     @Published private(set) var sessionsLoaded = false
 
     var tabs: [ServerDashboardTab] { ServerDashboardTab.available(supports: Store.shared.supports) }
-    var error: String? { tab == .sessions ? sessionsError : serverError }
+    var error: String? { tab.error(server: serverError, sessions: sessionsError) }
     private var requests: [String: UUID] = [:]
     private var sessionsHost: HostStats?
     private var known: KnownSessions { KnownSessions(repos: ProjectsModel.shared.projects.map(\.repo), cache: Store.shared.cache) }
@@ -63,7 +64,7 @@ final class ServerStatsModel: ObservableObject {
         defer { if requests[operation] == request { requests[operation] = nil } }
         do {
             let answer = try await Store.shared.call(operation)
-            guard requests[operation] == request, !Task.isCancelled else { return }
+            guard requests[operation] == request, Store.shared.supports(operation), !Task.isCancelled else { return }
             if operation == "sessions_stats" {
                 guard let parsed = OpenSessionsStats(answer) else { throw APIError(.nonJSON) }
                 rows = parsed.rows(known: known)
@@ -77,20 +78,38 @@ final class ServerStatsModel: ObservableObject {
                 serverError = nil
             }
         } catch {
-            guard requests[operation] == request, !Task.isCancelled, !error.isCancellation else { return }
+            guard requests[operation] == request, Store.shared.supports(operation), !Task.isCancelled, !error.isCancellation else { return }
             if operation == "sessions_stats" { sessionsError = errorText(error) }
             else { serverError = errorText(error) }
         }
     }
 
     func follow() async {
-        if let supported = tab.resolved(in: tabs), supported != tab { tab = supported; return }
-        guard tab.operation != nil else { return }
         while !Task.isCancelled {
+            discardUnsupportedReadings()
+            guard let supported = tab.resolved(in: tabs) else { return }
+            if supported != tab { tab = supported; return }
+            guard tab.operation != nil else { return }
             await load()
-            let host = tab == .sessions ? sessionsHost : server?.host
-            do { try await Task.sleep(for: .seconds(statsPollSeconds(host))) }
+            guard tabs.contains(tab) else { continue }
+            do { try await Task.sleep(for: .seconds(tab.pollSeconds(server: server?.host, sessions: sessionsHost))) }
             catch { return }
+        }
+    }
+
+    private func discardUnsupportedReadings() {
+        if !Store.shared.supports("server_stats") {
+            requests["server_stats"] = nil
+            server = nil
+            charts = []
+            serverError = nil
+        }
+        if !Store.shared.supports("sessions_stats") {
+            requests["sessions_stats"] = nil
+            rows = []
+            sessionsHost = nil
+            sessionsLoaded = false
+            sessionsError = nil
         }
     }
 
