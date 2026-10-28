@@ -1,52 +1,76 @@
-// The Server dashboard: the machine Briareus runs on and the server process (CPU, memory, load, uptime), its disks, the
-// open sessions together, the last hour as lines, then every open session, the busiest first; a row opens that session's
-// Resources. Opened from ◉ Status; read with any token through `GET /stats/server` and `GET /stats/sessions`, again every
-// time the server samples.
+// The Server dashboard stays in one pane, with only the selected resource panel mounted and polling.
 import SwiftUI
 
 struct ServerStatsScreen: View {
-    /// The page's width, for how many tiles fit across.
     @State private var width: CGFloat = 0
     @StateObject private var model = ServerStatsModel()
+    @State private var monitoredServerID: Double?
     @ObservedObject private var store = Store.shared
 
     var body: some View {
         VStack(spacing: 0) {
             PaneHeader(title: "\u{25A4} Server", subtitle: model.server.map { "\($0.host.cpus) cores \u{00B7} \($0.openSessions) open sessions" },
-                       buttons: [HeaderButton(glyph: "arrow.clockwise", tip: "Read the figures again") { Task { await model.load() } }])
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    if store.supports("ssh_monitoring") {
-                        Button("Registered SSH servers") { Navigator.shared.push(.sshMonitoring(serverID: nil)) }.dashButton(.bordered)
-                    }
-                    content
+                       buttons: model.tab == .sshServers ? [] : [HeaderButton(glyph: "arrow.clockwise", tip: "Refresh this tab") { Task { await model.load() } }])
+            TabNav {
+                ForEach(model.tabs) { tab in
+                    TabNavItem(title: tab.title, active: model.tab == tab) { model.tab = tab }
+                        .accessibilityAddTraits(model.tab == tab ? .isSelected : [])
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fdReadWidth($width)
-                .padding(.horizontal, Theme.paneMargin).padding(.vertical, 12)
+            }.padding(.horizontal, Theme.paneMargin)
+            if model.tabs.isEmpty {
+                EmptyNote(title: "This server does not report its resources.")
+            } else if model.tab == .sshServers {
+                RegisteredServersTab(serverID: $monitoredServerID)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        if let error = model.error { NoticeBox(message: error) }
+                        content
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fdReadWidth($width)
+                    .padding(.horizontal, Theme.paneMargin).padding(.vertical, 12)
+                }.id(model.tab)
             }
         }
-        .task { await model.follow() }
+        .task(id: model.tab) { await model.follow() }
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await model.load() } }
     }
 
     @ViewBuilder private var content: some View {
-        if !model.available {
-            EmptyNote(title: "This server does not report its resources.")
+        if model.tab == .sessions {
+            if model.sessionsLoaded {
+                OpenSessionsList(rows: model.rows, open: model.open)
+            } else if model.error == nil { LoadingNote() }
         } else if let server = model.server {
-            if let error = model.error { NoticeBox(message: error) }
-            StatTiles(width: width, tiles: server.tiles)
-            if !server.diskTiles.isEmpty {
-                SectionTitle(title: "Disks")
+            switch model.tab {
+            case .overview:
+                SectionTitle(title: "Machine and Briareus")
+                StatTiles(width: width, tiles: server.tiles)
+            case .history:
+                SectionTitle(title: "Last hour")
+                ForEach(model.charts) { StatsChartView(chart: $0) }
+            case .disks:
+                SectionTitle(title: "Storage")
+                if server.diskTiles.isEmpty { EmptyNote(title: "No disks are reported.") }
                 StatTiles(width: width, tiles: server.diskTiles)
+            case .sessions, .sshServers: EmptyView()
             }
-            SectionTitle(title: "Last hour")
-            ForEach(server.charts) { StatsChartView(chart: $0) }
-            if model.listsSessions { OpenSessionsList(rows: model.rows, open: model.open) }
-        } else if let error = model.error {
-            NoticeBox(message: error)
-        } else {
-            LoadingNote()
+        } else if model.error == nil { LoadingNote() }
+    }
+}
+
+/// Remote hosts stay under the dashboard's tabs, including the selected host's telemetry.
+private struct RegisteredServersTab: View {
+    @Binding var serverID: Double?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if serverID != nil {
+                Button("All SSH servers", systemImage: "chevron.left") { serverID = nil }
+                    .dashButton(.plain).padding(.horizontal, Theme.paneMargin).padding(.top, 8)
+            }
+            SSHMonitoringScreen(serverID: serverID, embedded: true, selectServer: { serverID = $0 })
+                .id(serverID)
         }
     }
 }
@@ -57,13 +81,10 @@ private struct OpenSessionsList: View {
     var open: (StatsRow) -> Void
     var body: some View {
         SectionTitle(title: "Open sessions")
-        if rows.isEmpty {
-            EmptyNote(title: "No session is open.")
-        }
+        if rows.isEmpty { EmptyNote(title: "No session is open.") }
         ForEach(rows) { row in
             Button { open(row) } label: { StatsRowView(row: row).contentShape(Rectangle()) }
-                .buttonStyle(.plain)
-                .help("See what this session costs")
+                .buttonStyle(.plain).help("See what this session costs")
         }
     }
 }

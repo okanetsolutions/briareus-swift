@@ -5,7 +5,14 @@ struct SSHMonitoringScreen: View {
     @StateObject private var model: SSHMonitoringModel
     @Environment(\.navigate) private var navigate
 
-    init(serverID: Double? = nil) { _model = StateObject(wrappedValue: SSHMonitoringModel(serverID: serverID)) }
+    private let embedded: Bool
+    private let selectServer: ((Double) -> Void)?
+
+    init(serverID: Double? = nil, embedded: Bool = false, selectServer: ((Double) -> Void)? = nil) {
+        _model = StateObject(wrappedValue: SSHMonitoringModel(serverID: serverID))
+        self.embedded = embedded
+        self.selectServer = selectServer
+    }
 
     var body: some View {
         List {
@@ -17,7 +24,7 @@ struct SSHMonitoringScreen: View {
             } else if model.serverID == nil {
                 if model.servers.isEmpty { ContentUnavailableView("No SSH servers", systemImage: "server.rack") }
                 ForEach(model.servers) { server in
-                    Button { navigate(.sshMonitoring(serverID: server.id)) } label: {
+                    Button { open(server.id) } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(server.title).font(.headline)
                             Text(server.repo).font(.caption).foregroundStyle(.secondary)
@@ -38,10 +45,14 @@ struct SSHMonitoringScreen: View {
                 SSHMonitorControls(model: model)
             }
         }
-        .navigationTitle(model.title)
+        .navigationTitle(embedded ? "Server" : model.title)
         .task { await model.follow() }
         .refreshable { await model.load() }
         .onDisappear { model.hideCredential() }
+    }
+    private func open(_ id: Double) {
+        if let selectServer { selectServer(id) }
+        else { navigate(.sshMonitoring(serverID: id)) }
     }
 }
 

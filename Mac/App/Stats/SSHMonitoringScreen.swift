@@ -5,14 +5,32 @@ struct SSHMonitoringScreen: View {
     @StateObject private var model: SSHMonitoringModel
     @State private var width: CGFloat = 0
 
-    init(serverID: Double? = nil) { _model = StateObject(wrappedValue: SSHMonitoringModel(serverID: serverID)) }
+    private let embedded: Bool
+    private let selectServer: ((Double) -> Void)?
+
+    init(serverID: Double? = nil, embedded: Bool = false, selectServer: ((Double) -> Void)? = nil) {
+        _model = StateObject(wrappedValue: SSHMonitoringModel(serverID: serverID))
+        self.embedded = embedded
+        self.selectServer = selectServer
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            PaneHeader(title: model.title, buttons: [HeaderButton(glyph: "arrow.clockwise", tip: "Refresh") { Task { await model.load() } }])
+            if !embedded {
+                PaneHeader(title: model.title, buttons: [HeaderButton(glyph: "arrow.clockwise", tip: "Refresh") { Task { await model.load() } }])
+            }
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) { content }
-                    .frame(maxWidth: .infinity, alignment: .leading).fdReadWidth($width).padding(Theme.paneMargin)
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    if embedded {
+                        HStack {
+                            Text(model.title).font(Theme.subheadlineSemibold).foregroundStyle(Theme.ink)
+                            Spacer()
+                            Button("Refresh", systemImage: "arrow.clockwise") { Task { await model.load() } }.dashButton(.plain)
+                        }
+                    }
+                    content
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).fdReadWidth($width).padding(Theme.paneMargin)
             }
         }
         .task { await model.follow() }
@@ -25,7 +43,7 @@ struct SSHMonitoringScreen: View {
         else if model.serverID == nil {
             if model.servers.isEmpty { EmptyNote(title: "No SSH servers") }
             ForEach(model.servers) { server in
-                Button { Navigator.shared.push(.sshMonitoring(serverID: server.id)) } label: {
+                Button { open(server.id) } label: {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(server.title).font(Theme.bodySemibold)
@@ -45,6 +63,10 @@ struct SSHMonitoringScreen: View {
             if model.history != nil { ForEach(model.charts) { StatsChartView(chart: $0) } }
             SSHMonitorControls(model: model)
         }
+    }
+    private func open(_ id: Double) {
+        if let selectServer { selectServer(id) }
+        else { Navigator.shared.push(.sshMonitoring(serverID: id)) }
     }
 }
 

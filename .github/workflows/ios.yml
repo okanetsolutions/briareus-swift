@@ -38,6 +38,12 @@ jobs:
         run: |
           swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/ProjectFeed.swift App/Board/GlobalPullsModel.swift scripts/check_phone_global_pulls.swift -o "$RUNNER_TEMP/check-phone-global-pulls"
           "$RUNNER_TEMP/check-phone-global-pulls"
+      - name: Check server dashboard tab loading and cancellation in both apps
+        run: |
+          for MODEL in App/Stats/StatsModels.swift Mac/App/Stats/StatsModels.swift; do
+            swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift "$MODEL" scripts/check_server_dashboard.swift -o "$RUNNER_TEMP/check-server-dashboard"
+            "$RUNNER_TEMP/check-server-dashboard"
+          done
       - name: Check personal connections, sharing and monitor credential lifecycle
         run: |
           swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/Settings/PersonalConnectionModel.swift App/Settings/SharingModel.swift App/Stats/SSHMonitoringModel.swift scripts/check_client_updates.swift -o "$RUNNER_TEMP/check-client-updates"
