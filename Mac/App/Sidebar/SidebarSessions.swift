@@ -1,5 +1,6 @@
 // A project's conversations in the sidebar, as screen_projects.c's SessionsScreen holds them: the list (saved first, then
 // the server's), ☑ Select's picks, and the bulk ⏻ Close or 🗑 Delete that works through them one at a time.
+import Combine
 import Foundation
 
 @MainActor
@@ -31,8 +32,9 @@ final class SidebarSessions: ObservableObject {
             let kept = Set(items.map(\.id))
             for s in sessions where !kept.contains(s.id) { Store.shared.cache.remove("transcript:\(s.id)") }
         }
-        sessions = items.orderedByPins()
-        loaded = true
+        let ordered = items.orderedByPins()
+        if ordered != sessions { sessions = ordered }
+        if !loaded { loaded = true }
     }
 
     /// sessions_load: the saved list at once the first time, then the server's. Nil on success, else the error.
@@ -45,9 +47,9 @@ final class SidebarSessions: ObservableObject {
             let answer = try await Store.shared.call("sessions", ["repo": .string(project.repo)])
             guard mine == generation else { return nil }
             show(answer, fromServer: true)
-            error = nil
+            if error != nil { error = nil }
             Store.shared.cache.store(Session.json(sessions), key)
-            ProjectsModel.shared.recount()
+            ProjectsModel.shared.scheduleRecount()
             return nil
         } catch {
             guard mine == generation, !error.isCancellation else { return nil }
