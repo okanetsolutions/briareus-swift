@@ -66,6 +66,14 @@ final class ClientUpdatesTests: XCTestCase {
         XCTAssertEqual(pinned.upserting(old)?.map(\.id), ["new", "old"])
         XCTAssertNil(pinned.upserting(pin))
     }
+    func testLiveUnpinPreservesCreationMillisecondsAndStatusEventsDoNotResort() throws {
+        let old = session("old", created: "2026-10-28T00:00:00.100Z")
+        let new = session("new", created: "2026-10-28T00:00:00.900Z")
+        var pinned = old; pinned.raw["pinnedAt"] = "2026-10-28T01:00:00.000Z"
+        XCTAssertEqual([pinned, new].upserting(old)?.map(\.id), ["new", "old"])
+        var running = old; running.raw["status"] = "running"
+        XCTAssertEqual([old, new].upserting(running)?.map(\.id), ["old", "new"])
+    }
     func testPinRequiresAnAdvertisedBodyFieldAndRetainsCapabilityInCache() throws {
         let pin = try XCTUnwrap(APIRoute.named("pin"))
         let old = [Route(method: "PATCH", path: "/sessions/{id}", access: "manage")]

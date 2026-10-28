@@ -30,19 +30,22 @@ extension Array where Element == Session {
         var list = self
         if let i = list.firstIndex(where: { $0.id == s.id }) {
             if list[i] == s { return nil }
+            let previous = list[i]
             list[i] = s
+            // Most events change only status or usage; keep their row in place without sorting the entire list.
+            if previous.pinnedAt == s.pinnedAt && previous.raw["createdAt"] == s.raw["createdAt"] { return list }
         } else {
             list.insert(s, at: 0)
         }
         return list.orderedByPins()
     }
-    /// Pinned records lead after both live changes and cached reads; unpinned rows keep their existing order.
+    /// Match the server's canonical ISO timestamps, including milliseconds; equal keys keep the list's order.
     func orderedByPins() -> [Session] {
         enumerated().sorted { a, b in
             let left = a.element.pinnedAt ?? "", right = b.element.pinnedAt ?? ""
             if left != right { return left > right }
-            let createdA = boardDateEpoch(a.element.raw["createdAt"].string) ?? 0
-            let createdB = boardDateEpoch(b.element.raw["createdAt"].string) ?? 0
+            let createdA = a.element.raw["createdAt"].string ?? ""
+            let createdB = b.element.raw["createdAt"].string ?? ""
             return createdA == createdB ? a.offset < b.offset : createdA > createdB
         }.map(\.element)
     }
