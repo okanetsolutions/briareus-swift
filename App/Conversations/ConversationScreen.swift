@@ -4,6 +4,7 @@
 // decision shows as a banner over the composer that opens its card. The session's shared browser opens over it all from
 // the menu, or from its 🌐 line over the transcript while it is on.
 import SwiftUI
+
 struct ConversationScreen: View {
     let sessionID: String
     let initial: JSON?
@@ -79,7 +80,7 @@ struct ConversationScreen: View {
         .fullScreenCover(isPresented: $showingBrowser) { SharedBrowserScreen(session: session.raw).environmentObject(store) }
     }
 
-    // Transcript
+    // MARK: Transcript
 
     private var content: some View {
         ScrollViewReader { proxy in
@@ -145,7 +146,7 @@ struct ConversationScreen: View {
         withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
     }
 
-    // Header
+    // MARK: Header
 
     /// The title with the state and runtime under it; a tap opens the details.
     private var heading: some View {
@@ -214,28 +215,11 @@ struct ConversationScreen: View {
         }
     }
 
-    // Review round
+    // MARK: Review round
 
     @ViewBuilder private var triageBanner: some View {
         if let triage = session.heldTriage, store.supports("complete_findings") {
-            let count = triage["findings"].count
-            Button { showingTriage = true } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "flag.fill").foregroundStyle(Theme.warn)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(triageTitle(triage)).font(.subheadline.weight(.medium)).lineLimit(1)
-                        Text("\(count) finding\(count == 1 ? "" : "s") waiting for a verdict").font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                    Text("Review").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.accent)
-                }
-                .padding(12)
-                .background(Theme.warn.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12).padding(.top, 6)
-            .background(Theme.canvas)
+            ConversationTriageBanner(triage: triage) { showingTriage = true }
         }
     }
 
@@ -255,7 +239,7 @@ struct ConversationScreen: View {
         .presentationDetents([.medium, .large])
     }
 
-    // Actions
+    // MARK: Actions
 
     /// Opens a voice call held to this conversation: what the user says for the agent is sent, and what it answers is
     /// read aloud. It needs a token that may write, as it messages and stops the agent.

@@ -5,9 +5,10 @@ import Combine
 @MainActor
 final class PersonalConnectionModel: ObservableObject {
     let kind: PersonalConnectionKind
-    @Published var token = ""
-    @Published var url = ""
-    @Published private(set) var status: PersonalConnectionStatus?
+    @Published private var form = PersonalConnectionFormState()
+    var token: String { get { form.token } set { form.token = newValue } }
+    var url: String { get { form.url } set { form.url = newValue } }
+    var status: PersonalConnectionStatus? { form.status }
     @Published private(set) var loaded = false
     @Published private(set) var busy = false
     @Published private(set) var uncertain = false
@@ -16,8 +17,8 @@ final class PersonalConnectionModel: ObservableObject {
     var available: Bool { Store.shared.supports(kind.read) }
     var canConnect: Bool { Store.shared.supports(kind.connect) }
     var canDisconnect: Bool { status?.connected == true && Store.shared.supports(kind.disconnect) }
-    var dirty: Bool { !token.isEmpty || (status != nil && url != status?.url) }
-    var canSave: Bool { status != nil && !token.cTrimmed.isEmpty && canConnect && !busy && !uncertain }
+    var dirty: Bool { form.dirty }
+    var canSave: Bool { form.canSave && canConnect && !busy && !uncertain }
 
     func load() async {
         guard available, !busy else { loaded = true; return }
@@ -26,9 +27,7 @@ final class PersonalConnectionModel: ObservableObject {
         do {
             let answer = try await Store.shared.call(kind.read)
             guard let status = PersonalConnectionStatus(answer) else { throw APIError(.nonJSON) }
-            let wasDirty = dirty
-            self.status = status
-            if !wasDirty { url = status.url }
+            form.adopt(status, preservingEdits: true)
             error = nil
         } catch {
             if !error.isCancellation { self.error = errorText(error) }
@@ -51,13 +50,13 @@ final class PersonalConnectionModel: ObservableObject {
             do {
                 let answer = try await Store.shared.call(operation, body)
                 guard let status = PersonalConnectionStatus(answer) else { throw APIError(.nonJSON) }
-                self.status = status; url = status.url
+                form.adopt(status, preservingEdits: false)
             } catch {
                 uncertain = !((error as? APIError)?.isRefusal ?? false)
                 if !error.isCancellation { self.error = errorText(error) }
             }
         }
     }
-    func discard() { token = ""; url = status?.url ?? "" }
-    func checkOutcome() { uncertain = false; Task { await load() } }
+    func discard() { form.discard() }
+    func checkOutcome() { discard(); uncertain = false; Task { await load() } }
 }

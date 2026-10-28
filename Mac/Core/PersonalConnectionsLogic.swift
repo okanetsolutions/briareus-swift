@@ -41,3 +41,18 @@ struct PersonalConnectionStatus: Equatable, Sendable {
     }
     var summary: String { connected ? identity.map { "Connected as @\($0)" } ?? "Connected" : "Not connected" }
 }
+
+/// The input and saved status are separate, so a refresh never overwrites edits made while it was in flight.
+struct PersonalConnectionFormState: Equatable, Sendable {
+    var token = ""
+    var url = ""
+    var status: PersonalConnectionStatus?
+    var dirty: Bool { !token.isEmpty || url != (status?.url ?? "") }
+    var canSave: Bool { status != nil && !token.cTrimmed.isEmpty }
+    mutating func adopt(_ status: PersonalConnectionStatus, preservingEdits: Bool) {
+        let preserve = preservingEdits && dirty
+        self.status = status
+        if !preserve { token = ""; url = status.url }
+    }
+    mutating func discard() { token = ""; url = status?.url ?? "" }
+}

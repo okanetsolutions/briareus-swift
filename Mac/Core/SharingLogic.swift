@@ -63,3 +63,15 @@ struct ShareResource: Equatable, Sendable, Identifiable {
         title = raw["label"].nonEmpty ?? raw["repo"].nonEmpty ?? raw["name"].nonEmpty ?? raw["host"].nonEmpty ?? id
     }
 }
+
+/// Membership is replaced as one complete set; selecting another resource must never carry edits across it.
+struct SharingFormState: Equatable, Sendable {
+    var picked: Set<Int> = []
+    var original: Set<Int> = []
+    var dirty: Bool { picked != original }
+    mutating func select(_ members: Set<Int>) { original = members; picked = members }
+    mutating func toggle(_ id: Int) {
+        if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
+    }
+    mutating func discard() { picked = original }
+}

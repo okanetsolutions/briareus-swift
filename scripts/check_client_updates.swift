@@ -13,6 +13,9 @@ final class Store {
     }
 }
 func errorText(_ error: Error) -> String { String(describing: error) }
+extension Error {
+    var isCancellation: Bool { (self as? APIError)?.kind == .cancelled || self is CancellationError }
+}
 
 @main
 struct ClientUpdatesCheck {

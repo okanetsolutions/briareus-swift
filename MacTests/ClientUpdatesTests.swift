@@ -135,4 +135,28 @@ final class ClientUpdatesTests: XCTestCase {
         let user = try XCTUnwrap(SharingUser(["id": 2, "name": "Member", "role": "member", "disabled": true]))
         XCTAssertTrue(user.disabled); XCTAssertFalse(user.admin)
     }
+    func testPersonalConnectionRefreshPreservesEditsAndReconciliationClearsSecrets() throws {
+        var form = PersonalConnectionFormState()
+        form.url = "http://edited.local"
+        XCTAssertTrue(form.dirty)
+        let stored = try XCTUnwrap(PersonalConnectionStatus(["connected": true, "url": "http://saved.local"]))
+        form.adopt(stored, preservingEdits: true)
+        XCTAssertEqual(form.url, "http://edited.local")
+        form.token = "new-token"
+        XCTAssertTrue(form.canSave)
+        form.adopt(stored, preservingEdits: false)
+        XCTAssertTrue(form.token.isEmpty)
+        XCTAssertEqual(form.url, "http://saved.local")
+        XCTAssertFalse(form.dirty); XCTAssertFalse(form.canSave)
+    }
+    func testSharingDraftCanBeDiscardedBeforeSelectingAnotherResource() {
+        var form = SharingFormState()
+        form.select([1, 3]); form.toggle(3); form.toggle(2)
+        XCTAssertEqual(form.picked, [1, 2]); XCTAssertTrue(form.dirty)
+        form.discard()
+        XCTAssertEqual(form.picked, [1, 3]); XCTAssertFalse(form.dirty)
+        form.select([8])
+        XCTAssertEqual(form.picked, [8]); XCTAssertFalse(form.dirty)
+    }
+
 }

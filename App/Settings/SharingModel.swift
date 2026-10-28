@@ -8,17 +8,17 @@ final class SharingModel: ObservableObject {
     @Published var resourceID = ""
     @Published private(set) var resources: [ShareResource] = []
     @Published private(set) var users: [SharingUser] = []
-    @Published private(set) var picked: Set<Int> = []
+    @Published private var form = SharingFormState()
+    var picked: Set<Int> { form.picked }
     @Published private(set) var loaded = false
     @Published private(set) var busy = false
     @Published private(set) var uncertain = false
     @Published private(set) var error: String?
     private var shares: JSON = []
-    private var original: Set<Int> = []
     init() { kind = ShareKind.allCases.first { Store.shared.supports($0.operation) } ?? .project }
-    var available: Bool { Store.shared.supports("shares") && Store.shared.supports("users") }
+    var available: Bool { Store.shared.supports("shares") && Store.shared.supports("users") && !kinds.isEmpty }
     var kinds: [ShareKind] { ShareKind.allCases.filter { Store.shared.supports($0.operation) } }
-    var dirty: Bool { picked != original }
+    var dirty: Bool { form.dirty }
     var canSave: Bool { available && loaded && !resourceID.isEmpty && dirty && !busy && !uncertain && Store.shared.supports("update_shares") }
 
     func load() async {
@@ -46,13 +46,13 @@ final class SharingModel: ObservableObject {
     func selectResource(_ id: String) {
         guard !dirty, resources.contains(where: { $0.id == id }) else { return }
         resourceID = id
-        original = kind.members(shares, resourceID: id); picked = original
+        form.select(kind.members(shares, resourceID: id))
     }
     func toggle(_ user: SharingUser) {
         guard Store.shared.supports("update_shares"), !busy, !uncertain else { return }
-        if picked.contains(user.id) { picked.remove(user.id) } else { picked.insert(user.id) }
+        form.toggle(user.id)
     }
-    func discard() { picked = original }
+    func discard() { form.discard() }
     func save() {
         guard canSave else { return }
         let requested = kind, id = resourceID, selection = picked
@@ -62,9 +62,9 @@ final class SharingModel: ObservableObject {
             do {
                 let answer = try await Store.shared.call("update_shares", requested.body(resourceID: id, users: selection))
                 guard answer["kind"].string == requested.rawValue, answer["id"].string == id, let ids = answer["userIds"].array else { throw APIError(.nonJSON) }
-                original = Set(ids.compactMap(\.int)); picked = original
+                form.select(Set(ids.compactMap(\.int)))
                 shares = .array(shares.items.filter { $0["kind"].string != requested.rawValue || $0["id"].string != id }
-                    + original.map { ["kind": .string(requested.rawValue), "id": .string(id), "userId": JSON($0)] })
+                    + form.original.map { ["kind": .string(requested.rawValue), "id": .string(id), "userId": JSON($0)] })
             } catch {
                 uncertain = !((error as? APIError)?.isRefusal ?? false)
                 if !error.isCancellation { self.error = errorText(error) }

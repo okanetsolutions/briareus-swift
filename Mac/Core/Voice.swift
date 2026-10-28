@@ -400,7 +400,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
             description = "The review findings left on one of the project's pull requests: each one's key, severity, place, what it says, the user's verdict (yes to fix, no, or optional) and whether it is fixed."
             add("number", "integer", "The pull request's number.")
         case .decideFinding:
-            description = "Records the user's yes or no on one finding of a pull request: fix (yes, implement it), dismissed (no) or optional. Only on the user's own word; run_errand implement-feedback then fixes the ones marked fix."
+            description = "Records the user's yes or no on one finding of a pull request: fix (yes, implement it), dismissed (no) or optional. Only on the user's own word; run_errand implement-feedback starts an assessment for manual Findings decisions; completing that assessment starts only selected fixes."
             add("number", "integer", "The pull request's number.")
             add("key", "string", "The finding's key, from list_findings.")
             properties["decision"] = ["type": "string", "enum": ["fix", "dismissed", "optional"], "description": "fix for yes, dismissed for no, optional to leave it to the implementer."]
