@@ -7,7 +7,7 @@ struct SettingsConnectionSections: View {
 
     var body: some View {
         Group { connection }
-        .alert(model.model.confirm == .revoke ? "Revoke this device token?" : "Forget this connection?",
+        .alert(model.confirm == .revoke ? "Revoke this device token?" : "Forget this connection?",
                isPresented: Binding(get: { model.confirm != nil }, set: { if !$0 { model.confirm = nil } }), presenting: model.confirm) { action in
             Button(action == .revoke ? "Revoke and disconnect" : "Forget", role: .destructive) { model.run(action) }
             Button("Cancel", role: .cancel) {}
