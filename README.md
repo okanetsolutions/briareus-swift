@@ -23,7 +23,7 @@ A native SwiftUI client for [Briareus](https://github.com/nadinyamaui/briareus),
 
 ## What it does
 
-The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out for a phone: **Projects** (the projects, their conversations and boards), **Findings** (◉ Status at its top, with how many conversations need you, are working and are ready, each waiting one's question answered in place with its options or a reply, and what is working now; then the review rounds waiting across every project; the tab's badge is the count needing you), **Usage** and **Settings**. It runs on the Mac app's core (`Mac/Core`), so both apps read the server the same way. The screen stays on while the app is open.
+The iPhone and iPad app opens on tabs, the Mac app's sidebar strip laid out for a phone: **Projects** (the projects, their conversations and boards), **Pull requests**, **Findings** (◉ Status at its top, with how many conversations need you, are working and are ready, each waiting one's question answered in place with its options or a reply, and what is working now; then the review rounds waiting across every project; the tab's badge is the count needing you), and **Settings**. The **Usage** dashboard is available on iPad only; iPhone never creates its model, loads its cached ledger or starts its requests and polling. Tabs depend on the server's supported routes. It runs on the Mac app's core (`Mac/Core`), so both apps read the server the same way. The screen stays on while the app is open.
 
 **Conversations**
 
