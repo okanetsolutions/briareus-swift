@@ -1,9 +1,27 @@
 // Remote host telemetry: preserve missing readings, freshness and gaps in the rolling history.
 import Foundation
 
+struct SSHMonitoringCapabilities: Equatable, Sendable {
+    let available: Bool
+    let canIssue: Bool
+    let canRevoke: Bool
+    let canToggle: Bool
+    init(serverID: Double?, server: SSHResourceServer?, supports: (String) -> Bool) {
+        available = supports("ssh_monitoring")
+        canIssue = serverID != nil && supports(SSHMonitoringAction.issue.rawValue)
+        canRevoke = serverID != nil && supports(SSHMonitoringAction.revoke.rawValue)
+        canToggle = server != nil && supports(SSHMonitoringAction.toggle.rawValue)
+    }
+}
+
 enum SSHMonitoringAction: String, Sendable {
     case issue = "ssh_monitor_token", revoke = "revoke_ssh_monitor_token", toggle = "update_ssh_server"
     var clearsCredential: Bool { self != .toggle }
+    func body(serverID: Double, extra: JSON = [:]) -> JSON {
+        var args = extra
+        args["id"] = .number(serverID)
+        return args
+    }
     func credential(from answer: JSON, current: String?) throws -> String? {
         if self == .issue { return try MonitorCredential(answer).configuration }
         return current
@@ -40,6 +58,10 @@ struct SSHResourceServer: Equatable, Sendable, Identifiable {
     let stale: Bool
     let latest: JSON
 
+    static func parseList(_ answer: JSON) throws -> [SSHResourceServer] {
+        guard answer["servers"].isArray else { throw APIError(.nonJSON) }
+        return answer["servers"].items.compactMap(Self.init)
+    }
     init?(_ raw: JSON) {
         guard let id = raw["id"].number, id > 0, id.isFinite else { return nil }
         self.id = id

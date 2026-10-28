@@ -1,6 +1,29 @@
 // Administrative sharing: save the complete membership of one resource without changing another.
 import Foundation
 
+struct SharingCapabilities: Equatable, Sendable {
+    let kinds: [ShareKind]
+    let available: Bool
+    var initialKind: ShareKind { kinds.first ?? .project }
+    init(supports: (String) -> Bool) {
+        let kinds = ShareKind.allCases.filter { supports($0.operation) }
+        self.kinds = kinds
+        available = supports("shares") && supports("users") && !kinds.isEmpty
+    }
+}
+
+struct SharingSnapshot: Equatable, Sendable {
+    let users: [SharingUser]
+    let shares: JSON
+    let resources: [ShareResource]
+    init(people: JSON, grants: JSON, records: JSON, kind: ShareKind) throws {
+        guard people["users"].isArray, grants["shares"].isArray, records[kind.listKey].isArray else { throw APIError(.nonJSON) }
+        users = people["users"].items.compactMap(SharingUser.init)
+        shares = grants["shares"]
+        resources = records[kind.listKey].items.compactMap(ShareResource.init)
+    }
+}
+
 enum ShareKind: String, CaseIterable, Identifiable, Sendable {
     case project, dbServer, sshServer, mcpServer, forgeAccount, envoyerAccount
     var id: String { rawValue }
@@ -69,6 +92,13 @@ struct SharingFormState: Equatable, Sendable {
     var picked: Set<Int> = []
     var original: Set<Int> = []
     var dirty: Bool { picked != original }
+    func canLoad(available: Bool, busy: Bool) -> Bool { available && !busy && !dirty }
+    func canSelect(resourceID: String, resources: [ShareResource]) -> Bool {
+        !dirty && resources.contains { $0.id == resourceID }
+    }
+    static func resourceID(afterLoading resources: [ShareResource], current: String) -> String {
+        resources.contains { $0.id == current } ? current : resources.first?.id ?? ""
+    }
     func canSave(resourceID: String, available: Bool, loaded: Bool, supported: Bool, busy: Bool, uncertain: Bool) -> Bool {
         available && loaded && !resourceID.isEmpty && dirty
             && SettingsWritePolicy.allows(supported: supported, busy: busy, uncertain: uncertain)

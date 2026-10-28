@@ -16,11 +16,14 @@ final class SSHMonitoringModel: ObservableObject {
     @Published private(set) var credential: String?
 
     init(serverID: Double? = nil) { self.serverID = serverID }
-    var available: Bool { Store.shared.supports("ssh_monitoring") }
+    private var capabilities: SSHMonitoringCapabilities {
+        SSHMonitoringCapabilities(serverID: serverID, server: server, supports: Store.shared.supports)
+    }
+    var available: Bool { capabilities.available }
     var server: SSHResourceServer? { servers.first { $0.id == serverID } }
-    var canIssue: Bool { serverID != nil && Store.shared.supports("ssh_monitor_token") }
-    var canRevoke: Bool { serverID != nil && Store.shared.supports("revoke_ssh_monitor_token") }
-    var canToggle: Bool { server != nil && Store.shared.supports("update_ssh_server") }
+    var canIssue: Bool { capabilities.canIssue }
+    var canRevoke: Bool { capabilities.canRevoke }
+    var canToggle: Bool { capabilities.canToggle }
     var title: String { server?.title ?? "SSH monitoring" }
 
     func load(afterWrite: Bool = false) async {
@@ -30,8 +33,7 @@ final class SSHMonitoringModel: ObservableObject {
         defer { loading = false }
         do {
             let answer = try await Store.shared.call("ssh_monitoring")
-            guard answer["servers"].isArray else { throw APIError(.nonJSON) }
-            servers = answer["servers"].items.compactMap(SSHResourceServer.init)
+            servers = try SSHResourceServer.parseList(answer)
             if let serverID {
                 guard server != nil else { history = nil; charts = []; throw APIError(.http, status: 404, message: "This server is no longer available.") }
                 if Store.shared.supports("ssh_resources") {
@@ -64,7 +66,7 @@ final class SSHMonitoringModel: ObservableObject {
         guard let serverID, SSHMonitoringPolicy.canWrite(serverID: serverID, supported: Store.shared.supports(operation), loading: loading, busy: busy, uncertain: uncertain) else { return }
         busy = true; error = nil
         if action.clearsCredential { credential = nil }
-        var args = extra; args["id"] = .number(serverID)
+        let args = action.body(serverID: serverID, extra: extra)
         Task {
             defer { busy = false }
             do {
@@ -72,9 +74,9 @@ final class SSHMonitoringModel: ObservableObject {
                 credential = try action.credential(from: answer, current: credential)
                 await load(afterWrite: true)
             } catch {
-                guard !error.isCancellation else { uncertain = true; return }
-                self.error = errorText(error)
                 uncertain = SettingsWritePolicy.isUncertain(error)
+                guard !error.isCancellation else { return }
+                self.error = errorText(error)
             }
         }
     }

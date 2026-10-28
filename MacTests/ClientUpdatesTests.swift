@@ -3,6 +3,62 @@ import XCTest
 @testable import BriareusMacCore
 
 final class ClientUpdatesTests: XCTestCase {
+    func testSharingCapabilitiesAndResourceSelectionAreSharedRules() throws {
+        let offered: Set<String> = ["shares", "users", ShareKind.sshServer.operation]
+        let capabilities = SharingCapabilities(supports: offered.contains)
+        XCTAssertTrue(capabilities.available)
+        XCTAssertEqual(capabilities.kinds, [.sshServer])
+        XCTAssertEqual(capabilities.initialKind, .sshServer)
+        XCTAssertEqual(SharingCapabilities(supports: { _ in false }).initialKind, .project)
+        for missing in offered {
+            let limited = offered.subtracting([missing])
+            XCTAssertFalse(SharingCapabilities(supports: limited.contains).available)
+        }
+        let resources = try ["1", "2"].map { id in try XCTUnwrap(ShareResource(["id": .string(id)])) }
+        XCTAssertEqual(SharingFormState.resourceID(afterLoading: resources, current: "2"), "2")
+        XCTAssertEqual(SharingFormState.resourceID(afterLoading: resources, current: "gone"), "1")
+        XCTAssertEqual(SharingFormState.resourceID(afterLoading: [], current: "gone"), "")
+        var form = SharingFormState()
+        XCTAssertTrue(form.canSelect(resourceID: "2", resources: resources))
+        XCTAssertFalse(form.canSelect(resourceID: "gone", resources: resources))
+        XCTAssertTrue(form.canLoad(available: true, busy: false))
+        XCTAssertFalse(form.canLoad(available: false, busy: false))
+        XCTAssertFalse(form.canLoad(available: true, busy: true))
+        form.toggle(1)
+        XCTAssertFalse(form.canSelect(resourceID: "2", resources: resources))
+        XCTAssertFalse(form.canLoad(available: true, busy: false))
+    }
+    func testMonitoringCapabilitiesRequireTheTargetAndAdvertisedOperation() throws {
+        let server = try XCTUnwrap(SSHResourceServer(["id": 1]))
+        let routes: Set<String> = ["ssh_monitoring", "ssh_monitor_token", "revoke_ssh_monitor_token", "update_ssh_server"]
+        let full = SSHMonitoringCapabilities(serverID: 1, server: server, supports: routes.contains)
+        XCTAssertTrue(full.available && full.canIssue && full.canRevoke && full.canToggle)
+        let overview = SSHMonitoringCapabilities(serverID: nil, server: nil, supports: routes.contains)
+        XCTAssertTrue(overview.available)
+        XCTAssertFalse(overview.canIssue || overview.canRevoke || overview.canToggle)
+        let unsupported = SSHMonitoringCapabilities(serverID: 1, server: server, supports: { _ in false })
+        XCTAssertFalse(unsupported.available || unsupported.canIssue || unsupported.canRevoke || unsupported.canToggle)
+        let missingServer = SSHMonitoringCapabilities(serverID: 1, server: nil, supports: routes.contains)
+        XCTAssertTrue(missingServer.canIssue && missingServer.canRevoke)
+        XCTAssertFalse(missingServer.canToggle)
+        XCTAssertEqual(SSHMonitoringAction.toggle.body(serverID: 1, extra: ["id": 2, "monitoringEnabled": false]), ["id": 1, "monitoringEnabled": false])
+        XCTAssertEqual(SSHMonitoringAction.issue.body(serverID: 3), ["id": 3])
+    }
+    func testSharedCollectionParsersRejectMissingCollectionsAndKeepValidRecords() throws {
+        let people: JSON = ["users": [["id": 2, "name": "Member"]]]
+        let grants: JSON = ["shares": [["kind": "project", "id": "1", "userId": 2]]]
+        let records: JSON = ["projects": [["id": 1]]]
+        let snapshot = try SharingSnapshot(people: people, grants: grants, records: records, kind: .project)
+        XCTAssertEqual(snapshot.users.map(\.id), [2])
+        XCTAssertEqual(snapshot.shares, grants["shares"])
+        XCTAssertEqual(snapshot.resources.map(\.id), ["1"])
+        XCTAssertThrowsError(try SharingSnapshot(people: [:], grants: grants, records: records, kind: .project))
+        XCTAssertThrowsError(try SharingSnapshot(people: people, grants: [:], records: records, kind: .project))
+        XCTAssertThrowsError(try SharingSnapshot(people: people, grants: grants, records: records, kind: .sshServer))
+        XCTAssertEqual(try SSHResourceServer.parseList(["servers": [["id": 1], ["id": -1]]]).map(\.id), [1])
+        XCTAssertTrue(try SSHResourceServer.parseList(["servers": []]).isEmpty)
+        XCTAssertThrowsError(try SSHResourceServer.parseList([:]))
+    }
     func testSharedWritePolicyBlocksDuplicatesUncertainOutcomesAndUnsupportedRoutes() {
         for supported in [false, true] {
             for busy in [false, true] {

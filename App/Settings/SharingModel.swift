@@ -15,14 +15,15 @@ final class SharingModel: ObservableObject {
     @Published private(set) var uncertain = false
     @Published private(set) var error: String?
     private var shares: JSON = []
-    init() { kind = ShareKind.allCases.first { Store.shared.supports($0.operation) } ?? .project }
-    var available: Bool { Store.shared.supports("shares") && Store.shared.supports("users") && !kinds.isEmpty }
-    var kinds: [ShareKind] { ShareKind.allCases.filter { Store.shared.supports($0.operation) } }
+    init() { kind = capabilities.initialKind }
+    private var capabilities: SharingCapabilities { SharingCapabilities(supports: Store.shared.supports) }
+    var available: Bool { capabilities.available }
+    var kinds: [ShareKind] { capabilities.kinds }
     var dirty: Bool { form.dirty }
     var canSave: Bool { form.canSave(resourceID: resourceID, available: available, loaded: loaded, supported: Store.shared.supports("update_shares"), busy: busy, uncertain: uncertain) }
 
     func load() async {
-        guard available, !busy, !dirty else { return }
+        guard form.canLoad(available: available, busy: busy) else { return }
         let requested = kind
         busy = true; loaded = false; error = nil
         defer { busy = false }
@@ -31,12 +32,12 @@ final class SharingModel: ObservableObject {
             async let s = Store.shared.call("shares")
             async let r = Store.shared.call(requested.operation)
             let (people, grants, records) = try await (u, s, r)
-            guard people["users"].isArray, grants["shares"].isArray, records[requested.listKey].isArray else { throw APIError(.nonJSON) }
+            let snapshot = try SharingSnapshot(people: people, grants: grants, records: records, kind: requested)
             guard kind == requested else { return }
-            users = people["users"].items.compactMap(SharingUser.init)
-            shares = grants["shares"]
-            resources = records[requested.listKey].items.compactMap(ShareResource.init)
-            if !resources.contains(where: { $0.id == resourceID }) { resourceID = resources.first?.id ?? "" }
+            users = snapshot.users
+            shares = snapshot.shares
+            resources = snapshot.resources
+            resourceID = SharingFormState.resourceID(afterLoading: resources, current: resourceID)
             selectResource(resourceID)
             loaded = true
         } catch {
@@ -44,7 +45,7 @@ final class SharingModel: ObservableObject {
         }
     }
     func selectResource(_ id: String) {
-        guard !dirty, resources.contains(where: { $0.id == id }) else { return }
+        guard form.canSelect(resourceID: id, resources: resources) else { return }
         resourceID = id
         form.select(kind.members(shares, resourceID: id))
     }
