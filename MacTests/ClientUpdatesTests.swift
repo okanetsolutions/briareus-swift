@@ -159,4 +159,11 @@ final class ClientUpdatesTests: XCTestCase {
         XCTAssertEqual(form.picked, [8]); XCTAssertFalse(form.dirty)
     }
 
+    func testSSHConnectionSaveDoesNotOverwriteSeparatelyEditedMonitoring() throws {
+        let form = SSHServerFormState(row: ["id": 123, "repo": "o/r", "host": "host.test", "port": 22, "username": "deploy", "monitoringEnabled": false])
+        let body = try form.body().get()
+        XCTAssertNil(body.object?["monitoringEnabled"])
+        XCTAssertEqual(body["host"], "host.test")
+    }
+
 }

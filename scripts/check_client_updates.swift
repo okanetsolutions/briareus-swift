@@ -101,6 +101,11 @@ struct ClientUpdatesCheck {
         let writes = store.calls.count
         monitor.issueToken()
         precondition(store.calls.count == writes)
+        store.offered.subtract(["connect_github", "update_shares", "ssh_monitor_token"])
+        precondition(!personal.canConnect && !sharing.canSave && !monitor.canIssue)
+        let readOnlyCalls = store.calls.count
+        personal.save(); sharing.save(); monitor.issueToken()
+        precondition(store.calls.count == readOnlyCalls)
         print("Client update model checks passed")
     }
 }
