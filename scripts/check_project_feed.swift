@@ -10,7 +10,13 @@ final class Store: ObservableObject {
     var read: (JSON) async throws -> JSON = { _ in [:] }
     func supports(_ operation: String) -> Bool { true }
     func call(_ operation: String, _ arguments: JSON = [:]) async throws -> JSON { try await read(arguments) }
-    func feed(_ repo: String) -> ProjectFeed { ProjectFeed(repo: repo) }
+    private var feeds: [String: ProjectFeed] = [:]
+    func feed(_ repo: String) -> ProjectFeed {
+        if let feed = feeds[repo] { return feed }
+        let feed = ProjectFeed(repo: repo)
+        feeds[repo] = feed
+        return feed
+    }
 }
 
 @MainActor
@@ -59,10 +65,51 @@ struct ProjectFeedChecks {
         try await cancelledTabRead(join: true)
         try await overlappingReads(failFirst: false)
         try await overlappingReads(failFirst: true)
+        try await boardRefreshProgress(fail: false)
+        try await boardRefreshProgress(fail: true)
         liveSessionsAfterCacheWipe()
         liveSessionsBeforeFirstRead()
         liveSessionDeletions()
-        print("Project feed cache reuse, tab cancellation, skipped reads, failures, overlapping spinner and live session checks passed")
+        try await coalescedSessionUpdates()
+        print("Project feed cache reuse, cancellation, overlapping reads, live sessions and coalesced overview checks passed")
+    }
+
+    @MainActor
+    static func coalescedSessionUpdates() async throws {
+        let store = Store.shared, model = ProjectsModel.shared, repo = "burst/sessions"
+        store.cache.removeAll()
+        var requests = 0
+        store.read = { _ in
+            requests += 1
+            return requests == 1 ? ["projects": [["repo": .string(repo)]]] : ["sessions": []]
+        }
+        try await model.load()
+        let feed = store.feed(repo)
+        var changes = 0
+        let subscription = model.$allSessions.dropFirst().sink { _ in changes += 1 }
+        defer { subscription.cancel() }
+        for n in 1...100 {
+            feed.upsert(Session(["id": .string("s\(n)"), "repo": .string(repo), "status": "running"])!)
+        }
+        precondition(changes == 0, "A stream burst must not rebuild every project's overview for each record")
+        for _ in 0..<100 {
+            if changes > 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        precondition(changes == 1 && model.allSessions.sessions.count == 100 && model.overview.working.count == 100,
+                     "One overview refresh must include the entire burst")
+        feed.remove("s1")
+        model.recount()
+        precondition(changes == 2 && model.allSessions.sessions.count == 99,
+                     "An explicit recount must reflect deletions immediately")
+        try await Task.sleep(for: .milliseconds(150))
+        precondition(changes == 2, "An explicit recount must cancel the pending refresh")
+        feed.upsert(Session(["id": "s101", "repo": .string(repo), "status": "running"])!)
+        store.cache.removeAll()
+        store.client = nil
+        try await Task.sleep(for: .milliseconds(150))
+        precondition(model.projects.isEmpty && model.allSessions.sessions.isEmpty && !model.sessionsLoaded,
+                     "A pending overview refresh must not restore data after sign-out")
     }
 
     @MainActor
@@ -150,6 +197,7 @@ struct ProjectFeedChecks {
         await reads.waitFor(1)
         precondition(requests == [false], "A stale local copy must try the server cache first")
         precondition(feed.boardReading && feed.board == stale)
+        precondition(!feed.boardRefreshing, "Automatic reads must not add progress above cached board rows")
         reads.pending[0].resume(returning: staleServer ? stale : board)
         if staleServer {
             await reads.waitFor(2)
@@ -210,5 +258,28 @@ struct ProjectFeedChecks {
         }
         precondition(failures == (failFirst ? 1 : 0))
         precondition(!feed.boardReading, "Spinner must stop after every read completes, including failures")
+    }
+
+    @MainActor
+    static func boardRefreshProgress(fail: Bool) async throws {
+        let reads = Reads(), feed = ProjectFeed(repo: "refresh-progress/\(fail)")
+        Store.shared.read = { _ in try await reads.read() }
+        let background = Task { try await feed.loadBoard(fresh: true) }
+        await reads.waitFor(1)
+        precondition(!feed.boardRefreshing, "A fresh read from another screen must not show board refresh progress")
+        let refresh = Task { try await feed.refreshBoard() }
+        while !feed.boardRefreshing { await Task.yield() }
+        precondition(feed.boardReading, "User refresh progress must cover waiting for an existing read")
+        reads.pending[0].resume(returning: board)
+        try await background.value
+        await reads.waitFor(2)
+        precondition(feed.boardRefreshing, "Progress must remain visible throughout the user's own read")
+        if fail { reads.pending[1].resume(throwing: APIError(.network)) }
+        else { reads.pending[1].resume(returning: board) }
+        do {
+            try await refresh.value
+            precondition(!fail)
+        } catch { precondition(fail) }
+        precondition(!feed.boardRefreshing && !feed.boardReading, "Success and failure must stop refresh progress")
     }
 }

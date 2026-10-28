@@ -23,6 +23,9 @@ final class ProjectFeed: ObservableObject {
     /// True while the pull request list is being read, including a refresh with cached rows still on screen.
     @Published private(set) var boardReading = false
     private var boardReadCount = 0
+    /// Only a refresh started on the board shows progress above its cached rows.
+    @Published private(set) var boardRefreshing = false
+    private var boardRefreshCount = 0
     /// The board's pull requests and issues, each issue with what the server sent for it.
     private(set) var pulls: [PullSummary] = []
     private(set) var issues: [(summary: IssueSummary, raw: JSON)] = []
@@ -61,7 +64,7 @@ final class ProjectFeed: ObservableObject {
         sessionsLoaded = true
         Store.shared.cache.store(Session.json(list), "sessions:\(repo)")
         for id in gone { Store.shared.cache.remove("transcript:\(id)") }
-        ProjectsModel.shared.recount()
+        ProjectsModel.shared.scheduleRecount()
     }
     /// A deleted conversation leaves the list at once, before the server is asked again.
     func drop(_ id: String) {
@@ -74,7 +77,7 @@ final class ProjectFeed: ObservableObject {
         guard let list = saved ?? sessions.upserting(s) else { return }
         sessions = list
         if saved != nil { sessionsLoaded = true }
-        ProjectsModel.shared.recount()
+        ProjectsModel.shared.scheduleRecount()
     }
     /// A conversation the live stream says was deleted, if it is in this list.
     func remove(_ id: String) {
@@ -83,7 +86,7 @@ final class ProjectFeed: ObservableObject {
         sessions = list
         if saved != nil { sessionsLoaded = true }
         Store.shared.cache.remove("transcript:\(id)")
-        ProjectsModel.shared.recount()
+        ProjectsModel.shared.scheduleRecount()
     }
 
     /// When each repository's pull request list may be read again, shared by every project's feed.
@@ -92,6 +95,16 @@ final class ProjectFeed: ObservableObject {
     /// Other lists reading through this feed respect the same repository cooldown.
     static func boardDeadline(_ repo: String) -> Date? { cooldown.deadline(repo) }
     static func boardCooldownError(_ repo: String) -> APIError? { cooldown.error(repo) }
+
+    func refreshBoard() async throws {
+        boardRefreshCount += 1
+        boardRefreshing = true
+        defer {
+            boardRefreshCount -= 1
+            boardRefreshing = boardRefreshCount > 0
+        }
+        try await loadBoard(fresh: true)
+    }
 
     /// `fresh` also has the server ask GitHub again instead of answering from its own short cache.
     func loadBoard(fresh: Bool = false) async throws {
@@ -174,6 +187,7 @@ final class ProjectsModel: ObservableObject {
 
     private var generation = 0
     private var signOut: AnyCancellable?
+    private var recountTask: Task<Void, Never>?
 
     private init() {
         if let saved = Store.shared.cache.value("projects") { adopt(saved) }
@@ -193,14 +207,26 @@ final class ProjectsModel: ObservableObject {
     }
     private func reset() {
         generation += 1
+        recountTask?.cancel(); recountTask = nil
         allSessions = AllSessions(sessions: [], projects: []); sessionsLoaded = false; sessionsError = nil
         projects = []; raw = .null; overview = SessionOverview([]); loaded = false; error = nil
     }
 
     func project(_ repo: String?) -> Project? { projects.first { $0.repo == repo } }
 
+    /// Stream catch-up and a full read can change many feeds together; aggregate them once per burst.
+    func scheduleRecount() {
+        guard recountTask == nil else { return }
+        recountTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+            self?.recount()
+        }
+    }
+
     /// The overview from what is saved of each project's conversations.
     func recount() {
+        recountTask?.cancel(); recountTask = nil
         var all: [Session] = []
         var cachedRepos: Set<String> = []
         for p in projects {

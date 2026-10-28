@@ -82,7 +82,7 @@ func logLineText(_ e: Event) -> String { e.kind == "cmd" ? "$ \(e.text ?? "")" :
 
 /// What the transcript lays out: workspace preparation folded into one block per turn, each run of tool calls into another,
 /// and the visible events between them.
-enum TranscriptBlock: Equatable {
+enum TranscriptBlock: Equatable, Sendable {
     case preparation([Event])
     case tools([Event])
     case event(Event)
@@ -104,32 +104,100 @@ enum TranscriptBlock: Equatable {
     }
 }
 
-func transcriptBlocks(_ events: [Event]) -> [TranscriptBlock] {
-    var out: [TranscriptBlock] = []
-    var prepDone = false
-    var i = 0
-    while i < events.count {
-        let e = events[i]
-        if e.kind == "user" || e.kind == "result" { prepDone = false }
-        if !prepDone && isPrepLine(e) && !prepClosed(e) {
-            var j = i
-            while j < events.count && isPrepLine(events[j]) && !prepClosed(events[j]) { j += 1 }
-            out.append(.preparation(Array(events[i..<j])))
-            i = j
-            continue
-        }
-        if isPrepLine(e) && prepClosed(e) { prepDone = true }
-        if isToolEvent(e) {
-            var j = i
-            while j < events.count && isToolEvent(events[j]) { j += 1 }
-            out.append(.tools(Array(events[i..<j])))
-            i = j
-            continue
-        }
-        if e.isVisible { out.append(.event(e)) }
-        i += 1
+/// A row snapshot shares completed history and keeps its own tail, the only block a later append can change.
+/// The builder and its snapshots stay with their owner; they are not sent between actors.
+struct TranscriptRows: RandomAccessCollection, Equatable {
+    fileprivate final class Storage { var blocks: [TranscriptBlock] = [] }
+    fileprivate let storage: Storage
+    fileprivate let tail: TranscriptBlock?
+    fileprivate let revision: Int
+    let endIndex: Int
+    var startIndex: Int { 0 }
+
+    fileprivate init(storage: Storage, revision: Int) {
+        self.storage = storage; self.revision = revision
+        endIndex = storage.blocks.count; tail = storage.blocks.last
     }
-    return out
+    func index(after i: Int) -> Int { i + 1 }
+    func index(before i: Int) -> Int { i - 1 }
+    subscript(position: Int) -> TranscriptBlock {
+        precondition(position >= startIndex && position < endIndex)
+        if position == endIndex - 1, let tail { return tail }
+        return storage.blocks[position]
+    }
+    static func == (a: Self, b: Self) -> Bool {
+        if a.storage === b.storage { return a.revision == b.revision }
+        return a.elementsEqual(b)
+    }
+}
+
+/// Folds rows only for conversation screens. Snapshots never retain the mutable history array's buffer.
+final class TranscriptBlockBuilder {
+    private var storage = TranscriptRows.Storage()
+    private var revision = 0
+    var blocks: TranscriptRows { TranscriptRows(storage: storage, revision: revision) }
+    private var prepDone = false
+    private enum Run: Equatable { case preparation, tools }
+    private var run: Run?
+
+    /// A poll can fill a gap behind the live cursor; its insertion may change existing folded runs.
+    @discardableResult
+    func update(_ events: [Event], changed: Range<Int>?) -> Bool {
+        guard let changed else { return false }
+        if changed.lowerBound == 0 {
+            storage = TranscriptRows.Storage(); revision = 0; prepDone = false; run = nil
+        }
+        return append(events[changed])
+    }
+
+    /// Appends an ordered suffix; even an invisible event ends a contiguous preparation or tool run.
+    @discardableResult
+    func append(_ events: ArraySlice<Event>) -> Bool {
+        var changed = false
+        var i = events.startIndex
+        while i < events.endIndex {
+            let e = events[i]
+            if e.kind == "user" || e.kind == "result" { prepDone = false }
+            if !prepDone && isPrepLine(e) && !prepClosed(e) {
+                var j = i + 1
+                while j < events.endIndex && isPrepLine(events[j]) && !prepClosed(events[j]) { j += 1 }
+                var group = Array(events[i..<j])
+                if run == .preparation, case .preparation(let previous)? = storage.blocks.last {
+                    group = previous + group
+                    storage.blocks.removeLast()
+                }
+                storage.blocks.append(.preparation(group))
+                run = .preparation
+                changed = true; i = j
+                continue
+            }
+            if isPrepLine(e) && prepClosed(e) { prepDone = true }
+            if isToolEvent(e) {
+                var j = i + 1
+                while j < events.endIndex && isToolEvent(events[j]) { j += 1 }
+                var group = Array(events[i..<j])
+                if run == .tools, case .tools(let previous)? = storage.blocks.last {
+                    group = previous + group
+                    storage.blocks.removeLast()
+                }
+                storage.blocks.append(.tools(group))
+                run = .tools
+                changed = true; i = j
+                continue
+            }
+            run = nil
+            if e.isVisible { storage.blocks.append(.event(e)); changed = true }
+            i += 1
+        }
+        if changed { revision += 1 }
+        return changed
+    }
+}
+
+func transcriptBlocks(_ events: [Event]) -> [TranscriptBlock] {
+    let builder = TranscriptBlockBuilder()
+    builder.append(events[...])
+    return Array(builder.blocks)
 }
 
 /// Whether a transcript holds only events without a time: saved before messages showed theirs, it is read again once.
@@ -234,7 +302,7 @@ struct BackgroundTask: Equatable, Sendable {
 /// Whether the agent has answered and said nothing since: past the server's own lines (a pull request's state, a quiet
 /// timer, stderr), the transcript ends on the turn's result. A running turn that has answered and still lists background
 /// work is waiting on it; one still speaking is not, whatever it backgrounded.
-func transcriptAnswered(_ blocks: [TranscriptBlock]) -> Bool {
+func transcriptAnswered<Blocks: BidirectionalCollection>(_ blocks: Blocks) -> Bool where Blocks.Element == TranscriptBlock {
     for block in blocks.reversed() {
         switch block {
         case .preparation: continue

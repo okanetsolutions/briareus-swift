@@ -33,6 +33,9 @@ final class BoardModel: ObservableObject {
     /// The pull request being merged from its row: read for its head first, then merged.
     @Published var mergingNumber = 0
     @Published var reading = false
+    /// User refreshes and post-merge reads show in-list progress until every fresh read finishes.
+    @Published private var refreshCount = 0
+    var refreshing: Bool { refreshCount > 0 }
     var dialogOpen = false
     /// The Board tab's own state (ProjectBoardTab.swift).
     lazy var projectBoard = ProjectBoardModel(repo: repo)
@@ -111,6 +114,8 @@ final class BoardModel: ObservableObject {
     /// Reads the board (`fresh` asks GitHub rather than the server's copy), the errands and the project's conversations.
     @discardableResult
     func load(fresh: Bool = false) async -> APIError? {
+        if fresh { refreshCount += 1 }
+        defer { if fresh { refreshCount -= 1 } }
         if !loaded {
             if let saved = Store.shared.cache.value("pulls:\(repo)") { show(saved, saved: true) }
             if catalog.count == 0, let acts = Store.shared.cache.value("actions") { catalog = acts["actions"] }
@@ -148,9 +153,10 @@ final class BoardModel: ObservableObject {
         case .board: projectBoard.refresh()
         case .files: files.refresh()
         default:
+            guard !refreshing else { return }
             uncertain = false; writeError = nil
             issueStatus.reset()
-            Task { await load(fresh: true) }
+            Task { if !refreshing { await load(fresh: true) } }
         }
     }
 
@@ -496,10 +502,9 @@ struct BoardScreen: View {
     // MARK: Lists
 
     @ViewBuilder private var lists: some View {
-        if let e = model.error { Notice(message: e); Spacer().frame(height: 10) }
-        BoardPullWriteNotice(model: model)
+        BoardListFeedback(error: model.error, writeError: model.writeError, uncertain: model.uncertain,
+                          loading: boardShowsLoading(loaded: model.loaded, refreshing: model.refreshing), loadingText: model.loadingText)
         if model.tab == .review { reviewList } else { filteredLists }
-        if !model.loaded { LoadingNote(text: "Loading pull requests…").padding(.horizontal, -8) }
     }
 
     @ViewBuilder private var filteredLists: some View {
@@ -525,7 +530,7 @@ struct BoardScreen: View {
             BoardPullListRow(model: model, pull: pull, stack: model.stack(of: pull)) { model.openPull(pull) }
             .padding(.bottom, 8)
         }
-        if model.loaded && shown.isEmpty && model.error == nil {
+        if !boardShowsLoading(loaded: model.loaded, refreshing: model.refreshing) && shown.isEmpty && model.error == nil {
             Text(model.reviewer == nil ? "Set your GitHub login to see the pull requests waiting on your review." : "Nothing is waiting on your review.")
                 .font(Theme.footnote).foregroundStyle(Theme.muted)
         }
@@ -536,7 +541,7 @@ struct BoardScreen: View {
             BoardPullListRow(model: model, pull: pull, stack: model.stack(of: pull)) { model.openPull(pull) }
             .padding(.bottom, 8)
         }
-        if model.loaded && shown == 0 && model.error == nil {
+        if !boardShowsLoading(loaded: model.loaded, refreshing: model.refreshing) && shown == 0 && model.error == nil {
             Text(model.pulls.isEmpty ? "No open pull requests." : "No pull requests match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)
         }
     }
@@ -568,7 +573,7 @@ struct BoardScreen: View {
                 Text("This repository has more open issues; only the most recently updated are listed.")
                     .font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
             }
-            if model.loaded && shown == 0 && model.error == nil {
+            if !boardShowsLoading(loaded: model.loaded, refreshing: model.refreshing) && shown == 0 && model.error == nil {
                 Text(model.issues.isEmpty ? "No open issues." : "No issues match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)
             }
         }

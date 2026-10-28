@@ -23,9 +23,9 @@ struct GlobalPullsScreen: View {
                             BoardPullWriteNotice(model: board, repo: entry.project.repo)
                         }
                     }
-                    GlobalBoardList(model: model)
-                    if model.state.loading && !model.state.loaded { LoadingNote(text: model.tab.loadingText) }
+                    if model.state.showsLoading { LoadingNote(text: model.tab.loadingText) }
                     else if model.state.loaded && model.shown.count(model.tab) == 0 { EmptyNote(title: model.emptyTitle) }
+                    GlobalBoardList(model: model)
                 }
                 .padding(18)
             }
