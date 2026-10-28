@@ -49,7 +49,8 @@ struct ProjectView: View {
 
     var body: some View {
         dialogs(chrome(List(selection: editing ? $picked : nil) { sections }))
-            .onChange(of: feed.sessions.map(\.id)) { _, ids in picked.formIntersection(ids) }
+            // A pick a live update, search or the closed switch moves out of sight is dropped, so a bulk action never reaches it.
+            .onChange(of: ConversationGroups(shown, limit: limit).drawnIDs) { _, drawn in picked.formIntersection(drawn) }
             .refreshable { _ = await load(fresh: true) }
             .task { await poll(every: ProjectFeed.sessionsEvery) { await load() } }
     }
