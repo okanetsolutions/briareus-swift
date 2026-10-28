@@ -78,7 +78,7 @@ struct BoardScreen: View {
                     ProgressView().accessibilityLabel(tab.loadingText)
                 }
                 if tab != .review {
-                    BoardFilterMenu(filter: filter, rows: rows, kinds: tab == .pulls ? [.author, .reviewer, .label] : [.author, .assignee, .label],
+                    BoardFilterMenu(filter: filter, rows: rows, kinds: tab.filterKinds,
                                     stacked: tab == .pulls) { filters.picked() }
                         .disabled(!loaded || rows.isEmpty && !filter.wrappedValue.isOn)
                 }

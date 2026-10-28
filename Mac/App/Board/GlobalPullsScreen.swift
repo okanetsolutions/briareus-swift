@@ -13,7 +13,6 @@ struct GlobalPullsScreen: View {
         VStack(spacing: 0) {
             PaneHeader(title: "All projects", subtitle: model.state.subtitle, buttons: headerButtons)
             GlobalBoardTabs(model: model).padding(.horizontal, Theme.paneMargin)
-            GlobalPullsFilters(model: model)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     if let error = model.state.error { Notice(message: error.description) }
@@ -23,6 +22,7 @@ struct GlobalPullsScreen: View {
                             BoardPullWriteNotice(model: board, repo: entry.project.repo)
                         }
                     }
+                    GlobalBoardFilterSummary(model: model)
                     if model.state.showsLoading { LoadingNote(text: model.tab.loadingText) }
                     else if model.state.loaded && model.shown.count(model.tab) == 0 { EmptyNote(title: model.emptyTitle) }
                     GlobalBoardList(model: model)
@@ -42,6 +42,10 @@ struct GlobalPullsScreen: View {
         if model.tab == .review {
             buttons.append(BoardEdits.reviewLoginButton { model.loginChanged() })
         }
+        buttons += BoardFilterControls.headerButtons(
+            filter: model.currentFilter, kinds: model.tab.filterKinds, stacked: model.tab == .pulls,
+            enabled: !model.state.projects.isEmpty, pick: model.pick,
+            toggleLaterStacked: model.toggleLaterStacked, toggleFailingChecks: model.toggleFailingChecks)
         buttons.append(HeaderButton(glyph: "arrow.clockwise", label: "Refresh", enabled: !model.state.loading,
                                     action: { Task { await model.load(fresh: true) } }))
         return buttons
@@ -88,32 +92,19 @@ private struct GlobalBoardList: View {
     }
 }
 
-private struct GlobalPullsFilters: View {
+/// The same filtered count and clear action as a project's board.
+private struct GlobalBoardFilterSummary: View {
     @ObservedObject var model: GlobalPullsModel
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) { search; project }
-            VStack(alignment: .leading, spacing: 10) { search; project }
-        }
-        .padding(.horizontal, 18).padding(.vertical, 10)
-    }
-
-    private var search: some View {
-        TextField(model.tab.searchPrompt, text: $model.filter.query)
-            .dashField().accessibilityLabel(model.tab.searchPrompt)
-    }
-
-    private var project: some View {
-        HStack(spacing: 8) {
-            Picker("Project", selection: $model.filter.repo) {
-                Text("All projects").tag("")
-                ForEach(model.state.projects, id: \.project.repo) { entry in
-                    Text(entry.project.title).tag(entry.project.repo)
-                }
+        if model.currentFilter.isOn {
+            HStack {
+                Text("Showing \(model.shown.count(model.tab)) of \(model.totals.count(model.tab))")
+                    .font(Theme.caption).foregroundStyle(Theme.muted)
+                Spacer(minLength: 8)
+                Button("Clear filters") { model.clearFilters() }
+                    .buttonStyle(.plain).font(Theme.caption).foregroundStyle(Theme.accent).handCursor()
             }
-            .labelsHidden().accessibilityLabel("Project")
-            if model.filter.isOn { Button("Clear filters") { model.clearFilters() }.dashButton(.bordered) }
         }
     }
 }

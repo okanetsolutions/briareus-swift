@@ -10,7 +10,7 @@ struct BoardFilterMenu: View {
     let kinds: [FilterKind]
     /// The pull requests' list, which offers Hide later stacked PRs and Hide failing checks; issues have neither.
     var stacked = false
-    let picked: () -> Void
+    var picked: () -> Void = {}
 
     var body: some View {
         Menu {

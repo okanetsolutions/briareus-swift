@@ -34,7 +34,16 @@ struct GlobalPullsScreen: View {
                 if let actions = model.actions[entry.project.repo] { Color.clear.boardPullPrompts(actions) }
             }
         }
-        .searchable(text: $model.filter.query, prompt: model.tab.searchPrompt)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if model.tab != .review {
+                    let rows = model.filterRows
+                    BoardFilterMenu(filter: $model.currentFilter, rows: rows,
+                                    kinds: model.tab.filterKinds, stacked: model.tab == .pulls)
+                        .disabled(rows.isEmpty && !model.currentFilter.isOn)
+                }
+            }
+        }
         .refreshable { await model.load(fresh: true) }
         .task { await poll(every: 60) { await model.load() } }
     }
@@ -60,15 +69,16 @@ private struct GlobalPullsFilters: View {
 
     var body: some View {
         Section {
-            Picker("Project", selection: $model.filter.repo) {
-                Text("All projects").tag("")
-                ForEach(model.state.projects, id: \.project.repo) { entry in
-                    Text(entry.project.title).tag(entry.project.repo)
-                }
-            }
             Text(model.state.subtitle).font(.footnote).foregroundStyle(.secondary)
             if model.tab == .review { ReviewLoginButton { model.loginChanged() } }
-            if model.filter.isOn { Button("Clear filters") { model.clearFilters() } }
+            if model.currentFilter.isOn {
+                HStack {
+                    Text("Showing \(model.shown.count(model.tab)) of \(model.totals.count(model.tab))")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Clear filters") { model.clearFilters() }.font(.footnote).buttonStyle(.borderless)
+                }
+            }
         }
         .listRowBackground(Theme.row)
     }

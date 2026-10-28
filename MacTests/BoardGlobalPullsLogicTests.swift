@@ -1,4 +1,4 @@
-// The global pull list's repository identity, filtering, caches, and independent project failures.
+// The global pull list's repository identity, regular board filters, caches, and independent project failures.
 import XCTest
 @testable import BriareusMacCore
 
@@ -62,23 +62,23 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
         XCTAssertEqual(state.rows.map(\.id), ["o/a#8", "o/a#3", "o/b#8", "o/b#3"])
     }
 
-    func testSearchMatchesProjectPeopleLabelsBranchAndNumberWithAllWords() {
-        for query in ["ALPHA", "o/a", "alice", "bob", "bug", "fix/login", "#7", "  Alpha\n bug  "] {
-            let found = GlobalPullsFilter(query: query).rows(in: state())
-            XCTAssertTrue(found.contains { $0.id == "o/a#7" }, query)
+    func testRegularPullFiltersMatchPeopleAndLabelsAcrossProjects() {
+        for (kind, value) in [(FilterKind.author, "ALICE"), (.reviewer, "BOB"), (.label, "BUG")] {
+            var filter = GlobalPullsFilter()
+            filter.pulls.set(kind, value)
+            XCTAssertEqual(filter.rows(in: state()).map(\.id), ["o/a#7"])
+            let options = filter.pulls.options(kind, rows: filter.optionsRows(in: state(), tab: .pulls))
+            XCTAssertEqual(options.first { $0.value == value.lowercased() }?.count, 1)
         }
-        XCTAssertTrue(GlobalPullsFilter(query: "Alpha Database").rows(in: state()).isEmpty)
-        XCTAssertEqual(GlobalPullsFilter(query: "\n ").rows(in: state()).count, 2)
-        XCTAssertFalse(GlobalPullsFilter(query: "\n ").isOn)
     }
 
-    func testProjectFilterCombinesWithSearchAndCanBeCleared() {
-        var filter = GlobalPullsFilter(query: "#7", repo: "O/A")
-        XCTAssertEqual(filter.rows(in: state()).map(\.id), ["o/a#7"])
-        filter.query = "Database"
+    func testPullFiltersCombineAndCanBeCleared() {
+        var filter = GlobalPullsFilter()
+        filter.pulls.set(.author, "alice")
+        filter.pulls.set(.label, "missing")
         XCTAssertTrue(filter.rows(in: state()).isEmpty)
-        filter = GlobalPullsFilter()
-        XCTAssertFalse(filter.isOn)
+        filter.pulls = BoardFilter()
+        XCTAssertFalse(filter.pulls.isOn)
         XCTAssertEqual(filter.rows(in: state()).count, 2)
     }
 
@@ -280,16 +280,13 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
         XCTAssertFalse(reader.state.hasErrors)
     }
 
-    func testRemovedProjectFilterResetsWithoutLosingSearchAndMatchesPickerCase() {
-        var state = state()
-        var filter = GlobalPullsFilter(query: "#7", repo: "O/A").reconciled(in: state)
-        XCTAssertEqual(filter.repo, "o/a")
+    func testRemovedProjectsLeaveWithoutClearingRegularFilters() {
+        var state = state(), filter = GlobalPullsFilter()
+        filter.pulls.set(.author, "alice")
         state.replaceProjects([Project(repo: "o/b")], saved: { _ in nil })
-        filter = filter.reconciled(in: state)
-        XCTAssertEqual(filter.repo, "")
-        XCTAssertEqual(filter.query, "#7")
-        XCTAssertEqual(filter.rows(in: state).map(\.id), ["o/b#7"])
-        XCTAssertEqual(GlobalPullsFilter(repo: "o/b").reconciled(in: GlobalPullsState()).repo, "")
+        XCTAssertTrue(filter.rows(in: state).isEmpty)
+        XCTAssertEqual(filter.pulls.author, "alice")
+        XCTAssertEqual(filter.pulls.options(.author, rows: filter.optionsRows(in: state, tab: .pulls)).first?.count, 0)
     }
 
     func testPreparedRowsUpdateAfterBoardAndProjectChanges() throws {
@@ -297,11 +294,11 @@ final class BoardGlobalPullsLogicTests: XCTestCase {
         let snapshot = state
         try state.projects[0].adopt(jBoard([9]))
         XCTAssertEqual(state.rows.map(\.id), ["o/b#7", "o/a#9"])
-        XCTAssertTrue(GlobalPullsFilter(query: "Login").rows(in: state).isEmpty)
-        XCTAssertEqual(GlobalPullsFilter(query: "#9").rows(in: state).map(\.id), ["o/a#9"])
-        state.replaceProjects([Project(repo: "O/A", label: "Renamed")], saved: { _ in nil })
-        XCTAssertEqual(GlobalPullsFilter(query: "RENAMED", repo: "o/a").rows(in: state).map(\.id), ["o/a#9"])
-        XCTAssertTrue(GlobalPullsFilter(query: "Alpha").rows(in: state).isEmpty)
+        var filter = GlobalPullsFilter()
+        filter.pulls.set(.author, "alice")
+        XCTAssertTrue(filter.rows(in: state).isEmpty)
+        state.replaceProjects([Project(repo: "o/a", label: "Renamed")], saved: { _ in nil })
+        XCTAssertEqual(state.rows.map(\.project.title), ["Renamed"])
         XCTAssertEqual(snapshot.rows.map(\.id), ["o/b#7", "o/a#7"])
     }
 

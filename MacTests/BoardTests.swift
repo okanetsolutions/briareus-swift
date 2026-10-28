@@ -235,6 +235,11 @@ final class BoardTests: XCTestCase {
 
     // MARK: - Rows and filters
 
+    func testBoardFilterKindsMatchTheList() {
+        XCTAssertEqual(boardFilterKinds(pulls: true), [.author, .reviewer, .label])
+        XCTAssertEqual(boardFilterKinds(pulls: false), [.author, .assignee, .label])
+    }
+
     func testBoardRowsCarryWhatThePickersFilterOn() {
         let p = pull(#"{"number":1,"author":"ana","reviewers":[{"user":"luis"}],"labels":["bug","ui"]}"#)!
         var r = BoardRow(p)
