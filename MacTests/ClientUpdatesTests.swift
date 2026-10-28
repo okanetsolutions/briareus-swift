@@ -90,6 +90,7 @@ final class ClientUpdatesTests: XCTestCase {
         let server = try XCTUnwrap(SSHResourceServer(["id": 1700000000000, "label": "Remote", "repo": "o/r", "enabled": true, "monitoringEnabled": true, "stale": true, "latest": ["at": 60000, "metrics": nil]]))
         XCTAssertEqual(server.id, 1700000000000)
         XCTAssertTrue(server.stale); XCTAssertTrue(server.tiles.isEmpty)
+        XCTAssertEqual(server.monitoringEdit, ["monitoringEnabled": false])
         XCTAssertEqual(server.measuredAt?.timeIntervalSince1970, 60)
         let tiles = SSHResourceHistory.tiles(["cpu": ["cores": 2, "usagePercent": nil], "memory": ["totalBytes": 1000, "usedBytes": 500, "usedPercent": 50], "network": [["name": "eth0", "rxBytesPerSecond": nil, "txBytesPerSecond": nil]]])
         XCTAssertNil(tiles.first { $0.id == "cpu" }?.fraction)

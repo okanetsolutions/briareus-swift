@@ -58,7 +58,7 @@ private struct SSHMonitorControls: View {
             HStack {
                 if model.canIssue { Button("Issue or rotate token") { issue() }.dashButton(.bordered) }
                 if model.canRevoke { Button("Revoke token") { revoke() }.dashButton(.destructive) }
-                if model.canToggle { Button(model.server?.monitoring == true ? "Pause monitoring" : "Enable monitoring") { model.toggleMonitoring() }.dashButton(.bordered) }
+                if model.canToggle { Button(model.server?.monitoringAction ?? "Monitoring") { model.toggleMonitoring() }.dashButton(.bordered) }
                 if model.busy { ProgressView().controlSize(.small) }
             }.disabled(model.busy || model.loading || model.uncertain)
         }

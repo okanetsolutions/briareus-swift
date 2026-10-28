@@ -3,20 +3,13 @@ import SwiftUI
 
 struct SettingsConnectionSections: View {
     @EnvironmentObject private var store: Store
-    @State private var confirm: ConnectionAction?
-    @State private var busy = false
-    @State private var error: String?
-
-    private enum ConnectionAction: Identifiable {
-        case revoke, forget
-        var id: Self { self }
-    }
+    @StateObject private var model = ConnectionSettingsModel()
 
     var body: some View {
         Group { connection }
-        .alert(confirm == .revoke ? "Revoke this device token?" : "Forget this connection?",
-               isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), presenting: confirm) { action in
-            Button(action == .revoke ? "Revoke and disconnect" : "Forget", role: .destructive) { run(action) }
+        .alert(model.model.confirm == .revoke ? "Revoke this device token?" : "Forget this connection?",
+               isPresented: Binding(get: { model.confirm != nil }, set: { if !$0 { model.confirm = nil } }), presenting: model.confirm) { action in
+            Button(action == .revoke ? "Revoke and disconnect" : "Forget", role: .destructive) { model.run(action) }
             Button("Cancel", role: .cancel) {}
         } message: { action in
             Text(action == .revoke
@@ -53,32 +46,15 @@ struct SettingsConnectionSections: View {
         }
         Section {
             if store.supports("revoke_token") {
-                Button("Revoke token and disconnect", role: .destructive) { confirm = .revoke }
+                Button("Revoke token and disconnect", role: .destructive) { model.confirm = .revoke }
             }
-            Button("Forget this connection", role: .destructive) { confirm = .forget }
-            if let error { ErrorNotice(message: error) }
+            Button("Forget this connection", role: .destructive) { model.confirm = .forget }
+            if let error = model.error { ErrorNotice(message: error) }
         } footer: {
             Text("Revoking disables this token on the server. Forgetting removes it and the saved conversations from this device only; revoke it later on the server with `npm run create-token -- --revoke`. Neither action stops running agents.")
         }
         .listRowBackground(Theme.row)
-        .disabled(busy)
-    }
-
-    private func run(_ action: ConnectionAction) {
-        busy = true
-        error = nil
-        Task {
-            defer { busy = false }
-            // Named both ways: a token meant to be revoked must never be merely forgotten.
-            do {
-                switch action {
-                case .revoke: try await store.revoke()
-                case .forget: try store.forget()
-                }
-            } catch {
-                self.error = failure(error)
-            }
-        }
+        .disabled(model.busy)
     }
 
 }

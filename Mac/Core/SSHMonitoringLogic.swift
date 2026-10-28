@@ -36,6 +36,8 @@ struct SSHResourceServer: Equatable, Sendable, Identifiable {
         if !monitoring { return "Monitoring disabled" }
         return stale ? "No recent telemetry" : "Receiving telemetry"
     }
+    var monitoringAction: String { monitoring ? "Pause monitoring" : "Enable monitoring" }
+    var monitoringEdit: JSON { ["monitoringEnabled": .bool(!monitoring)] }
     var measuredAt: Date? { latest["at"].number.map { Date(timeIntervalSince1970: $0 / 1000) } }
     var tiles: [StatTile] { SSHResourceHistory.tiles(latest["metrics"]) }
 }

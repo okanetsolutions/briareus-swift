@@ -56,7 +56,7 @@ final class SSHMonitoringModel: ObservableObject {
     func revokeToken() { write("revoke_ssh_monitor_token") }
     func toggleMonitoring() {
         guard let server else { return }
-        write("update_ssh_server", extra: ["monitoringEnabled": .bool(!server.monitoring)])
+        write("update_ssh_server", extra: server.monitoringEdit)
     }
     private func write(_ operation: String, extra: JSON = [:]) {
         guard let serverID, !busy, !loading, !uncertain, Store.shared.supports(operation) else { return }

@@ -56,7 +56,7 @@ private struct SSHMonitorControls: View {
                     .font(.caption).foregroundStyle(.secondary)
                 if model.canIssue { Button("Issue or rotate monitor token") { action = "issue" } }
                 if model.canRevoke { Button("Revoke monitor token", role: .destructive) { action = "revoke" } }
-                if model.canToggle { Button(model.server?.monitoring == true ? "Pause monitoring" : "Enable monitoring") { model.toggleMonitoring() } }
+                if model.canToggle { Button(model.server?.monitoringAction ?? "Monitoring") { model.toggleMonitoring() } }
                 if model.busy { ProgressView() }
             }
             .disabled(model.busy || model.loading || model.uncertain)
