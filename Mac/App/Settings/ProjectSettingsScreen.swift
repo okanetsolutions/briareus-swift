@@ -287,20 +287,17 @@ struct ProjectSettingsScreen: View {
             check(.dbPool)
             field(.dbRestore)
         case .review:
-            HStack(alignment: .top, spacing: 14) {
-                field(.reviewAuthor).frame(maxWidth: .infinity)
-                Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
-                Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
-            }
+            field(.reviewAuthor)
             runtimeRow(.review)
             field(.publish)
             check(.autoLoop)
             check(.babysit)
-            // Each step runs as a turn of its own, on the code review's runtime unless it names one; a step switched off has none.
+            // Current QA sessions always write a sheet; older servers offered a switch.
+            if state.offered(ProjectRuntime.testSheet) { SectionTitle(title: "Test sheet") }
             check(.testSheet)
-            if state.bool(.testSheet) { runtimeRow(.testSheet).padding(.leading, 23) }
+            if state.stepEnabled(.testSheet) { runtimeRow(.testSheet).padding(.leading, 23) }
             check(.testRun)
-            if state.bool(.testRun) { runtimeRow(.testRun).padding(.leading, 23) }
+            if state.stepEnabled(.testRun) { runtimeRow(.testRun).padding(.leading, 23) }
             Color.clear.frame(height: 4)
             field(.qaNotes)
             field(.sheetSteps)

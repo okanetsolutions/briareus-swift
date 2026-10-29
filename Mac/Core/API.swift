@@ -182,6 +182,8 @@ struct APIRoute: Sendable {
         // figures, disks and last hour (StatsLogic.swift).
         .init(name: "sessions_stats", method: "GET", path: "stats/sessions"),
         .init(name: "server_stats", method: "GET", path: "stats/server"),
+        .init(name: "ci_stats", method: "GET", path: "stats/ci"),
+        .init(name: "ci_runs", method: "GET", path: "ci/runs"),
         .init(name: "actions", method: "GET", path: "actions"),
         .init(name: "action", method: "POST", path: "actions"),       // an errand on a pull request, named in `action`
         // Pull requests
@@ -219,7 +221,7 @@ struct APIRoute: Sendable {
         // Sessions. The list has no project parameter: a `repo` argument cuts the answer down here instead.
         .init(name: "sessions", method: "GET", path: "sessions", filter: "repo", list: "sessions"),
         .init(name: "start_session", method: "POST", path: "sessions"),
-        .init(name: "review", method: "POST", path: "sessions", set: "review"),
+        .init(name: "review", method: "POST", path: "sessions", set: "review", bodyField: "review"),
         .init(name: "qa", method: "POST", path: "sessions", set: "qa"),
         .init(name: "session", method: "GET", path: "sessions/{sessionId}"),
         // What an open session costs the machine now, with its last hour of samples.

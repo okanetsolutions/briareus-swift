@@ -317,12 +317,12 @@ struct ProjectSettingsScreen: View {
             // Each step runs as a turn of its own, on the code review's runtime unless it names one; a step switched off has none.
             Section {
                 check(.testSheet)
-                if state.bool(.testSheet) { runtime(.testSheet) }
+                if state.stepEnabled(.testSheet) { runtime(.testSheet) }
             } header: { Text("Test sheet") }
             .listRowBackground(Theme.row)
             Section {
                 check(.testRun)
-                if state.bool(.testRun) { runtime(.testRun) }
+                if state.stepEnabled(.testRun) { runtime(.testRun) }
             } header: { Text("Test run") }
             .listRowBackground(Theme.row)
             Section { field(.qaNotes); field(.sheetSteps); field(.feedbackSteps) } header: { Text("Prompts") }.listRowBackground(Theme.row)

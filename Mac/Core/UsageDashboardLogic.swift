@@ -2,18 +2,20 @@
 import Foundation
 
 enum UsageDashboardTab: Hashable, Identifiable, Sendable {
-    case usage
+    case usage, ci
     case server(ServerDashboardTab)
 
     var id: String {
         switch self {
         case .usage: return "usage"
+        case .ci: return "ci"
         case .server(let tab): return "server-\(tab.id)"
         }
     }
     var title: String {
         switch self {
         case .usage: return "Usage"
+        case .ci: return "CI/CD"
         case .server(.overview): return "Server"
         case .server(let tab): return tab.title
         }
@@ -28,6 +30,6 @@ enum UsageDashboardTab: Hashable, Identifiable, Sendable {
     }
 
     static func available(supports: (String) -> Bool) -> [Self] {
-        [.usage] + ServerDashboardTab.available(supports: supports).map(Self.server)
+        [.usage] + (supports("ci_stats") || supports("ci_runs") ? [.ci] : []) + ServerDashboardTab.available(supports: supports).map(Self.server)
     }
 }

@@ -400,8 +400,8 @@ struct ProviderSettingsScreen: View {
         } footer: {
             if state.binary == "grok" {
                 Text(inlineMarkdown("grok signs in with its own login; it takes no API token."))
-            } else if state.binary == "opencode" {
-                Text(inlineMarkdown("opencode authenticates with an API key per service and has no login of its own."))
+            } else if ["opencode", "dsh", "qwen"].contains(state.binary) {
+                Text(inlineMarkdown(ProviderFormState.keyOnlyHint(state.binary)))
             } else if !state.usesToken && state.id == 0 {
                 Text("Save the provider first: its login is registered against the saved entry, so there is nothing to log in until one exists.")
             }

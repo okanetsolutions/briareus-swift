@@ -10,6 +10,11 @@ struct FindingsGroup: Equatable {
 }
 
 enum Findings {
+    static func emptyText(hasTriage: Bool) -> String {
+        hasTriage ? "Findings arrive here from Code review and from every review-loop round."
+            : "Code reviews are available on pull requests. Read the results in the review session and on GitHub."
+    }
+
     static func plural(_ n: Int) -> String { n == 1 ? "" : "s" }
 
     /// Rounds by the pull request they were left on (the repository compared folded), in the order they first appear.

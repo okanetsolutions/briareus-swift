@@ -69,7 +69,7 @@ enum ProjectTab: Int, CaseIterable, Sendable {
         switch self {
         case .project: return "Project"
         case .database: return "Database"
-        case .review: return "Code review"
+        case .review: return "PR actions & QA"
         case .orchestrator: return "Orchestrator"
         case .env: return "Checkout .env"
         case .run: return "Run"
@@ -107,13 +107,13 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .dbPool: return SettingsField(key: "dbPoolEnabled", kind: .bool, label: "Give each session a database server of its own")
         case .dbRestore: return SettingsField(key: "dbRestoreSql", kind: .text, label: "Restore from .sql", cue: "/home/you/dumps/my_app.sql",
             hint: "A dump on this machine, piped into the database every time a server is claimed, right after it is created, before the setup steps run. Leave empty to skip. The servers themselves are added under Database pool in the sidebar.", mono: true)
-        case .reviewAuthor: return SettingsField(key: "reviewAuthor", kind: .text, label: "PR author", cue: "github-username", mono: true)
+        case .reviewAuthor: return SettingsField(key: "prAuthor", kind: .text, label: "PR author", cue: "github-username", mono: true)
         case .publish: return SettingsField(key: "reviewPublishInstructions", kind: .area, label: "Publish steps",
             hint: "Sent to the agent as its own turn after a ⌕ Code review: this text and nothing else. Leave empty to run no turn after the review.", rows: 4)
         case .autoLoop: return SettingsField(key: "autonomousReviewLoop", kind: .bool, label: "Autonomous review loop: fix verified worthwhile findings")
         case .babysit: return SettingsField(key: "babysitPrs", kind: .bool, label: "Babysit pull requests: start the errand each open one needs")
         case .testSheet: return SettingsField(key: "reviewTestSheet", kind: .bool, label: "Write a test sheet when the 🎬 QA errand is started")
-        case .testRun: return SettingsField(key: "reviewTestRun", kind: .bool, label: "Execute the test sheet and record a video of each scenario")
+        case .testRun: return SettingsField(key: "qaTestRun", kind: .bool, label: "Execute the test sheet and record a video of each scenario")
         case .qaNotes: return SettingsField(key: "qaNotes", kind: .area, label: "QA notes",
             hint: "Appended to the test sheet and test run prompts: logins, tenants, URLs, whatever a tester needs that the repository does not say.", rows: 4)
         case .sheetSteps: return SettingsField(key: "testSheetInstructions", kind: .area, label: "Test sheet closing steps",
@@ -140,9 +140,9 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .autoLoop where on:
             return "Independently verified worthwhile findings in a session’s review-loop round are fixed and reviewed again; optional findings do not prolong the loop, and findings without an assessment wait for manual triage. The loop's round limit and repeated-findings check still stop one that cannot converge. Sessions still need their review loop switched on; a standalone ⌕ Code review keeps its manual findings."
         case .babysit where on:
-            return "Every 15 minutes the server starts, once per head commit, the first errand each open non-draft pull request needs: 🔀 Solve conflicts, else 🧪 Fix failing checks, else a ⌕ Code review when the board recommends one. It runs on the code review's runtime and skips pull requests labelled blocked or do-not-merge and those with a session open. With a PR author set, conflicts and checks are fixed only on that author’s pull requests, and new developer feedback is assessed for manual Findings decisions before fixes start."
+            return "Every 15 minutes the server resolves conflicts and failing checks on the PR action runtime, once per head commit. It skips drafts, blocked pull requests and pull requests with an open session. A PR author limits which pull requests it fixes."
         case .isSelf:
-            return "Tick it on the repository whose code is running right now, and on no other. An orchestrator on any project that finds a flaw in the tooling running it (a briefing, a worker tool, a loop) can then send a fix worker here, review loop armed, and merge its pull request once the loop approves and the checks are green. The running server keeps its code until you redeploy."
+            return "Tick it on the repository whose code is running right now, and on no other. An orchestrator on any project that finds a flaw in the tooling running it (a briefing, a worker tool, a loop) can then send a fix worker here and merge its pull request once the checks are green. The running server keeps its code until you redeploy."
         default:
             return nil
         }
@@ -164,15 +164,15 @@ enum ProjectField: Int, CaseIterable, Sendable {
 /// one edits three keys of the project; a step edits its entry in `stepRuntimes`.
 enum ProjectRuntime: Int, CaseIterable, Sendable {
     case review, testSheet, testRun, worker
-    var providerKey: String? { self == .review ? "reviewProviderId" : self == .worker ? "workerProviderId" : nil }
-    var modelKey: String? { self == .review ? "reviewModel" : self == .worker ? "workerModel" : nil }
-    var effortKey: String? { self == .review ? "reviewEffort" : self == .worker ? "workerEffort" : nil }
+    var providerKey: String? { self == .review ? "actionProviderId" : self == .worker ? "workerProviderId" : nil }
+    var modelKey: String? { self == .review ? "actionModel" : self == .worker ? "workerModel" : nil }
+    var effortKey: String? { self == .review ? "actionEffort" : self == .worker ? "workerEffort" : nil }
     var step: String? { self == .testSheet ? "testSheet" : self == .testRun ? "testRun" : nil }
     /// What the provider picker says with no provider picked.
     var none: String {
         switch self {
         case .review: return "Pick a provider"
-        case .testSheet, .testRun: return "Same as the code review"
+        case .testSheet, .testRun: return "Same as the PR action"
         case .worker: return "Same as the orchestrator"
         }
     }
@@ -210,15 +210,34 @@ struct ProjectFormState: Equatable, Sendable {
     /// Fills every field from the row; nothing is unsaved afterwards.
     mutating func fill() {
         for f in ProjectField.allCases {
-            if f.def.isEdit { texts[f] = Self.fieldText(row, f) } else { bools[f] = row[f.key].is(true) }
+            if f.def.isEdit { texts[f] = Self.fieldText(row, f) } else { bools[f] = row[fieldKey(f)].is(true) }
         }
         for r in ProjectRuntime.allCases { picks[r] = savedPick(r) }
         dirty = false
     }
 
     func has(_ key: String) -> Bool { SettingsText.rowHas(row, key) }
-    func offered(_ f: ProjectField) -> Bool { has(f.key) }
-    func offered(_ r: ProjectRuntime) -> Bool { has(r.presenceKey) }
+    /// Use the key this server returned, including the names used before PR actions replaced reviews.
+    static func fieldKey(_ f: ProjectField, in row: JSON) -> String {
+        let legacy: String?
+        switch f { case .reviewAuthor: legacy = "reviewAuthor"; case .testRun: legacy = "reviewTestRun"; default: legacy = nil }
+        if let legacy, row.object?[f.key] == nil, row.object?[legacy] != nil { return legacy }
+        return f.key
+    }
+    func fieldKey(_ f: ProjectField) -> String { Self.fieldKey(f, in: row) }
+    func offered(_ f: ProjectField) -> Bool {
+        if [.publish, .autoLoop, .testSheet, .feedbackSteps].contains(f) { return row.object?[f.key] != nil }
+        return has(fieldKey(f))
+    }
+    func offered(_ r: ProjectRuntime) -> Bool { has(runtimeKey(r.presenceKey)) }
+    /// QA always writes a test sheet on current servers; executing it remains optional.
+    func stepEnabled(_ r: ProjectRuntime) -> Bool {
+        r == .testSheet ? (!offered(ProjectField.testSheet) || bool(.testSheet)) : r == .testRun ? bool(.testRun) : true
+    }
+    private func runtimeKey(_ key: String) -> String {
+        let legacy = key.replacingOccurrences(of: "action", with: "review")
+        return row.object?[key] == nil && row.object?[legacy] != nil ? legacy : key
+    }
     /// The restore dump only means something with the pool on.
     func enabled(_ f: ProjectField) -> Bool { f != .dbRestore || bools[.dbPool] == true }
     func text(_ f: ProjectField) -> String { texts[f] ?? "" }
@@ -227,7 +246,7 @@ struct ProjectFormState: Equatable, Sendable {
 
     /// A field's value in the row as its box shows it: a list one item per line, a number as typed, empty for null.
     static func fieldText(_ row: JSON, _ f: ProjectField) -> String {
-        let v = row[f.key]
+        let v = row[Self.fieldKey(f, in: row)]
         switch f.def.kind {
         case .list: return SettingsText.listText(v)
         case .number: return SettingsText.numberText(v)
@@ -241,13 +260,13 @@ struct ProjectFormState: Equatable, Sendable {
             let src = row["stepRuntimes"][step]
             return RuntimePick(providerId: src["providerId"].int32 ?? 0, model: src["model"].string, effort: src["effort"].string)
         }
-        return RuntimePick(providerId: row[r.providerKey!].int32 ?? 0, model: row[r.modelKey!].string, effort: row[r.effortKey!].string)
+        return RuntimePick(providerId: row[runtimeKey(r.providerKey!)].int32 ?? 0, model: row[runtimeKey(r.modelKey!)].string, effort: row[runtimeKey(r.effortKey!)].string)
     }
 
     /// Whether a tab holds a change not saved yet, for the dot after its title.
     func tabChanged(_ t: ProjectTab) -> Bool {
         for f in ProjectField.allCases where f.tab == t && offered(f) {
-            if !f.def.isEdit { if bool(f) != row[f.key].is(true) { return true }; continue }
+            if !f.def.isEdit { if bool(f) != row[fieldKey(f)].is(true) { return true }; continue }
             if text(f) != Self.fieldText(row, f) { return true }
         }
         for r in ProjectRuntime.allCases where r.tab == t {
@@ -262,7 +281,7 @@ struct ProjectFormState: Equatable, Sendable {
         // What the server sets itself, and the order, which belongs to the list's Move up and Move down.
         for k in ["id", "createdAt", "updatedAt", "sortOrder"] { body.remove(k) }
         for f in ProjectField.allCases where offered(f) {
-            let key = f.key
+            let key = fieldKey(f)
             switch f.def.kind {
             case .bool: body[key] = .bool(bool(f))
             case .text: body[key] = .string(text(f).cTrimmed)
@@ -287,19 +306,19 @@ struct ProjectFormState: Equatable, Sendable {
         if repo.isEmpty || !repo.contains("/") || repo.hasPrefix("/") || repo.hasSuffix("/") {
             return .failure(FormProblem(message: "Enter the repository as owner/name.", tab: ProjectTab.project.rawValue))
         }
-        // The runtimes. A step left on "Same as the code review" is no entry at all rather than empty strings.
+        // The runtimes. A step left on "Same as the PR action" is no entry at all rather than empty strings.
         let hasSteps = has("stepRuntimes")
         var steps: JSON = body["stepRuntimes"].isObject ? body["stepRuntimes"] : [:]
-        for r in ProjectRuntime.allCases where has(r.presenceKey) {
+        for r in ProjectRuntime.allCases where offered(r) {
             let p = pick(r)
             if let step = r.step {
                 if p.providerId == 0 { steps.remove(step); continue }
                 steps[step] = ["providerId": JSON(p.providerId), "model": .string(p.model ?? ""), "effort": .string(p.effort ?? "")]
                 continue
             }
-            body[r.providerKey!] = p.providerId != 0 ? JSON(p.providerId) : .null
-            body[r.modelKey!] = .string(p.providerId != 0 ? p.model ?? "" : "")
-            body[r.effortKey!] = .string(p.providerId != 0 ? p.effort ?? "" : "")
+            body[runtimeKey(r.providerKey!)] = p.providerId != 0 ? JSON(p.providerId) : .null
+            body[runtimeKey(r.modelKey!)] = .string(p.providerId != 0 ? p.model ?? "" : "")
+            body[runtimeKey(r.effortKey!)] = .string(p.providerId != 0 ? p.effort ?? "" : "")
         }
         if hasSteps { body["stepRuntimes"] = steps }
         return .success(body)
@@ -356,6 +375,7 @@ struct ProviderFormState: Equatable, Sendable {
     /// The CLIs a provider runs, as the Windows client's Binary select offers them.
     static let binaries: [(id: String, title: String)] = [
         ("claude", "claude (Claude Code)"), ("codex", "codex (Codex)"), ("grok", "grok (Grok)"), ("opencode", "opencode"),
+        ("dsh", "dsh (DeepSeek Harness)"), ("qwen", "qwen (Qwen Code)"),
     ]
     static func == (a: ProviderFormState, b: ProviderFormState) -> Bool {
         a.row == b.row && a.texts == b.texts && a.active == b.active && a.token == b.token && a.binary == b.binary && a.dirty == b.dirty
@@ -385,22 +405,29 @@ struct ProviderFormState: Equatable, Sendable {
     func text(_ f: ProviderField) -> String { texts[f] ?? "" }
 
     /// grok has no token mode and opencode nothing but a key, so only claude and codex choose.
-    static func modeOffered(_ binary: String) -> Bool { binary != "grok" && binary != "opencode" }
+    static func modeOffered(_ binary: String) -> Bool { ["claude", "codex"].contains(binary) }
     /// Whether the endpoint and its token are part of the provider: the API token mode, or opencode's key.
-    var usesToken: Bool { binary == "opencode" || (binary != "grok" && token) }
+    var usesToken: Bool { ["opencode", "dsh", "qwen"].contains(binary) || (Self.modeOffered(binary) && token) }
     /// A login is registered against a saved row, so only a saved one logged in through its CLI can log in.
-    var canLogIn: Bool { id != 0 && !usesToken && binary != "opencode" }
+    var canLogIn: Bool { id != 0 && !usesToken }
 
+    static func keyOnlyHint(_ binary: String) -> String {
+        "\(binaryTitle(binary)) authenticates through its endpoint and API key; it has no interactive login."
+    }
     static func binaryTitle(_ binary: String) -> String {
         binaries.first { $0.id == binary }?.title ?? (binary.isEmpty ? "Pick a binary" : binary)
     }
     static func baseURLHint(_ binary: String) -> String {
         if binary == "claude" { return "Passed to the claude CLI as `ANTHROPIC_BASE_URL`, for a proxy or an Anthropic-compatible endpoint. Leave empty for the Anthropic API." }
+        if binary == "dsh" { return "A DeepSeek-compatible endpoint. Leave empty for the DeepSeek API; the API key is required." }
+        if binary == "qwen" { return "An OpenAI-compatible endpoint. Leave empty for Model Studio; provide its API key or a custom endpoint." }
         if binary == "opencode" { return "The base URL of the service this entry's models name (`anthropic` for `anthropic/claude-sonnet-4-5`), for a proxy or a compatible gateway; include the `/v1` when the service's own URL carries one. Handed to the CLI as an inline config (`OPENCODE_CONFIG_CONTENT`) alongside the key, so the machine's own opencode config is never touched. Leave empty for the service's own endpoint." }
         return "A custom API endpoint driven through the codex CLI (Responses wire format). Sessions run with a server-written `CODEX_HOME` pointing codex at it, so the machine's own `~/.codex` login is never touched. Leave empty for the binary's own service."
     }
     static func apiKeyHint(_ binary: String) -> String {
         if binary == "claude" { return "Passed as `ANTHROPIC_API_KEY`, used instead of a login. With a base URL it also goes out as `ANTHROPIC_AUTH_TOKEN`, so gateways that read `Authorization` instead of `x-api-key` see it too." }
+        if binary == "dsh" { return "The DeepSeek API key used by headless sessions." }
+        if binary == "qwen" { return "The key for Model Studio or the custom endpoint; an endpoint may allow an empty key." }
         if binary == "opencode" { return "The key for the service this entry's models name: `anthropic` for `anthropic/claude-sonnet-4-5`. It is handed to the CLI as its whole credential store, so the machine's own opencode credentials stay untouched." }
         return "Authenticates the base URL above."
     }

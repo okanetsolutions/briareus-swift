@@ -427,18 +427,20 @@ struct BoardAction: Equatable, Sendable {
     var label: String
     var hint: String
     var input: ActionInput?
+    /// A CLI restriction advertised by the server; review actions use the actions endpoint.
+    var binary: String?
 
     init(id: String, label: String, hint: String = "", input: ActionInput? = nil) { self.id = id; self.label = label; self.hint = hint; self.input = input }
 
-    /// The call that starts it: `serve_pull` for Run, `review` for Code review, and `action` (with the errand's id) for the rest.
-    var operation: String { id == "run" ? "serve_pull" : id == "review" ? "review" : "action" }
+    /// Run has its own route; legacy reviews use a session flag, and catalogued CLI reviews use `action`.
+    var operation: String { id == "run" ? "serve_pull" : id == "review" && binary == nil ? "review" : "action" }
     /// Run answers only once the workspace is prepared and serving, which takes longer than a request is given. Nil = default.
     var timeoutMs: Int? { id == "run" ? 170_000 : nil }
-    /// Review checks the branch out itself; the rest look the pull request up by number. Input is sent trimmed, and only to
+    /// Legacy reviews take a branch; actions look the pull request up by number. Input is sent trimmed, and only to
     /// an errand that asks for it.
     func arguments(repo: String, number: Int, branch: String? = nil, input: String? = nil) -> JSON {
         var args: JSON = ["repo": .string(repo), "prNumber": JSON(number)]
-        if id == "review" { if let branch { args["branch"] = .string(branch) } }
+        if operation == "review" { if let branch { args["branch"] = .string(branch) } }
         else if id != "run" { args["action"] = .string(id) }
         if self.input != nil, let input {
             let trimmed = input.cTrimmed
@@ -475,6 +477,7 @@ struct BoardAction: Equatable, Sendable {
             if let inputLabel = entry["input"]["label"].string {
                 a.input = ActionInput(label: inputLabel, placeholder: entry["input"]["placeholder"].string ?? "", required: entry["input"]["required"].is(true))
             }
+            a.binary = entry["binary"].nonEmpty
             if let k = served.firstIndex(where: { $0.id == id }) { served[k] = a } else { served.append(a) }
         }
         var out: [BoardAction] = []
@@ -490,7 +493,11 @@ struct BoardAction: Equatable, Sendable {
             guard offered else { continue }
             // The server words the question and adds errands this app predates.
             var a = k
-            if let s, s.input != nil { a.input = s.input }
+            if let s {
+                a.binary = s.binary
+                if s.input != nil { a.input = s.input }
+                if !s.hint.isEmpty { a.hint = s.hint }
+            }
             out.append(a)
         }
         for s in served where !known.contains(where: { $0.id == s.id }) && !dropped.contains(s.id) { out.append(s) }

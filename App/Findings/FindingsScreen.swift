@@ -104,7 +104,7 @@ struct FindingsScreen: View {
             }
             if model.loaded && model.queue.isEmpty {
                 ContentUnavailableView("Nothing waiting", systemImage: "flag",
-                                       description: Text("Findings arrive here from Code review and from every review-loop round."))
+                                       description: Text(Findings.emptyText(hasTriage: Store.shared.supports("findings"))))
                     .frame(maxWidth: .infinity).listRowBackground(Color.clear)
             }
             if !model.loaded && model.queue.isEmpty {

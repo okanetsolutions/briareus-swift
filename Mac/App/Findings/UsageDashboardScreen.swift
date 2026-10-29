@@ -12,6 +12,7 @@ struct UsageScreen: View {
         return usage.query.subtitle(reading, options: usage.options ?? .null)
     }
     private var buttons: [HeaderButton] {
+        if usage.selection == .ci { return [] }
         if usage.selection != .usage {
             guard usage.selection.serverTab != .sshServers else { return [] }
             return [HeaderButton(glyph: "arrow.clockwise", tip: "Refresh this tab") { Task { await server.load() } }]
@@ -37,7 +38,9 @@ struct UsageScreen: View {
                     .opacity(usage.selection == .usage ? 1 : 0)
                     .allowsHitTesting(usage.selection == .usage)
                     .accessibilityHidden(usage.selection != .usage)
-                if usage.selection != .usage {
+                if usage.selection == .ci {
+                    CIDashboardScreen().id(store.client.map(ObjectIdentifier.init))
+                } else if usage.selection.serverTab != nil {
                     ServerStatsScreen(model: server, embedded: true)
                 }
             }
@@ -47,7 +50,7 @@ struct UsageScreen: View {
         }
         .onChange(of: tabs) { _, offered in usage.selection = usage.selection.resolved(in: offered) }
         .onChange(of: server.tab) { _, tab in
-            if usage.selection != .usage { usage.selection = UsageDashboardTab.server(tab).resolved(in: tabs) }
+            if usage.selection.serverTab != nil { usage.selection = UsageDashboardTab.server(tab).resolved(in: tabs) }
         }
         .onChange(of: usage.selection) { _, tab in
             if let resource = tab.serverTab { server.tab = resource }

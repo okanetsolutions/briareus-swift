@@ -426,7 +426,7 @@ struct FindingsScreen: View {
                     if !model.rounds.isEmpty {
                         ForEach(groups, id: \.rounds) { g in GroupView(model: model, group: g) }
                     } else if model.loaded {
-                        Text("No review is waiting. Findings arrive here from \u{2315} Code review and from every review-loop round.")
+                        Text(Findings.emptyText(hasTriage: store.supports("findings")))
                             .font(Theme.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
                     }
                     if !model.loaded { LoadingNote(text: "Loading findings\u{2026}") }

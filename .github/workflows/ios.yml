@@ -52,6 +52,12 @@ jobs:
         run: |
           swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/Settings/PersonalConnectionModel.swift App/Settings/SharingModel.swift App/Stats/SSHMonitoringModel.swift scripts/check_client_updates.swift -o "$RUNNER_TEMP/check-client-updates"
           "$RUNNER_TEMP/check-client-updates"
+      - name: Check CI dashboard windows, pagination and stale reads in both apps
+        run: |
+          for MODEL in App/Stats/CIDashboardModel.swift Mac/App/Stats/CIDashboardModel.swift; do
+            swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift "$MODEL" scripts/check_ci_dashboard.swift -o "$RUNNER_TEMP/check-ci-dashboard"
+            "$RUNNER_TEMP/check-ci-dashboard"
+          done
   structure:
     name: Structure guardrails
     runs-on: ubuntu-latest
