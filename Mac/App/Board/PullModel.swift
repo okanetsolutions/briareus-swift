@@ -166,6 +166,8 @@ final class PullModel: ObservableObject {
         case .failure(let e):
             if e.kind == .cancelled { readingPull = false; return e }
             error = e.description
+            // The reviews are read after the pull request: without it there is nothing more to wait for.
+            codeReviewsRead = true
             failure = e
         }
         readingPull = false

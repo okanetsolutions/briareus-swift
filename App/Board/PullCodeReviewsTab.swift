@@ -6,6 +6,8 @@ import SwiftUI
 /// The reviews as sections of the pull request's list.
 struct PullCodeReviewsTab: View {
     let reviews: [CodeReview]
+    /// False until the reviews were read once: the tab shows it is loading rather than empty.
+    let read: Bool
     let error: String?
 
     var body: some View {
@@ -13,7 +15,9 @@ struct PullCodeReviewsTab: View {
             Section { ErrorNotice(message: error) }.listRowBackground(Theme.row)
         }
         if reviews.isEmpty {
-            if error == nil {
+            if !read && error == nil {
+                ProgressView().frame(maxWidth: .infinity).listRowBackground(Color.clear)
+            } else if error == nil {
                 ContentUnavailableView("No code reviews", systemImage: "checklist",
                                        description: Text("Reviews run on this pull request show here with their findings."))
                     .frame(maxWidth: .infinity).listRowBackground(Color.clear)
@@ -32,7 +36,7 @@ private struct CodeReviewSection: View {
     var body: some View {
         Section {
             CodeReviewHeading(review: review)
-            if let id = review.sessionID {
+            if let id = review.openableSessionID {
                 Button { navigate(.conversation(id: id, session: nil)) } label: {
                     Label("Open session", systemImage: "bubble.left.and.bubble.right")
                 }

@@ -66,40 +66,14 @@ private struct CIFilterSection: View {
     }
 }
 
-/// The window's figures as tiles, two across; the success rate in its tone.
+/// The window's figures as tiles, two across; the success rate and failures in their tones.
 private struct CISummarySection: View {
     let totals: CIMetrics
 
     var body: some View {
         Section {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                CIFigureTile(label: "Total", value: "\(totals.total)")
-                CIFigureTile(label: "Success rate", value: totals.successText, color: Theme.color(totals.successTone))
-                CIFigureTile(label: "Failed", value: "\(totals.failed)", color: totals.failed > 0 ? Theme.danger : nil)
-                CIFigureTile(label: "Avg duration", value: totals.avgDurationText)
-                CIFigureTile(label: "Pending", value: "\(totals.pending)")
-            }
-            .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+            StatTiles(tiles: totals.tiles(), valueTones: totals.tileTones)
+                .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
         }
-    }
-}
-
-/// A figure over its label, as the dashboards' stat tiles draw it, its figure in `color` when given.
-private struct CIFigureTile: View {
-    let label: String
-    let value: String
-    var color: Color?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            Text(value).font(.title2.weight(.semibold).monospacedDigit()).foregroundStyle(color ?? .primary)
-                .lineLimit(1).minimumScaleFactor(0.6)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(Theme.raise, in: RoundedRectangle(cornerRadius: BriareusRadius.xxl, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: BriareusRadius.xxl, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
-        .accessibilityElement(children: .combine)
     }
 }

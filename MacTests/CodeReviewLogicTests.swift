@@ -194,3 +194,17 @@ final class CodeReviewRouteTests: XCTestCase {
         }
     }
 }
+
+final class CodeReviewSessionTests: XCTestCase {
+    func testOnlyARunningReviewOffersItsSessionWhichTheServerDeletesOnClose() {
+        func review(_ status: String, _ session: String? = "s1") -> CodeReview {
+            var j: JSON = ["id": 1, "status": .string(status)]
+            if let session { j["sessionId"] = .string(session) }
+            return CodeReview(j)!
+        }
+        XCTAssertEqual(review("running").openableSessionID, "s1")
+        XCTAssertNil(review("completed").openableSessionID)
+        XCTAssertNil(review("failed").openableSessionID)
+        XCTAssertNil(review("running", nil).openableSessionID)
+    }
+}

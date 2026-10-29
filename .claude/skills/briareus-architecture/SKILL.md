@@ -27,7 +27,7 @@ View (`App/**`, `Mac/App/**`) -> Model (`@MainActor ObservableObject`, `*Model.s
 | --- | --- | --- | --- |
 | Projects, conversations | `Conversations/` | `Sidebar/`, `Conversation/` | `ConversationLogic.swift`, `PhoneConversations.swift`, `SessionOverview.swift`, `LiveEvents.swift`, `EventStream.swift`, `WebhookLogic.swift`, `MailWakeLogic.swift` (Mac only: the iPhone app has no mail) |
 | Board, pull requests, issues | `Board/` | `Board/` | `Board.swift`, `BoardLogic.swift`, `BoardEdits.swift`, `ProjectBoard.swift`, `IssuePage.swift`, `PullFiles.swift`, `Diff.swift` |
-| Status, Usage | `Findings/` | `Findings/` | `AttentionLogic.swift`, `PhoneUsage.swift`, `UsageLogic.swift` |
+| Status, Usage | `Status/` (Status), `Findings/` (Usage) | `Findings/` | `AttentionLogic.swift`, `PhoneUsage.swift`, `UsageLogic.swift` |
 | Code reviews (a pull request's tab) | `Board/` | `Board/` | `CodeReviewLogic.swift` |
 | Server resources, SSH monitoring, CI/CD | `Stats/` | `Stats/` | `StatsLogic.swift`, `SSHMonitoringLogic.swift`, `CILogic.swift` |
 | Settings | `Settings/` | `Settings/` | `SettingsLogic.swift`, `SSHServerLogic.swift` (the SSH server form), `AccountSettingsLogic.swift` |
@@ -52,6 +52,8 @@ Search here before writing a component.
 **Mac settings kit** (`Mac/App/Settings/SettingsKit.swift`): `SettingsPage`, `SettingsTabs`, `SettingsFieldBox`, `SettingsFieldLabel`, `SettingsTextArea`, `SettingsCheck`, `SettingsSelect`, `SettingsLabeledSelect`, `SettingsPair`, `SettingsStatusRow`, `SettingsHint`, `SettingsNote`, `SettingsHelpIcon`, `PopupMenu`.
 
 **iPhone primitives** (`App/Theme.swift`): `StatusDot`, `StatusLabel`, `ErrorNotice`, `MarkdownText`, `CodeBlock`; otherwise system controls and `ContentUnavailableView`.
+
+**iPhone shared** (`App/Shared/`): `StatTiles`/`StatTileView` (Core's `StatTile`, with an optional value tone per tile id), `StatGauge`, `SavedPrompts`.
 
 **iPhone board pieces** (`App/Board/BoardPieces.swift`): `BoardPullRow`, `BoardIssueRow`, `BoardSessionRow`, `BoardLinkedRow`, `BoardLabelChips`, `BoardBadge`, `ChecksBadge`, `BoardEpicProgress`, `BoardUpdated`, `ErrandNotice`, `BoardFlowLayout`, `boardErrands`, `errandSymbol`.
 

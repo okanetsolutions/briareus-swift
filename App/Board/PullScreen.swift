@@ -116,7 +116,7 @@ struct PullScreen: View {
                 case .reviews: reviews
                 case .issues: issues
                 case .projects: PullProjectsSection(entries: model.issueProjects.entries)
-                case .codeReviews: PullCodeReviewsTab(reviews: model.codeReviews, error: model.codeReviewsError)
+                case .codeReviews: PullCodeReviewsTab(reviews: model.codeReviews, read: model.codeReviewsRead, error: model.codeReviewsError)
                 case .conversations: conversations
                 case .run: EmptyView()
                 }
@@ -388,7 +388,7 @@ struct PullScreen: View {
         case .reviews: return model.commentCount ?? model.pr["reviews"].count
         case .issues: return model.closes.count
         case .projects: return model.issueProjects.entries.map { $0.reduce(0) { $0 + $1.projects.count } }
-        case .codeReviews: return model.codeReviews.count
+        case .codeReviews: return model.codeReviewsRead ? model.codeReviews.count : nil
         case .conversations: return model.runs.count
         default: return nil
         }

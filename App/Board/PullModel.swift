@@ -63,6 +63,8 @@ final class PullScreenModel: ObservableObject {
     /// The stored code reviews, newest first, and the `code_reviews` list they were read from (saved with the snapshot).
     @Published private(set) var codeReviews: [CodeReview] = []
     private var codeReviewsRaw: JSON = []
+    /// Whether the reviews have been read, or restored from the last visit: until then the tab is loading.
+    @Published private(set) var codeReviewsRead = false
     @Published private(set) var runs: [Session] = []
     @Published var error: String?
     @Published var codeReviewsError: String?
@@ -172,7 +174,7 @@ final class PullScreenModel: ObservableObject {
     private func restore() {
         guard let saved = PullSnapshot(Store.shared.cache.value(key)) else { return }
         pr = saved.pr
-        takeCodeReviews(saved.codeReviews)
+        if saved.codeReviews.isArray { takeCodeReviews(saved.codeReviews) }
         descriptionBody = saved.body
         descriptionAuthor = saved.bodyAuthor
         savedRow = saved.row
@@ -202,6 +204,8 @@ final class PullScreenModel: ObservableObject {
         do { v = try await store.call("pull", args) }
         catch {
             if gen == pullGen, let said = failure(error) { self.error = said }
+            // The reviews are read after the pull request: without it there is nothing more to wait for.
+            if gen == pullGen { codeReviewsRead = true }
             throw error
         }
         guard gen == pullGen else { return }
@@ -216,7 +220,7 @@ final class PullScreenModel: ObservableObject {
                 guard gen == pullGen else { return }
                 takeCodeReviews(f["codeReviews"]); codeReviewsError = nil
             } catch {
-                if gen == pullGen, let said = failure(error) { codeReviewsError = said }
+                if gen == pullGen, let said = failure(error) { codeReviewsError = said; codeReviewsRead = true }
             }
         }
         save()
@@ -225,6 +229,7 @@ final class PullScreenModel: ObservableObject {
         codeReviewsRaw = list.isArray ? list : []
         let parsed = CodeReview.parse(["codeReviews": codeReviewsRaw])
         if parsed != codeReviews { codeReviews = parsed }
+        codeReviewsRead = true
     }
     private func loadBody() async {
         readingBody = true

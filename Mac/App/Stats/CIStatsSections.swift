@@ -10,15 +10,7 @@ struct CISummaryTiles: View {
     var width: CGFloat
 
     var body: some View {
-        let observed = totals.lastObservedAt.map { "last \(formatRelative($0))" } ?? "in this window"
-        StatTiles(width: width, tiles: [
-            StatTile(id: "total", label: "Total", value: "\(totals.total)", detail: observed, fraction: nil),
-            StatTile(id: "success", label: "Success rate", value: totals.successText,
-                     detail: "\(totals.succeeded) passed", fraction: nil),
-            StatTile(id: "failed", label: "Failed", value: "\(totals.failed)", detail: "\(totals.cancelled) cancelled", fraction: nil),
-            StatTile(id: "duration", label: "Avg duration", value: totals.avgDurationText, detail: "per completed check", fraction: nil),
-            StatTile(id: "pending", label: "Pending", value: "\(totals.pending)", detail: "\(totals.skipped) skipped", fraction: nil),
-        ], valueTones: ["success": totals.successTone, "failed": totals.failed > 0 ? .danger : .muted])
+        StatTiles(width: width, tiles: totals.tiles(), valueTones: totals.tileTones)
     }
 }
 
@@ -101,7 +93,7 @@ private struct CIGroupRow: View {
             Text("\(m.total) total").font(Theme.footnote).foregroundStyle(Theme.muted).monospacedDigit()
             Text(m.successText).font(Theme.footnoteSemibold).foregroundStyle(Theme.color(m.successTone)).monospacedDigit()
                 .frame(minWidth: 44, alignment: .trailing)
-            Text("\(m.failed) failed").font(Theme.footnote).foregroundStyle(m.failed > 0 ? Theme.danger : Theme.muted).monospacedDigit()
+            Text("\(m.failed) failed").font(Theme.footnote).foregroundStyle(Theme.color(m.failedTone)).monospacedDigit()
                 .frame(minWidth: 64, alignment: .trailing)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)

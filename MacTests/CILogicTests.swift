@@ -62,6 +62,20 @@ final class CILogicTests: XCTestCase {
         XCTAssertEqual(m.avgDurationText, formatDurationMs(192_000))
     }
 
+    func testSummaryTilesCarryTheFiguresAndTheirTones() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let m = CIMetrics(["total": 12, "succeeded": 9, "failed": 2, "cancelled": 1, "pending": 3, "skipped": 4,
+                           "successRate": 0.8, "avgDurationMs": 65_000, "lastObservedAt": 1_799_999_940_000])
+        let tiles = m.tiles(now: now)
+        XCTAssertEqual(tiles.map(\.id), ["total", "success", "failed", "duration", "pending"])
+        XCTAssertEqual(tiles.map(\.value), ["12", m.successText, "2", m.avgDurationText, "3"])
+        XCTAssertTrue(tiles.allSatisfy { $0.fraction == nil })
+        XCTAssertNotEqual(tiles[0].detail, CIMetrics([:]).tiles(now: now)[0].detail)
+        XCTAssertEqual(m.failedTone, .danger)
+        XCTAssertEqual(CIMetrics(["failed": 0]).failedTone, .muted)
+        XCTAssertEqual(m.tileTones, ["success": m.successTone, "failed": .danger])
+    }
+
     func testMetricsWithNullsAndNothingDecided() {
         let m = CIMetrics(j(#"{"total":2,"pending":2,"successRate":null,"avgDurationMs":null,"maxDurationMs":null,"totalDurationMs":0,"lastObservedAt":null}"#))
         XCTAssertEqual(m.total, 2); XCTAssertEqual(m.pending, 2); XCTAssertEqual(m.failed, 0)

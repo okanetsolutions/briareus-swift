@@ -71,6 +71,22 @@ struct CIMetrics: Equatable, Sendable {
         return r >= 0.9 ? .ok : r >= 0.7 ? .warn : .danger
     }
     var avgDurationText: String { avgDurationMs.map(formatDurationMs) ?? "\u{2013}" }
+    /// Red while anything failed, muted otherwise.
+    var failedTone: RowTone { failed > 0 ? .danger : .muted }
+
+    /// The summary tiles both CI/CD screens draw: total, success rate, failed, average duration and pending.
+    func tiles(now: Date = Date()) -> [StatTile] {
+        let observed = lastObservedAt.map { "last \(formatRelative($0, now: now))" } ?? "in this window"
+        return [
+            StatTile(id: "total", label: "Total", value: "\(total)", detail: observed, fraction: nil),
+            StatTile(id: "success", label: "Success rate", value: successText, detail: "\(succeeded) passed", fraction: nil),
+            StatTile(id: "failed", label: "Failed", value: "\(failed)", detail: "\(cancelled) cancelled", fraction: nil),
+            StatTile(id: "duration", label: "Avg duration", value: avgDurationText, detail: "per completed check", fraction: nil),
+            StatTile(id: "pending", label: "Pending", value: "\(pending)", detail: "\(skipped) skipped", fraction: nil),
+        ]
+    }
+    /// The tiles whose figure takes a tone, by tile id; the rest are in ink.
+    var tileTones: [String: RowTone] { ["success": successTone, "failed": failedTone] }
 }
 
 /// One UTC day, one repository or one named check, with its figures.

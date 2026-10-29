@@ -154,6 +154,9 @@ struct CodeReview: Equatable, Sendable, Identifiable {
         if let costUsd { parts.append((costEstimated ? "~" : "") + formatCost(costUsd)) }
         return parts.joined(separator: " \u{00B7} ")
     }
+    /// The review session to open, only while the review runs: the server deletes the session once it closes, and the
+    /// review lives on here.
+    var openableSessionID: String? { status == .running ? sessionID : nil }
     /// How many findings carry each verdict, and how many wait for one.
     var counts: CodeReviewCounts { CodeReviewCounts(findings) }
 }

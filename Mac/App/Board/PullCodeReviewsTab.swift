@@ -34,7 +34,7 @@ private struct CodeReviewCard: View {
                     Text(formatEventTime(at)).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1)
                 }
                 Spacer(minLength: 8)
-                if let sid = review.sessionID {
+                if let sid = review.openableSessionID {
                     Button("Open session") { openSession(sid) }.dashButton(.bordered)
                 }
             }
@@ -43,7 +43,7 @@ private struct CodeReviewCard: View {
             }
             Text(review.counts.line).font(Theme.footnoteSemibold).foregroundStyle(Theme.ink).padding(.top, 4)
             if let summary = review.summary {
-                MarkdownView(source: summary, size: .footnote).padding(.top, 10)
+                MarkdownView(source: visibleMarkdown(summary), size: .footnote).padding(.top, 10)
             }
             if !review.findings.isEmpty {
                 BoardRule().padding(.vertical, 10)
@@ -92,7 +92,7 @@ private struct CodeReviewFindingRow: View {
             Text(location).font(Theme.monoSmall).foregroundStyle(Theme.ink).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        if let body = finding.body { MarkdownView(source: body, size: .footnote) }
+        if let body = finding.body { MarkdownView(source: visibleMarkdown(body), size: .footnote) }
         if let comments = finding.comments {
             VStack(alignment: .leading, spacing: 2) {
                 Text(finding.verdict.map { "Why \($0.title.lowercased())" } ?? "Verifier's note")
