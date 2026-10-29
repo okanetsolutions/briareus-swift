@@ -5,9 +5,26 @@ struct SSHMonitoringScreen: View {
     @StateObject private var model: SSHMonitoringModel
     @Environment(\.navigate) private var navigate
 
-    init(serverID: Double? = nil) { _model = StateObject(wrappedValue: SSHMonitoringModel(serverID: serverID)) }
+    private let embedded: Bool
+    private let selectServer: ((Double) -> Void)?
+
+    init(serverID: Double? = nil, embedded: Bool = false, selectServer: ((Double) -> Void)? = nil) {
+        _model = StateObject(wrappedValue: SSHMonitoringModel(serverID: serverID))
+        self.embedded = embedded
+        self.selectServer = selectServer
+    }
 
     var body: some View {
+        Group {
+            if embedded { serverList }
+            else { serverList.navigationTitle(model.title) }
+        }
+        .task { await model.follow() }
+        .refreshable { await model.load() }
+        .onDisappear { model.hideCredential() }
+    }
+
+    private var serverList: some View {
         List {
             if let error = model.error { ErrorNotice(message: error) }
             if !model.available {
@@ -17,7 +34,7 @@ struct SSHMonitoringScreen: View {
             } else if model.serverID == nil {
                 if model.servers.isEmpty { ContentUnavailableView("No SSH servers", systemImage: "server.rack") }
                 ForEach(model.servers) { server in
-                    Button { navigate(.sshMonitoring(serverID: server.id)) } label: {
+                    Button { open(server.id) } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(server.title).font(.headline)
                             Text(server.repo).font(.caption).foregroundStyle(.secondary)
@@ -31,17 +48,20 @@ struct SSHMonitoringScreen: View {
                     if let at = server.measuredAt { LabeledContent("Last sample", value: at.formatted()) }
                     if server.tiles.isEmpty { Text("No metrics received yet.") }
                     StatTiles(tiles: server.tiles)
-                } header: { Text(server.repo) }
+                } header: {
+                    if embedded { Text(model.title) }
+                    Text(server.repo)
+                }
                 if model.history != nil {
                     Section("Last 24 hours") { ForEach(model.charts) { StatsChartView(chart: $0) } }
                 }
                 SSHMonitorControls(model: model)
             }
         }
-        .navigationTitle(model.title)
-        .task { await model.follow() }
-        .refreshable { await model.load() }
-        .onDisappear { model.hideCredential() }
+    }
+    private func open(_ id: Double) {
+        if let selectServer { selectServer(id) }
+        else { navigate(.sshMonitoring(serverID: id)) }
     }
 }
 
