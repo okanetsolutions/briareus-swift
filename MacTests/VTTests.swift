@@ -284,8 +284,8 @@ final class VTTests: XCTestCase {
     func testTargetsAndTheirArguments() {
         var t = TermTarget(key: "k", group: "g", label: "", user: "me", host: "example.com", port: 22)
         XCTAssertNil(t.problem)
-        XCTAssertEqual(t.sshArguments, ["-p", "22", "-l", "me", "--", "example.com"])
-        XCTAssertEqual(t.sftpArguments, ["-P", "22", "-o", "User=me", "-o", "ServerAliveInterval=30", "--", "example.com"])
+        XCTAssertEqual(t.sshArguments, ["-p", "22", "-l", "me", "-o", "StrictHostKeyChecking=accept-new", "--", "example.com"])
+        XCTAssertEqual(t.sftpArguments, ["-P", "22", "-o", "User=me", "-o", "ServerAliveInterval=30", "-o", "StrictHostKeyChecking=accept-new", "--", "example.com"])
         XCTAssertEqual(t.display, "me@example.com:22")
         t.host = "-oProxyCommand=x"; XCTAssertNotNil(t.problem)
         t.host = "a b"; XCTAssertNotNil(t.problem)
@@ -293,6 +293,12 @@ final class VTTests: XCTestCase {
         t.user = ""; XCTAssertEqual(t.problem, "This server has no username.")
         t.user = "DOMAIN\\me"; XCTAssertNil(t.problem)
         t.port = 0; XCTAssertEqual(t.problem, "The port 0 is not from 1 to 65535.")
+    }
+
+    func testSQLSSHUsesTheSameHostKeyPolicyWithoutATerminal() {
+        let t = TermTarget(key: "k", group: "g", label: "", user: "db", host: "[::1]", port: 2222)
+        XCTAssertEqual(t.sshQueryArguments, ["-T", "-o", "ServerAliveInterval=30", "-o", "LogLevel=ERROR",
+                                           "-p", "2222", "-l", "db", "-o", "StrictHostKeyChecking=accept-new", "--", "[::1]"])
     }
 
     func testCtrlTabStepsThroughTheProjectsSessionsOrEveryProjects() {

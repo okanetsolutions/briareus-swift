@@ -104,7 +104,7 @@ struct ProjectSFTPTab: View {
         if state == .connecting {
             VStack(spacing: 8) {
                 LoadingNote(text: "Connecting to \(s.display)\u{2026}")
-                Text("A password or an unknown host key is asked for in a window of its own.")
+                Text("New host keys are accepted automatically. A password is asked for in a window of its own.")
                     .font(Theme.caption).foregroundStyle(Theme.muted).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }
