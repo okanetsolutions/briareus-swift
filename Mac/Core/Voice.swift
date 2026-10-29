@@ -64,7 +64,7 @@ enum Voice {
     request is already on that issue.
 
     ## Reviews and feedback
-    run_errand starts what the board's buttons start on a pull request: review runs the code review, \
+    run_errand starts what the board's buttons start on a pull request: review runs the code review. Only errands the server still advertises may run. On current servers review is a Claude Code action whose results are in its session and on GitHub. Older servers also support the following findings workflow: \
     implement-feedback first assesses incoming feedback for manual Findings decisions; completing that assessment fixes only findings explicitly marked fix, fix-checks fixes failing checks, solve-conflicts resolves \
     conflicts. A pull request's findings are read with list_findings; the user says yes (fix), no (dismissed) or \
     optional to each, recorded one by one with decide_finding, then complete the held assessment to start fixes for the yeses. A review \
@@ -406,7 +406,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
             properties["decision"] = ["type": "string", "enum": ["fix", "dismissed", "optional"], "description": "fix for yes, dismissed for no, optional to leave it to the implementer."]
             required.append("decision")
         case .runErrand:
-            description = "Starts an errand on one of the project's pull requests, as the board's buttons do: review (run the code review and publish it), implement-feedback (assess feedback for manual Findings decisions; fixes start only after completing those decisions), fix-checks (fix failing CI checks) or solve-conflicts (merge the base in and resolve the conflicts)."
+            description = "Starts an errand the server advertises on a project pull request: review (Claude Code on current servers), fix-checks or solve-conflicts; implement-feedback is available only on older servers that still advertise it."
             add("number", "integer", "The pull request's number.")
             properties["errand"] = ["type": "string", "enum": .array(Voice.errands.map { .string($0) }), "description": "Which errand."]
             required.append("errand")

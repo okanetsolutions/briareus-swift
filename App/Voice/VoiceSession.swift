@@ -403,26 +403,20 @@ final class VoiceSession: ObservableObject {
             return finish(.waiting, ["needs_confirmation": true, "read_back": .string(readBack),
                                      "next": "Read this back to the user. Call again with confirmed=true only if they say yes."])
         case .call(var arguments):
-            // An errand's call is the board's own: `review` for a code review, `action` for the rest.
-            let operation = tool == .runErrand ? (Voice.errand(step.args["errand"].string ?? "")?.operation ?? tool.operation) : tool.operation
-            guard Store.shared.supports(operation) else {
-                return finish(.failed("Not allowed"), ["error": "This device's token cannot do that on the server."])
-            }
             do {
+                var operation = tool.operation
+                if tool == .runErrand {
+                    let request = try await errandRequest(step.args, repo: repo)
+                    operation = request.operation; arguments = request.arguments
+                }
+                guard Store.shared.supports(operation) else {
+                    return finish(.failed("Not allowed"), ["error": "This device's token cannot do that on the server."])
+                }
                 // A conversation named by id is acted on only when it is the project's.
                 if tool.namesConversation, let id = arguments["sessionId"].string,
                    !Voice.owns(try await Store.shared.call("sessions", ["repo": .string(repo)]), session: id) {
                     let why = "That conversation is not one of this project's."
                     return finish(.failed(why), ["error": .string(why)])
-                }
-                if tool == .runErrand, operation == "review", let number = arguments["prNumber"].int {
-                    // A code review checks the pull request's branch out, read from the board.
-                    let board = try await Store.shared.call("pulls", ["repo": .string(repo)])
-                    guard let row = PullSummary.parseList(board["pulls"]).first(where: { $0.number == number }), !row.branch.isEmpty else {
-                        let why = "Pull request #\(number) is not open on this project."
-                        return finish(.failed(why), ["error": .string(why)])
-                    }
-                    arguments["branch"] = .string(row.branch)
                 }
                 if tool == .completeReviewRound, let id = arguments["sessionId"].string {
                     // The verdicts are made from the round as it is now, so a finding added meanwhile stays optional.

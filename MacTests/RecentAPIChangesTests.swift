@@ -75,4 +75,14 @@ final class RecentAPIChangesTests: XCTestCase {
         XCTAssertTrue(Route.supportsBodyField([Route(method: "POST", path: "sessions", access: "manage", bodyFields: ["review"])], route: legacy))
         XCTAssertEqual(BoardAction.startable(catalog: catalog, pull: nil, failedChecks: 0, canManage: false, supports: { _ in true }), [])
     }
+    func testVoiceErrandsRespectTheCatalogAndLegacyReviewCapability() throws {
+        let current: JSON = [["id": "review", "label": "Review", "binary": "claude"], ["id": "fix-checks", "label": "Fix checks"]]
+        XCTAssertEqual(Voice.offeredErrand("review", catalog: current, legacyReviews: false)?.operation, "action")
+        XCTAssertEqual(Voice.offeredErrand("fix-checks", catalog: current, legacyReviews: false)?.operation, "action")
+        XCTAssertNil(Voice.offeredErrand("implement-feedback", catalog: current, legacyReviews: false))
+        XCTAssertNil(Voice.offeredErrand("review", catalog: [], legacyReviews: false))
+        XCTAssertEqual(Voice.offeredErrand("review", catalog: [], legacyReviews: true)?.operation, "review")
+        XCTAssertNil(Voice.offeredErrand("delete-self-comments", catalog: current, legacyReviews: true))
+    }
+
 }
