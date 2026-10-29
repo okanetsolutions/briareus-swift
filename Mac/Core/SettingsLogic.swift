@@ -405,7 +405,7 @@ struct ProviderFormState: Equatable, Sendable {
     func text(_ f: ProviderField) -> String { texts[f] ?? "" }
 
     /// grok has no token mode and opencode nothing but a key, so only claude and codex choose.
-    static func modeOffered(_ binary: String) -> Bool { ["claude", "codex"].contains(binary) }
+    static func modeOffered(_ binary: String) -> Bool { !["grok", "opencode", "dsh", "qwen"].contains(binary) }
     /// Whether the endpoint and its token are part of the provider: the API token mode, or opencode's key.
     var usesToken: Bool { ["opencode", "dsh", "qwen"].contains(binary) || (Self.modeOffered(binary) && token) }
     /// A login is registered against a saved row, so only a saved one logged in through its CLI can log in.

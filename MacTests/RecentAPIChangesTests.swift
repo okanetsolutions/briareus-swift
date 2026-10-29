@@ -62,6 +62,13 @@ final class RecentAPIChangesTests: XCTestCase {
         }
     }
 
+    func testUnknownProviderBinaryRetainsItsExistingTokenConfiguration() throws {
+        let form = ProviderFormState(row: ["label": "Future agent", "binary": "future-cli", "apiKey": "saved-key", "baseUrl": "https://endpoint.example"])
+        XCTAssertTrue(form.usesToken)
+        XCTAssertTrue(ProviderFormState.modeOffered("future-cli"))
+        XCTAssertEqual(try form.body().get()["apiKey"], "saved-key")
+    }
+
     func testClaudeReviewActionUsesActionsRatherThanTheRemovedSessionFlag() throws {
         let catalog: JSON = [["id": "review", "label": "Code review", "binary": "claude", "hint": "Claude review"]]
         let review = try XCTUnwrap(BoardAction.startable(catalog: catalog, pull: nil, failedChecks: 0,
