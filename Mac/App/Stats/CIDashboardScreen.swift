@@ -119,6 +119,8 @@ private struct CIDailyChart: View {
             BarMark(x: .value("UTC day", day.title), y: .value("Other", day.metrics.other))
                 .foregroundStyle(by: .value("Result", "Other"))
         }
+        .chartForegroundStyleScale(domain: ["Passed", "Failed", "Pending", "Cancelled", "Skipped", "Other"],
+                                   range: [Theme.ok, Theme.danger, Theme.accent, Theme.warn, Theme.muted, Theme.dot])
         .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
         .frame(height: 210)
         .accessibilityLabel("Observed CI executions by UTC day")

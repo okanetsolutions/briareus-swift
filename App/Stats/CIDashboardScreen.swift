@@ -8,20 +8,7 @@ struct CIDashboardScreen: View {
 
     var body: some View {
         List {
-            Section {
-                Picker("Window", selection: $model.query.days) {
-                    ForEach([7, 30, 90], id: \.self) { Text("\($0) days").tag($0) }
-                }
-                Picker("Project", selection: $model.query.repo) {
-                    Text("All projects").tag("")
-                    ForEach(projects.projects, id: \.repo) { Text($0.title).tag($0.repo) }
-                }
-                Picker("Source", selection: $model.query.kind) {
-                    ForEach(CIKind.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-            } footer: {
-                Text("Observed GitHub checks only; earlier history may be incomplete. Daily totals use UTC. Durations are execution time, not billed minutes.")
-            }
+            CIDashboardFilters(query: $model.query, projects: projects.projects)
             if let error = model.error {
                 ErrorNotice(message: error)
                 Button("Retry") { Task { await model.load() } }
@@ -107,6 +94,8 @@ private struct CIDailyChart: View {
             BarMark(x: .value("UTC day", day.title), y: .value("Other", day.metrics.other))
                 .foregroundStyle(by: .value("Result", "Other"))
         }
+        .chartForegroundStyleScale(domain: ["Passed", "Failed", "Pending", "Cancelled", "Skipped", "Other"],
+                                   range: [Theme.ok, Theme.danger, Theme.accent, Theme.warn, Theme.muted, Theme.dot])
         .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
         .frame(height: 210)
         .accessibilityLabel("Observed CI executions by UTC day")

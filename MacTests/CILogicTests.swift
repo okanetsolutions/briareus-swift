@@ -3,6 +3,17 @@ import XCTest
 @testable import BriareusMacCore
 
 final class CILogicTests: XCTestCase {
+    func testHistoryArgumentsPreserveTheFrozenWindowAndFilters() {
+        let window = CIQuery(days: 7, repo: "o/r", kind: .statuses).arguments(now: Date(timeIntervalSince1970: 2_000_000_000))
+        for offset in [0, 50, 100] {
+            let args = CIHistory.arguments(window: window, offset: offset)
+            for key in window.keys { XCTAssertEqual(args[key], window[key]) }
+            XCTAssertEqual(args["offset"], JSON(offset))
+            XCTAssertEqual(args["limit"], 50)
+        }
+        XCTAssertNil(window.object?["offset"])
+        XCTAssertNil(window.object?["limit"])
+    }
     func testQueryUsesOneMillisecondWindowAndKeepsSourcesSeparate() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let all = CIQuery().arguments(now: now)

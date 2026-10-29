@@ -118,6 +118,12 @@ struct CIHistory: Equatable, Sendable {
     var runs: [CIRun] = []
     var nextOffset: Int?
     var truncated = false
+    /// History pages retain the aggregate's exact window and filters.
+    static func arguments(window: JSON, offset: Int) -> JSON {
+        var args = window
+        args["offset"] = JSON(offset); args["limit"] = 50
+        return args
+    }
     /// Replace on a new window; append without duplicating executions seen on adjacent pages.
     mutating func receive(_ j: JSON, offset: Int) throws {
         guard j["runs"].isArray else { throw APIError(.nonJSON) }

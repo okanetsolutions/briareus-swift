@@ -48,8 +48,7 @@ final class CIDashboardModel: ObservableObject {
     private func page(offset: Int, generation gen: Int, connection: ObjectIdentifier?) async {
         loadingMore = true; historyError = nil
         defer { if gen == generation { loadingMore = false } }
-        var args = window
-        args["offset"] = JSON(offset); args["limit"] = 50
+        let args = CIHistory.arguments(window: window, offset: offset)
         do {
             let answer = try await Store.shared.call("ci_runs", args)
             guard gen == generation, connection == connectionID, !Task.isCancelled else { return }
