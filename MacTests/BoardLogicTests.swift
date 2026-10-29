@@ -295,6 +295,11 @@ extension BoardLogicTests {
         XCTAssertEqual(runs.active, 2)
         XCTAssertEqual(BoardPullRuns(sessions, number: 9).total, 0)
         XCTAssertEqual(BoardPullRuns([], number: 7).active, 0)
+        let byPull = BoardPullRuns.byPull(sessions)
+        XCTAssertEqual(byPull[7], runs)
+        XCTAssertEqual(byPull[8], BoardPullRuns(sessions, number: 8))
+        XCTAssertNil(byPull[9])
+        XCTAssertEqual(Set(byPull.keys), [7, 8])
     }
 
     func testMergeConfirmationCarriesTargetAndCurrentWarnings() {

@@ -37,19 +37,15 @@ final class BoardModel: ObservableObject {
     let repo: String
     @Published var board: JSON = .null
     var catalog: JSON = []
-    var runs: [Session] = []
+    @Published var runs: [Session] = []
     var uncertain = false, reading = false, loaded = false
     var writeError: String?, error: String?
     var syncedAt: Date?
-    var readGen = 0, cooldownTick = 0
+    var readGen = 0, cooldownTick = 0, runsGen = 0
+    var readingRuns = false
     let issueStatus = IssueStatusChecks()
     init(repo: String) { self.repo = repo }
     func show(_ answer: JSON, saved: Bool) { board = answer }
-    func loadRuns() async {
-        if let answer = await boardCall("sessions", ["repo": .string(repo)]).value {
-            runs = Session.parseList(answer) ?? []
-        }
-    }
 }
 
 @MainActor
@@ -91,7 +87,35 @@ struct GlobalPullsChecks {
         try await orderedReads(failedPoll: false)
         try await orderedReads(failedPoll: true)
         try await parallelReadsAndCatalogThrottle()
+        try await sessionReadOrdering()
         print("Global pull read ordering, stale failures, parallel sessions/actions and catalog throttle checks passed")
+    }
+
+    @MainActor
+    static func sessionReadOrdering() async throws {
+        let model = BoardModel(repo: "o/a"), older = PendingRead(), newer = PendingRead()
+        let sessions: JSON = ["sessions": [["id": "s1", "repo": "o/a", "status": "running", "prNumber": 7]]]
+        var requests = 0
+        Store.shared.read = { _, _ in
+            requests += 1
+            return try await (requests == 1 ? older : newer).read()
+        }
+        let poll = Task { await model.loadRuns() }
+        await older.wait()
+        let refresh = Task { await model.loadRuns() }
+        await newer.wait()
+        newer.continuation?.resume(returning: sessions)
+        await refresh.value
+        precondition(model.runs.count == 1 && !model.readingRuns)
+        older.continuation?.resume(returning: ["sessions": []])
+        await poll.value
+        precondition(model.runs.count == 1, "An older run response must not replace newer rows")
+        var changes = 0
+        let subscription = model.$runs.dropFirst().sink { _ in changes += 1 }
+        defer { subscription.cancel() }
+        Store.shared.read = { _, _ in sessions }
+        await model.loadRuns()
+        precondition(changes == 0 && !model.readingRuns, "An unchanged run list must not invalidate every pull row")
     }
 
     @MainActor

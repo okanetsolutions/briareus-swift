@@ -16,7 +16,11 @@ final class BoardModel: ObservableObject {
     @Published var tab = BoardTab.pulls
     /// The epics whose sub-issues the Issues tab hides, by number.
     @Published var foldedEpics: Set<Int> = []
-    @Published var runs: [Session] = []
+    @Published var runs: [Session] = [] {
+        didSet { pullRuns = BoardPullRuns.byPull(runs) }
+    }
+    /// Run counts are shared by every row and rebuilt only when the sessions change.
+    private var pullRuns: [Int: BoardPullRuns] = [:]
     @Published var syncedAt: Date?
     /// Bumped when a read is held by the cooldown, so the board reads once it is over.
     @Published var cooldownTick = 0
@@ -45,7 +49,8 @@ final class BoardModel: ObservableObject {
     private var hasOpening = false
     private var opening = BoardFilter()
     var readGen = 0
-    private var readingActions = false, readingRuns = false
+    private var readingActions = false
+    var readingRuns = false
     /// The Run, Database and Forge tabs (project_run.c, project_db.c, project_forge.c), kept with the board as the Windows
     /// client keeps them with its screen; what they change redraws the board's header.
     private(set) lazy var run = adoptTab(ProjectRunModel(repo: repo))
@@ -131,17 +136,7 @@ final class BoardModel: ObservableObject {
         if Store.shared.supports("sessions") && !readingRuns { Task { await loadRuns() } }
         return await loadBoard(fresh: fresh, ifStale: true)?.error
     }
-    /// The newest read wins: after a start, C cancels the read in flight and reads again.
-    private var runsGen = 0
-    func loadRuns() async {
-        runsGen += 1
-        let gen = runsGen
-        readingRuns = true
-        let r = await boardCall("sessions", ["repo": .string(repo)])
-        guard gen == runsGen else { return }
-        readingRuns = false
-        if let v = r.value, let list = Session.parseList(v) { runs = list }
-    }
+    var runsGen = 0
     /// Refreshing is how an uncertain start is checked: its conversation is listed in the project if it began.
     func refresh() {
         switch tab {
@@ -160,8 +155,8 @@ final class BoardModel: ObservableObject {
         }
     }
 
-    func runsOn(_ number: Int) -> Int { BoardPullRuns(runs, number: number).total }
-    func runActiveOn(_ number: Int) -> Bool { BoardPullRuns(runs, number: number).active > 0 }
+    func runsOn(_ number: Int) -> Int { pullRuns[number]?.total ?? 0 }
+    func runActiveOn(_ number: Int) -> Bool { (pullRuns[number]?.active ?? 0) > 0 }
     func stack(of pull: PullSummary) -> StackPosition? { StackPosition(pull.raw["stack"], stacks: board["stacks"]) }
     /// Whose review the Review List waits on: the saved GitHub login, else the project's author.
     var reviewer: String? { BoardEdits.login ?? board["author"].nonEmpty }

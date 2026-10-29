@@ -13,7 +13,6 @@ struct BoardScreen: View {
     @EnvironmentObject private var store: Store
     @ObservedObject private var feed: ProjectFeed
     @ObservedObject private var catalog = ErrandCatalog.shared
-    @ObservedObject private var projects = ProjectsModel.shared
     @StateObject private var filters: BoardFilters
     @StateObject private var pullActions: BoardPullActionsModel
     @StateObject private var issueStatus: IssueStatusReader
@@ -43,6 +42,7 @@ struct BoardScreen: View {
     var body: some View {
         let pulls = self.pulls, issues = self.issues
         let rows = tab == .pulls ? pulls.map(BoardRow.init) : issues.map { BoardRow($0.summary) }
+        let review = reviewList(pulls, stacks: board["stacks"], me: reviewer)
         List {
             if let error { Section { ErrorNotice(message: error) }.listRowBackground(Theme.row) }
             BoardPullNotices(model: pullActions)
@@ -50,7 +50,7 @@ struct BoardScreen: View {
                 Text("PRs (\(pulls.count))").tag(Tab.pulls)
                 Text("Issues (\(issues.count))").tag(Tab.issues)
                 // Review List, the pull requests waiting on the user's review.
-                Text("Review List (\(reviewList(pulls, stacks: board["stacks"], me: reviewer).count))").tag(Tab.review)
+                Text("Review List (\(review.count))").tag(Tab.review)
             }
             .pickerStyle(.segmented)
             .listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
@@ -67,11 +67,13 @@ struct BoardScreen: View {
             if boardShowsLoading(loaded: loaded, refreshing: feed.boardRefreshing) {
                 ProgressView(tab.loadingText).frame(maxWidth: .infinity).padding(.vertical, 24).listRowBackground(Color.clear)
             }
-            if tab == .pulls || tab == .review { pullRows(pulls, review: tab == .review) } else if tab == .issues { issueRows(issues) }
+            if tab == .pulls || tab == .review { pullRows(pulls, review: tab == .review ? review : nil) }
+            else if tab == .issues { issueRows(issues) }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden).background(Theme.canvas)
-        .navigationTitle(projects.project(repo)?.title ?? "Board").navigationBarTitleDisplayMode(.inline)
+        // Read, not observed: the projects model changes with every live update, and each redrew the whole board.
+        .navigationTitle(ProjectsModel.shared.project(repo)?.title ?? "Board").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if feed.boardReading {
@@ -129,10 +131,11 @@ struct BoardScreen: View {
 
     // MARK: Pull requests
 
-    /// The pull requests the filters show, or for `review` the Review List's: labelled requires-dev-review, not the
+    /// The pull requests the filters show, or the Review List's when given: labelled requires-dev-review, not the
     /// user's, and not stacked on another, or labelled feedback-implemented on one they review.
-    @ViewBuilder private func pullRows(_ pulls: [PullSummary], review: Bool = false) -> some View {
-        let shown = review ? reviewList(pulls, stacks: board["stacks"], me: reviewer) : pulls.filter { filters.pulls.passes(BoardRow($0)) }
+    @ViewBuilder private func pullRows(_ pulls: [PullSummary], review reviewRows: [PullSummary]? = nil) -> some View {
+        let review = reviewRows != nil
+        let shown = reviewRows ?? pulls.filter { filters.pulls.passes(BoardRow($0)) }
         Section {
             ForEach(shown, id: \.number) { pull in
                 let stack = StackPosition(pull.raw["stack"], stacks: board["stacks"])

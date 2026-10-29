@@ -30,14 +30,24 @@ jobs:
         run: |
           swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/ProjectFeed.swift scripts/check_project_feed.swift -o "$RUNNER_TEMP/check-project-feed"
           "$RUNNER_TEMP/check-project-feed"
+      - name: Check Mac live-update aggregation and unchanged sidebar reads
+        run: |
+          swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift Mac/App/Shared/Events.swift Mac/App/Shared/ProjectsModel.swift Mac/App/Sidebar/SidebarSessions.swift scripts/check_mac_projects.swift -o "$RUNNER_TEMP/check-mac-projects"
+          "$RUNNER_TEMP/check-mac-projects"
       - name: Check global pull reads and catalog throttling
         run: |
-          swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift Mac/App/Board/BoardModel+Reading.swift Mac/App/Board/GlobalPullsModel.swift scripts/check_global_pulls.swift -o "$RUNNER_TEMP/check-global-pulls"
+          swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift Mac/App/Board/BoardModel+Reading.swift Mac/App/Board/BoardModel+Runs.swift Mac/App/Board/GlobalPullsModel.swift scripts/check_global_pulls.swift -o "$RUNNER_TEMP/check-global-pulls"
           "$RUNNER_TEMP/check-global-pulls"
       - name: Check phone global board progress during slow auxiliary reads
         run: |
           swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/ProjectFeed.swift App/Board/GlobalPullsModel.swift scripts/check_phone_global_pulls.swift -o "$RUNNER_TEMP/check-phone-global-pulls"
           "$RUNNER_TEMP/check-phone-global-pulls"
+      - name: Check server dashboard tab loading and cancellation in both apps
+        run: |
+          for MODEL in App/Stats/StatsModels.swift Mac/App/Stats/StatsModels.swift; do
+            swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift "$MODEL" scripts/check_server_dashboard.swift -o "$RUNNER_TEMP/check-server-dashboard"
+            "$RUNNER_TEMP/check-server-dashboard"
+          done
       - name: Check personal connections, sharing and monitor credential lifecycle
         run: |
           swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Mac/Core/*.swift App/Settings/PersonalConnectionModel.swift App/Settings/SharingModel.swift App/Stats/SSHMonitoringModel.swift scripts/check_client_updates.swift -o "$RUNNER_TEMP/check-client-updates"

@@ -8,11 +8,12 @@ struct ProjectView: View {
     let repo: String
     @EnvironmentObject private var store: Store
     @ObservedObject private var feed: ProjectFeed
-    @ObservedObject private var projects = ProjectsModel.shared
     @Environment(\.navigate) private var navigate
     @WindowOpener private var openInWindow
     @State private var search = ""
     @State private var showClosed = false
+    /// How many recent conversations are drawn; Show more adds a page.
+    @State private var limit = conversationPageSize
     @State private var composing = false
     @State private var error: String?
     @State private var actionError: String?
@@ -39,14 +40,16 @@ struct ProjectView: View {
         _feed = ObservedObject(wrappedValue: Store.shared.feed(repo))
     }
 
-    private var title: String { projects.project(repo)?.title ?? repo }
+    /// Read, not observed: the projects model changes with every live update, and redrawing the list for each was slow.
+    private var title: String { ProjectsModel.shared.project(repo)?.title ?? repo }
     private var editing: Bool { editMode.isEditing }
     private var shown: [Session] { conversationsShown(feed.sessions, search: search, showClosed: showClosed) }
     private var canSelect: Bool { store.canManage && (store.supports("close") || store.supports("delete")) && !feed.sessions.isEmpty }
 
     var body: some View {
         dialogs(chrome(List(selection: editing ? $picked : nil) { sections }))
-            .onChange(of: feed.sessions.map(\.id)) { _, ids in picked.formIntersection(ids) }
+            // A pick a live update, search or the closed switch moves out of sight is dropped, so a bulk action never reaches it.
+            .onChange(of: ConversationGroups(shown, limit: limit).drawnIDs) { _, drawn in picked.formIntersection(drawn) }
             .refreshable { _ = await load(fresh: true) }
             .task { await poll(every: ProjectFeed.sessionsEvery) { await load() } }
     }
@@ -64,7 +67,7 @@ struct ProjectView: View {
             .listRowBackground(Theme.row)
         }
         let list = shown
-        let groups = ConversationGroups(list)
+        let groups = ConversationGroups(list, limit: limit)
         let active = groups.active
         if !groups.pinned.isEmpty {
             Section("Pinned") { ForEach(groups.pinned, id: \.id) { row($0) } }.listRowBackground(Theme.row)
@@ -74,6 +77,7 @@ struct ProjectView: View {
         }
         Section {
             ForEach(groups.recent, id: \.id) { row($0) }
+            if groups.hidden > 0 { ShowMoreRow(hidden: groups.hidden) { limit += conversationPageSize } }
             if feed.sessionsLoaded && list.isEmpty {
                 Text(search.isEmpty ? (feed.sessions.isEmpty ? "No conversations here yet." : "No open conversations.") : "No matching conversations.")
                     .foregroundStyle(.secondary)
@@ -168,7 +172,7 @@ struct ProjectView: View {
     /// While selecting: Select All, and Close and Delete for the picked conversations.
     private var bulkBar: some View {
         let closable = bulkConversationTargets(feed.sessions, picked: picked, delete: false).count
-        let all = Set(shown.map(\.id))
+        let all = ConversationGroups(shown, limit: limit).drawnIDs
         return HStack(spacing: 16) {
             Button(picked.isSuperset(of: all) && !all.isEmpty ? "Deselect All" : "Select All") {
                 if picked.isSuperset(of: all) { picked.subtract(all) } else { picked.formUnion(all) }

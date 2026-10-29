@@ -23,7 +23,7 @@ A native SwiftUI client for [Briareus](https://github.com/nadinyamaui/briareus),
 
 ## What it does
 
-The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out for a phone: **Projects** (the projects, their conversations and boards), **Status** (how many conversations need you, are working and are ready, each waiting one's question answered in place with its options or a reply, and what is working now, with links to the server's resources and its CI/CD statistics; the tab's badge is the count needing you), **Usage** and **Settings**. It runs on the Mac app's core (`Mac/Core`), so both apps read the server the same way. The screen stays on while the app is open.
+The iPhone and iPad app opens on tabs, the Mac app's sidebar strip laid out for a phone: **Projects** (the projects, their conversations and boards), **Pull requests**, **Status** (how many conversations need you, are working and are ready, each waiting one's question answered in place with its options or a reply, and what is working now, with links to the server's resources and its CI/CD statistics; the tab's badge is the count needing you), and **Settings**. The **Usage** dashboard is available on iPad only; iPhone never creates its model, loads its cached ledger or starts its requests and polling. Tabs depend on the server's supported routes. It runs on the Mac app's core (`Mac/Core`), so both apps read the server the same way. The screen stays on while the app is open.
 
 **Conversations**
 
@@ -72,7 +72,7 @@ The iPhone and iPad app opens on four tabs, the Mac app's sidebar strip laid out
 
 **Usage and Settings**
 
-- Shows what the projects spent over a window, by project, activity, provider and model, with the costliest sessions; an admin token sees every project's, others this month's for their own. Above it, every provider account's login and quota windows, as the Mac shows them.
+- On iPad, shows what the projects spent over a window, by project, activity, provider and model, with the costliest sessions; an admin token sees every project's, others this month's for their own. Above it, every provider account's login and quota windows, as the Mac shows them.
 - With an admin token, edits the server's settings as the Mac app does: projects (active or not, their GitHub Projects board, PR actions' runtime and local session limit) and their order, providers and their logins, the database pool, SSH servers with the database login each stores, Forge accounts, and Slack workspaces with the channels each project may post to. Each field's hint is behind an ⓘ beside it.
 
 **In the car**

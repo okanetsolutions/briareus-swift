@@ -4,6 +4,10 @@ import SwiftUI
 
 @MainActor
 final class UsageModel: ObservableObject {
+    /// Dashboard state shares the ledger's lifetime while a session is open above Usage.
+    @Published var selection: UsageDashboardTab = .usage
+    let server = ServerStatsModel()
+
     /// The window is a preference, kept while the app runs; the filters are not, so a fresh visit shows everything.
     private static var period = 0
     private static var range: UsageRange?

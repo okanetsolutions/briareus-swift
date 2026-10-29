@@ -1,6 +1,7 @@
 // The Resources screens' state: a session's stats (`session_stats`) and the server's with its open sessions
 // (`server_stats`, `sessions_stats`), each read again as often as the server samples while its screen is open. What the
 // figures say is StatsLogic's.
+import Combine
 import Foundation
 
 @MainActor
@@ -40,39 +41,75 @@ final class SessionStatsModel: ObservableObject {
 
 @MainActor
 final class ServerStatsModel: ObservableObject {
+    @Published var tab: ServerDashboardTab = .overview
+    @Published var monitoredServerID: Double?
     @Published private(set) var server: ServerStats?
-    /// The open sessions, the busiest first, named by the conversations the sidebar has read.
     @Published private(set) var rows: [StatsRow] = []
-    @Published private(set) var error: String?
-    @Published private(set) var loaded = false
+    @Published private(set) var charts: [StatsChart] = []
+    @Published private(set) var serverError: String?
+    @Published private(set) var sessionsError: String?
+    @Published private(set) var sessionsLoaded = false
 
-    var available: Bool { Store.shared.supports("server_stats") }
-    var listsSessions: Bool { Store.shared.supports("sessions_stats") }
-
+    var tabs: [ServerDashboardTab] { ServerDashboardTab.available(supports: Store.shared.supports) }
+    var error: String? { tab.error(server: serverError, sessions: sessionsError) }
+    private var requests: [String: UUID] = [:]
+    private var sessionsHost: HostStats?
     private var known: KnownSessions { KnownSessions(repos: ProjectsModel.shared.projects.map(\.repo), cache: Store.shared.cache) }
 
+    /// Only the selected panel reads; a slow or failed session list cannot block the overview.
     func load() async {
-        guard available else { loaded = true; return }
-        let lists = listsSessions
-        async let serverAnswer = Store.shared.call("server_stats")
-        async let openAnswer: JSON? = lists ? Store.shared.call("sessions_stats") : nil
+        guard let operation = tab.operation, Store.shared.supports(operation), !Task.isCancelled else { return }
+        let request = UUID()
+        requests[operation] = request
+        defer { if requests[operation] == request { requests[operation] = nil } }
         do {
-            let (s, o) = try await (serverAnswer, openAnswer)
-            guard let parsed = ServerStats(s) else { throw APIError(.nonJSON) }
-            server = parsed
-            rows = o.flatMap(OpenSessionsStats.init)?.rows(known: known) ?? []
-            error = nil
+            let answer = try await Store.shared.call(operation)
+            guard requests[operation] == request, Store.shared.supports(operation), !Task.isCancelled else { return }
+            if operation == "sessions_stats" {
+                guard let parsed = OpenSessionsStats(answer) else { throw APIError(.nonJSON) }
+                rows = parsed.rows(known: known)
+                sessionsHost = parsed.host
+                sessionsLoaded = true
+                sessionsError = nil
+            } else {
+                guard let parsed = ServerStats(answer) else { throw APIError(.nonJSON) }
+                server = parsed
+                charts = parsed.charts
+                serverError = nil
+            }
         } catch {
-            guard !error.isCancellation else { return }
-            self.error = errorText(error)
+            guard requests[operation] == request, Store.shared.supports(operation), !Task.isCancelled, !error.isCancellation else { return }
+            if operation == "sessions_stats" { sessionsError = errorText(error) }
+            else { serverError = errorText(error) }
         }
-        loaded = true
     }
 
     func follow() async {
         while !Task.isCancelled {
+            discardUnsupportedReadings()
+            guard let supported = tab.resolved(in: tabs) else { return }
+            if supported != tab { tab = supported; return }
+            guard tab.operation != nil else { return }
             await load()
-            try? await Task.sleep(for: .seconds(statsPollSeconds(server?.host)))
+            guard tabs.contains(tab) else { continue }
+            do { try await Task.sleep(for: .seconds(tab.pollSeconds(server: server?.host, sessions: sessionsHost))) }
+            catch { return }
+        }
+    }
+
+    private func discardUnsupportedReadings() {
+        if !Store.shared.supports("server_stats") {
+            requests["server_stats"] = nil
+            server = nil
+            charts = []
+            serverError = nil
+        }
+        if !Store.shared.supports("sessions_stats") {
+            requests["sessions_stats"] = nil
+            rows = []
+            sessionsHost = nil
+            sessionsLoaded = false
+            sessionsError = nil
         }
     }
 
