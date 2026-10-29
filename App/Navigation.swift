@@ -98,7 +98,7 @@ enum Destination: Hashable, Identifiable {
         case .branchRun(let repo): BranchRunScreen(repo: repo)
         case .issue(let repo, let issue): IssueScreen(repo: repo, issue: issue)
         case .findings(let repo): FindingsScreen(repo: repo)
-        case .usage: UsageScreen()
+        case .usage: UsageEntry()
         case .projectSettings(let row, let defaults): ProjectSettingsScreen(row: row, defaults: defaults)
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)
         case .dbServerSettings(let row, let defaults): DBServerSettingsScreen(row: row, defaults: defaults)

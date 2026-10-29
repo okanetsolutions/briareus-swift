@@ -38,7 +38,7 @@ struct DetachedPageView: View {
         switch page {
         case .conversation(let id, let session): NavigationRoot { ConversationScreen(sessionID: id, initial: session) }
         case .findings(let repo): NavigationRoot { FindingsScreen(repo: repo) }
-        case .usage: NavigationRoot { UsageScreen() }
+        case .usage: NavigationRoot { UsageEntry() }
         // The browser holds its own navigation bar.
         case .browser(let session): SharedBrowserScreen(session: session)
         }
