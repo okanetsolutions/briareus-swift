@@ -1,4 +1,4 @@
-// Pages in windows of their own, as the Mac's DetachedWindows: on an iPad, a conversation, Findings, Usage or a
+// Pages in windows of their own, as the Mac's DetachedWindows: on an iPad, a conversation, Status, Usage or a
 // session's shared browser opens in a window (a scene) of its own beside the app's, so several can sit side by side on
 // the one Store. Each window has a navigation stack of its own, so what its page opens stays there, and asking again for
 // a page that already has a window brings that window forward. A phone, which has one window, offers none of this.
@@ -10,8 +10,8 @@ import UIKit
 enum DetachedPage: Codable, Hashable, Identifiable {
     /// A conversation; `session` is the record the list had.
     case conversation(id: String, session: JSON?)
-    /// The review rounds waiting: one project's, or every project's with nil.
-    case findings(repo: String?)
+    /// ◉ Status across every project.
+    case status
     case usage
     /// A session's shared browser, on its session record.
     case browser(session: JSON)
@@ -22,7 +22,7 @@ enum DetachedPage: Codable, Hashable, Identifiable {
     var id: String {
         switch self {
         case .conversation(let id, _): return "conversation:\(id)"
-        case .findings(let repo): return "findings:\(repo ?? "")"
+        case .status: return "status"
         case .usage: return "usage"
         case .browser(let session): return "browser:\(session["id"].string ?? "")"
         }
@@ -37,7 +37,7 @@ struct DetachedPageView: View {
     var body: some View {
         switch page {
         case .conversation(let id, let session): NavigationRoot { ConversationScreen(sessionID: id, initial: session) }
-        case .findings(let repo): NavigationRoot { FindingsScreen(repo: repo) }
+        case .status: NavigationRoot { StatusScreen() }
         case .usage: NavigationRoot { UsageScreen() }
         // The browser holds its own navigation bar.
         case .browser(let session): SharedBrowserScreen(session: session)

@@ -1,8 +1,7 @@
 // One conversation, as the Mac's ConversationScreen (screen_conversation.c): the transcript, read a little at a time
 // after the saved part, opening on its end; the composer under it; the session's actions in the toolbar's menu. The
-// Mac's session panel opens as a sheet from the title or the strip over the transcript, and a review round held for a
-// decision shows as a banner over the composer that opens its card. The session's shared browser opens over it all from
-// the menu, or from its 🌐 line over the transcript while it is on.
+// Mac's session panel opens as a sheet from the title or the strip over the transcript. The session's shared browser
+// opens over it all from the menu, or from its 🌐 line over the transcript while it is on.
 import SwiftUI
 
 struct ConversationScreen: View {
@@ -19,7 +18,6 @@ struct ConversationScreen: View {
     @State private var renaming = false
     @State private var newTitle = ""
     @State private var showingDetails = false
-    @State private var showingTriage = false
     @State private var showingBrowser = false
     @State private var atBottom = true
 
@@ -76,7 +74,6 @@ struct ConversationScreen: View {
         .sheet(isPresented: $showingDetails) {
             SessionDetailsSheet(model: model) { navigate($0) }
         }
-        .sheet(isPresented: $showingTriage) { triageSheet }
         .fullScreenCover(isPresented: $showingBrowser) { SharedBrowserScreen(session: session.raw).environmentObject(store) }
     }
 
@@ -133,11 +130,8 @@ struct ConversationScreen: View {
             .animation(.snappy, value: atBottom)
             .safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { strip; browserLine } }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 0) {
-                    triageBanner
-                    ConversationComposer(model: model, draft: model.draft, files: model.files, focused: $composerFocused,
-                                         stop: { asked = "cancel" }, reopen: { asked = "reopen" })
-                }
+                ConversationComposer(model: model, draft: model.draft, files: model.files, focused: $composerFocused,
+                                     stop: { asked = "cancel" }, reopen: { asked = "reopen" })
             }
         }
     }
@@ -167,7 +161,6 @@ struct ConversationScreen: View {
     private var subtitle: String {
         var parts = [session.conversationState.capitalized]
         if let model = session.model { parts.append(model) }
-        if session.reviewLoopOn { parts.append("Review loop") }
         return parts.joined(separator: " \u{00B7} ")
     }
 
@@ -213,30 +206,6 @@ struct ConversationScreen: View {
             .accessibilityLabel(browser.running ? "Shared browser, running" : "Shared browser, starts next turn")
             .accessibilityHint("Opens the session's shared browser")
         }
-    }
-
-    // MARK: Review round
-
-    @ViewBuilder private var triageBanner: some View {
-        if let triage = session.heldTriage, store.supports("complete_findings") {
-            ConversationTriageBanner(triage: triage) { showingTriage = true }
-        }
-    }
-
-    private var triageSheet: some View {
-        NavigationStack {
-            ScrollView {
-                TriageCard(session: session) {
-                    showingTriage = false
-                    model.triageDone()
-                }
-                .padding(16)
-            }
-            .background(Theme.canvas)
-            .navigationTitle(session.heldTriage.map(triageTitle) ?? "Review findings").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingTriage = false } } }
-        }
-        .presentationDetents([.medium, .large])
     }
 
     // MARK: Actions
@@ -292,11 +261,6 @@ struct ConversationScreen: View {
                 SessionPinButton(model: model)
                 if store.supports("rename") {
                     Button("Rename", systemImage: "pencil") { newTitle = s.displayTitle; renaming = true }.disabled(!can)
-                }
-                if store.supports("review_loop") && s.canReviewLoop {
-                    Button(s.reviewLoopOn ? "Turn Off Review Loop" : "Turn On Review Loop", systemImage: "repeat") {
-                        model.mutate("review_loop", ["on": .bool(!s.reviewLoopOn)])
-                    }.disabled(!can)
                 }
                 if sessionOffersCompact(s.raw) && store.supports("compact") && store.canManage {
                     let compacting = s.raw["compacting"].is(true)

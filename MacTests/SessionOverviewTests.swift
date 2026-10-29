@@ -5,17 +5,17 @@ import XCTest
 final class SessionOverviewTests: XCTestCase {
     private func sessions(_ text: String) -> [Session] { Session.parseList(j(text)) ?? [] }
 
-    func testStateReadsAQuestionThenHeldFindingsThenTheStatus() {
+    func testStateReadsAQuestionThenTheStatus() {
         let list = sessions(#"""
-        [{"id":"a","status":"idle","awaitingAnswer":true,"reviewTriage":{"findings":[{}]}},
-         {"id":"b","status":"idle","reviewTriage":{"findings":[]}},
-         {"id":"c","status":"idle","reviewLoop":{"triage":{"findings":[{}]}}},
+        [{"id":"a","status":"idle","awaitingAnswer":true},
+         {"id":"b","status":"idle"},
+         {"id":"c","status":"idle","awaitingAnswer":false},
          {"id":"d","status":"running","awaitingAnswer":true},
          {"id":"e","status":"queued"},{"id":"f","status":"starting"},
          {"id":"g","status":"idle"},{"id":"h","status":"failed"},{"id":"i","status":"closed"},{"id":"k","status":"interrupted"}]
         """#)
-        XCTAssertEqual(list.map(\.state), [.waiting, .findings, .findings, .working, .working, .working, .ready, .failed, .closed, .closed])
-        XCTAssertEqual(list.map(\.state.needsYou), [true, true, true, false, false, false, false, false, false, false])
+        XCTAssertEqual(list.map(\.state), [.waiting, .ready, .ready, .working, .working, .working, .ready, .failed, .closed, .closed])
+        XCTAssertEqual(list.map(\.state.needsYou), [true, false, false, false, false, false, false, false, false, false])
         XCTAssertEqual(SessionState.waiting.label, "Needs your answer")
         XCTAssertEqual(SessionState.ready.label, "Ready")
     }
@@ -23,7 +23,7 @@ final class SessionOverviewTests: XCTestCase {
     func testOverviewCountsTopLevelConversationsOnly() {
         let o = SessionOverview(sessions(#"""
         [{"id":"w1","status":"idle","awaitingAnswer":true,"endedAt":"2026-01-02T00:00:00Z"},
-         {"id":"f1","status":"idle","reviewTriage":{"findings":[]},"endedAt":"2026-01-01T00:00:00Z"},
+         {"id":"f1","status":"idle","awaitingAnswer":true,"endedAt":"2026-01-01T00:00:00Z"},
          {"id":"w2","status":"idle","awaitingAnswer":true,"createdAt":"2026-01-03T00:00:00Z"},
          {"id":"worker","status":"idle","awaitingAnswer":true,"parentId":"o1"},
          {"id":"r1","status":"running","title":"beta"},{"id":"r2","status":"preparing","title":"Alpha"},

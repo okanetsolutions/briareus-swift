@@ -1,8 +1,7 @@
 // Conversation rows, shared by the project and All lists.
 import SwiftUI
 
-/// A conversation in a list: its mark, its title, and a line of provider, branch, state and age; a ⚑ while a review
-/// round waits on it.
+/// A conversation in a list: its mark, its title, and a line of provider, branch, state and age.
 struct ConversationRowLabel: View {
     let session: Session
     var working = false
@@ -17,9 +16,6 @@ struct ConversationRowLabel: View {
             Spacer(minLength: 0)
             if session.isPinned { Image(systemName: "pin.fill").font(.caption).accessibilityLabel("Pinned") }
             if working { ProgressView().controlSize(.small) }
-            if session.heldRound != nil {
-                Image(systemName: "flag.fill").font(.caption).foregroundStyle(Theme.warn).accessibilityLabel("Findings waiting")
-            }
         }
         .padding(.vertical, 3)
         .accessibilityElement(children: .combine)

@@ -377,7 +377,7 @@ final class VoiceSession: ObservableObject {
             guard VoiceTool.conversationCases.contains(tool) else {
                 return finish(.failed("Not here"), ["error": "This call is held to one conversation and cannot do that."])
             }
-            if tool == .readPullRequest, step.args["number"].int == nil {
+            if tool == .readPullRequest || tool == .listCodeReviews, step.args["number"].int == nil {
                 let why = "This conversation has no pull request yet."
                 return finish(.failed(why), ["error": .string(why)])
             }
@@ -403,7 +403,7 @@ final class VoiceSession: ObservableObject {
             return finish(.waiting, ["needs_confirmation": true, "read_back": .string(readBack),
                                      "next": "Read this back to the user. Call again with confirmed=true only if they say yes."])
         case .call(var arguments):
-            // An errand's call is the board's own: `review` for a code review, `action` for the rest.
+            // An errand's call is the board's own (`action`, with the errand's id).
             let operation = tool == .runErrand ? (Voice.errand(step.args["errand"].string ?? "")?.operation ?? tool.operation) : tool.operation
             guard Store.shared.supports(operation) else {
                 return finish(.failed("Not allowed"), ["error": "This device's token cannot do that on the server."])
@@ -414,27 +414,6 @@ final class VoiceSession: ObservableObject {
                    !Voice.owns(try await Store.shared.call("sessions", ["repo": .string(repo)]), session: id) {
                     let why = "That conversation is not one of this project's."
                     return finish(.failed(why), ["error": .string(why)])
-                }
-                if tool == .runErrand, operation == "review", let number = arguments["prNumber"].int {
-                    // A code review checks the pull request's branch out, read from the board.
-                    let board = try await Store.shared.call("pulls", ["repo": .string(repo)])
-                    guard let row = PullSummary.parseList(board["pulls"]).first(where: { $0.number == number }), !row.branch.isEmpty else {
-                        let why = "Pull request #\(number) is not open on this project."
-                        return finish(.failed(why), ["error": .string(why)])
-                    }
-                    arguments["branch"] = .string(row.branch)
-                }
-                if tool == .completeReviewRound, let id = arguments["sessionId"].string {
-                    // The verdicts are made from the round as it is now, so a finding added meanwhile stays optional.
-                    let sessions = Session.parseList(try await Store.shared.call("sessions", ["repo": .string(repo)])) ?? []
-                    guard let held = sessions.first(where: { $0.id == id })?.heldTriage else {
-                        let why = "That conversation holds no review round waiting for a decision."
-                        return finish(.failed(why), ["error": .string(why)])
-                    }
-                    var completion: JSON = ["sessionId": .string(id)]
-                    completion.merge(Voice.roundCompletion(held, fix: arguments["fix"].strings, dismiss: arguments["dismiss"].strings,
-                                                           note: arguments["note"].string))
-                    arguments = completion
                 }
                 if tool == .workOnIssue, let number = arguments["issue"].int {
                     let board = try await Store.shared.call("pulls", ["repo": .string(repo)])
@@ -474,7 +453,7 @@ final class VoiceSession: ObservableObject {
                     Store.shared.cache.remove("transcript:\(id)")
                     Store.shared.feed(repo).drop(id)
                 }
-                if tool.changes || tool == .decideFinding { Task { try? await Store.shared.feed(repo).loadSessions(fresh: true) } }
+                if tool.changes { Task { try? await Store.shared.feed(repo).loadSessions(fresh: true) } }
                 return finish(.done, tool.summary(answer, args: step.args, sessions: sessions))
             } catch {
                 let said = errorText(error)
@@ -523,7 +502,7 @@ final class VoiceSession: ObservableObject {
         }
     }
 
-    /// The same change asked twice: the tool, what it acts on, its verdicts, and its words without case, spacing or punctuation.
+    /// The same change asked twice: the tool, what it acts on, and its words without case, spacing or punctuation.
     static func readBackKey(_ tool: VoiceTool, _ args: JSON) -> String {
         let words = { (s: String?) in
             (s ?? "").lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: " ")
@@ -535,10 +514,6 @@ final class VoiceSession: ObservableObject {
         parts.append(args["issue"].int.map(String.init) ?? "")
         parts.append(args["number"].int.map(String.init) ?? "")
         parts.append(args["errand"].string ?? "")
-        parts.append(args["key"].string ?? "")
-        parts.append(args["decision"].string ?? "")
-        parts.append(args["fix"].strings.sorted().joined(separator: ","))
-        parts.append(args["dismiss"].strings.sorted().joined(separator: ","))
         parts.append(words(args["text"].string ?? args["prompt"].string))
         return parts.joined(separator: "|")
     }

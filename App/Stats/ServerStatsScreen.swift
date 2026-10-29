@@ -1,6 +1,6 @@
 // The Server dashboard, as the Mac's: the machine Briareus runs on and the server process (CPU, memory, load, uptime), its
 // disks, the open sessions together, the last hour as lines, then every open session, the busiest first; a row opens that
-// session's Resources. Opened from the Findings tab's status; read with any token through `GET /stats/server` and
+// session's Resources. Opened from the Status tab; read with any token through `GET /stats/server` and
 // `GET /stats/sessions`, again every time the server samples.
 import SwiftUI
 

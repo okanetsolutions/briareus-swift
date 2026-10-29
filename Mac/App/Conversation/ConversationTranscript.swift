@@ -1,6 +1,6 @@
 // The conversation's `#messages` (screen_conversation.c conversation_layout): the errors, the transcript with workspace
-// preparation and tool calls folded into blocks, why the session failed, the queued messages, the held review round and
-// the working line.
+// preparation and tool calls folded into blocks, why the session failed, the queued messages and the working
+// line.
 import AppKit
 import SwiftUI
 
@@ -18,8 +18,6 @@ struct TranscriptColumn: View, Equatable {
     var blocks: TranscriptRows
     var session: Session
     var expanded: Set<Int>
-    var decisions: [String: String]
-    var triageNote: String
     var loaded: Bool
     var error: String?
     var writeError: String?
@@ -29,14 +27,14 @@ struct TranscriptColumn: View, Equatable {
     var canMessage: Bool
 
     static func == (a: TranscriptColumn, b: TranscriptColumn) -> Bool {
-        a.blocks == b.blocks && sameShown(a.session, b.session) && a.expanded == b.expanded && a.decisions == b.decisions
-            && a.triageNote == b.triageNote && a.loaded == b.loaded && a.error == b.error && a.writeError == b.writeError
+        a.blocks == b.blocks && sameShown(a.session, b.session) && a.expanded == b.expanded
+            && a.loaded == b.loaded && a.error == b.error && a.writeError == b.writeError
             && a.busy == b.busy && a.loading == b.loading && a.uncertain == b.uncertain && a.canMessage == b.canMessage
     }
 
     /// The parts of the session the column shows: a poll that changed only the rest does not lay it out again.
     private static func sameShown(_ a: Session, _ b: Session) -> Bool {
-        a.raw["error"] == b.raw["error"] && a.status == b.status && a.queued == b.queued && a.heldTriage == b.heldTriage
+        a.raw["error"] == b.raw["error"] && a.status == b.status && a.queued == b.queued
             && a.backgroundTasks == b.backgroundTasks
     }
 
@@ -65,9 +63,6 @@ struct TranscriptColumn: View, Equatable {
                 DangerBox { DangerText("\u{26A0} \(failure)") }.padding(.top, 10)
             }
             queued
-            if let triage = session.heldTriage, Store.shared.supports("complete_findings") {
-                TriageBox(model: model, triage: triage, decisions: decisions, note: triageNote, enabled: can).padding(.top, 14)
-            }
             if session.isActive { WorkingLine(status: session.status, background: session.backgroundTasks, answered: transcriptAnswered(blocks)).padding(.top, 12) }
             // Keep the target in the lazy stack so jumping to it also lays out the latest messages.
             Color.clear.frame(height: 1).id("end")

@@ -6,7 +6,7 @@ struct BriareusApp: App {
     @Environment(\.scenePhase) private var phase
     var body: some Scene {
         WindowGroup { shell { RootTabs() } }
-        // A conversation, Findings, Usage or a shared browser in a window of its own (on an iPad), on the same store.
+        // A conversation, Status, Usage or a shared browser in a window of its own (on an iPad), on the same store.
         WindowGroup(id: DetachedPage.scene, for: DetachedPage.self) { $page in
             shell {
                 if let page { DetachedPageView(page: page).environment(\.inOwnWindow, true) } else { RootTabs() }
@@ -44,7 +44,7 @@ struct BriareusApp: App {
 }
 
 /// The Mac app's sidebar strip, as a phone's tab bar: the projects and their conversations, what waits for you across
-/// them (Pull requests, ◉ Status and the review rounds, badged with the count needing you), what they spent, and Settings.
+/// them (Pull requests, and ◉ Status badged with the count needing you), what they spent, and Settings.
 struct RootTabs: View {
     @EnvironmentObject private var store: Store
     @ObservedObject private var projects = ProjectsModel.shared
@@ -61,8 +61,8 @@ struct RootTabs: View {
                     .tabItem { Label("Pull requests", systemImage: "arrow.triangle.pull") }
             }
             if store.supports("sessions") {
-                NavigationRoot { FindingsScreen(repo: nil) }
-                    .tabItem { Label("Findings", systemImage: "flag") }
+                NavigationRoot { StatusScreen() }
+                    .tabItem { Label("Status", systemImage: "circle.circle") }
                     .badge(projects.overview.needsYouCount)
             }
             if store.supports("usage") || store.supports("usage_all") || store.supports("providers") {

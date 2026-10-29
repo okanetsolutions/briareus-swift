@@ -27,7 +27,9 @@ View (`App/**`, `Mac/App/**`) -> Model (`@MainActor ObservableObject`, `*Model.s
 | --- | --- | --- | --- |
 | Projects, conversations | `Conversations/` | `Sidebar/`, `Conversation/` | `ConversationLogic.swift`, `PhoneConversations.swift`, `SessionOverview.swift`, `LiveEvents.swift`, `EventStream.swift`, `WebhookLogic.swift`, `MailWakeLogic.swift` (Mac only: the iPhone app has no mail) |
 | Board, pull requests, issues | `Board/` | `Board/` | `Board.swift`, `BoardLogic.swift`, `BoardEdits.swift`, `ProjectBoard.swift`, `IssuePage.swift`, `PullFiles.swift`, `Diff.swift` |
-| Findings, Status, Usage | `Findings/` | `Findings/` | `FindingsLogic.swift`, `PhoneFindings.swift`, `UsageLogic.swift` |
+| Status, Usage | `Findings/` | `Findings/` | `AttentionLogic.swift`, `PhoneUsage.swift`, `UsageLogic.swift` |
+| Code reviews (a pull request's tab) | `Board/` | `Board/` | `CodeReviewLogic.swift` |
+| Server resources, SSH monitoring, CI/CD | `Stats/` | `Stats/` | `StatsLogic.swift`, `SSHMonitoringLogic.swift`, `CILogic.swift` |
 | Settings | `Settings/` | `Settings/` | `SettingsLogic.swift`, `SSHServerLogic.swift` (the SSH server form), `AccountSettingsLogic.swift` |
 | Forge | `Forge/` | `Board/ProjectForgeTab.swift`, `Board/ForgeSiteView.swift` | `Forge.swift` |
 | Shared browser | `Conversations/SharedBrowserScreen.swift` | `Conversation/SharedBrowserScreen.swift` | `SharedBrowser.swift` |
@@ -43,7 +45,7 @@ Search here before writing a component.
 
 **Mac primitives** (`Mac/App/Components.swift`): `DashButtonStyle` with `ButtonKind` (prominent, bordered, plain, destructive), `IconButtonStyle`, `GlyphButton`, `StatusDot`, `Badge`, `Chip`, `Monogram`, `Notice`, `NoticeBox`, `EmptyNote`, `SectionTitle`, `LabeledRow`, `Card`, `Segments`, `TabNav`/`TabNavItem`, `FieldStyle`, `FlowLayout`, `Clipboard`, `openWebURL`. Shared progress: `LoadingNote` in `Mac/App/Shared/LoadingNote.swift`.
 
-**Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `severityColor`, `reviewGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
+**Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `reviewGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
 
 **Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `ErrandLabel`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`, `actionIcon`.
 
@@ -83,7 +85,7 @@ Next: the pull request screens still read the `pr` JSON directly (`model.pr["...
 
 ## Oversized files
 
-The ratchet blocks growth above 300 lines. The largest at the time of writing: `Mac/App/Board/ProjectFilesTab.swift` (1114), `Mac/App/Conversation/SharedBrowserScreen.swift` (989), `Mac/App/Board/PullScreen.swift` (956), `Mac/App/Findings/FindingsScreen.swift` (891), `Mac/App/Conversation/ConversationScreen.swift` (811), `App/Board/IssueScreen.swift` (798), `App/Conversations/SharedBrowserScreen.swift` (780), `App/Board/PullScreen.swift` (778). Run `find App Mac/App -name '*.swift' | xargs wc -l | sort -n | tail -30` for the current list.
+The ratchet blocks growth above 300 lines. The largest at the time of writing: `Mac/App/Board/ProjectFilesTab.swift` (1114), `Mac/App/Conversation/SharedBrowserScreen.swift` (989), `Mac/App/Board/PullScreen.swift` (956), `Mac/App/Conversation/ConversationScreen.swift` (811), `App/Board/IssueScreen.swift` (798), `App/Conversations/SharedBrowserScreen.swift` (780), `App/Board/PullScreen.swift` (778). Run `find App Mac/App -name '*.swift' | xargs wc -l | sort -n | tail -30` for the current list.
 
 ## Recipe: splitting an oversized screen
 

@@ -9,7 +9,7 @@ enum MeetTool: String, CaseIterable, Sendable {
     case readConversation = "read_conversation"
     case listPullRequests = "list_pull_requests"
     case readPullRequest = "read_pull_request"
-    case listFindings = "list_findings"
+    case listCodeReviews = "list_code_reviews"
     case listIssues = "list_issues"
     case readIssue = "read_issue"
 
@@ -28,9 +28,10 @@ enum MeetTool: String, CaseIterable, Sendable {
         case .readPullRequest:
             return "What one of the project's pull requests changes: how many files, lines added and removed, its description, and "
                 + "each changed file's name with its diff, to summarize what it touches."
-        case .listFindings:
-            return "The review findings left on one of the project's pull requests: each one's severity, place, what it says, the "
-                + "verdict given it (fix, dismissed or optional) and whether it is fixed."
+        case .listCodeReviews:
+            return "The code reviews run on one of the project's pull requests, newest first: each one's status and summary, and "
+                + "every finding it registered with its severity, place, what it says and the verify step's verdict (fix, "
+                + "optional or dismissed)."
         case .listIssues:
             return "The project's open issues with their labels, epic progress, the pull requests that close them and the "
                 + "conversations started on them."
@@ -43,7 +44,7 @@ enum MeetTool: String, CaseIterable, Sendable {
         switch self {
         case .listConversations: return [("active_only", "boolean", "Only the conversations still open.")]
         case .readConversation: return [("session_id", "string", "The conversation's id, from list_conversations.")]
-        case .readPullRequest, .listFindings: return [("number", "integer", "The pull request's number.")]
+        case .readPullRequest, .listCodeReviews: return [("number", "integer", "The pull request's number.")]
         case .readIssue: return [("issue", "integer", "The issue's number.")]
         case .listPullRequests, .listIssues: return []
         }
@@ -79,8 +80,8 @@ enum MeetTool: String, CaseIterable, Sendable {
             + "checks, and each open pull request names the conversations working on it. list_pull_requests lists open pull "
             + "requests only; one missing from it was merged or closed. read_conversation tells what an agent did, said or "
             + "asks. For what a pull request changes, use read_pull_request with its number and summarize its description and "
-            + "diffs in plain words: what it touches and why, never the code itself. list_findings reads a pull request's "
-            + "review findings. list_issues and read_issue read the project's issues.\n\n"
+            + "diffs in plain words: what it touches and why, never the code itself. list_code_reviews reads a pull "
+            + "request's code reviews and their findings. list_issues and read_issue read the project's issues.\n\n"
             + "## Ready to merge\n"
             + "A pull request is ready to merge only when list_pull_requests marks it ready_to_merge: the code-approved label, "
             + "checks passed, no conflicts, not a draft, and not stacked on another pull request. Otherwise say what it lacks.\n\n"
@@ -109,10 +110,10 @@ enum MeetTool: String, CaseIterable, Sendable {
             return ([MeetCall(op: "sessions", args: r), MeetCall(op: "session", args: ["sessionId": .string(id), "since": 0])], nil)
         case .listPullRequests, .listIssues:
             return ([MeetCall(op: "pulls", args: r), MeetCall(op: "sessions", args: r)], nil)
-        case .readPullRequest, .listFindings:
+        case .readPullRequest, .listCodeReviews:
             guard let number = positive("number") else { return ([], MeetTool.error("Say which pull request: its number.")) }
             var a = r; a["pr"] = JSON(number)
-            if self == .listFindings { return ([MeetCall(op: "findings", args: a)], nil) }
+            if self == .listCodeReviews { return ([MeetCall(op: "code_reviews", args: a)], nil) }
             return ([MeetCall(op: "pull_files", args: a), MeetCall(op: "pull_description", args: a)], nil)
         case .readIssue:
             guard let number = positive("issue") else { return ([], MeetTool.error("Say which issue: its number.")) }
@@ -138,7 +139,7 @@ enum MeetTool: String, CaseIterable, Sendable {
         case .readConversation: out = Self.readConversation(args, repo: repo, list: a0, at(1))
         case .listPullRequests: out = Self.listPullRequests(repo: repo, board: a0, sessions: at(1))
         case .readPullRequest: out = Self.readPullRequest(files: a0, description: at(1))
-        case .listFindings: out = Self.listFindings(a0)
+        case .listCodeReviews: out = Self.listCodeReviews(a0)
         case .listIssues: out = Self.listIssues(repo: repo, board: a0, sessions: at(1))
         case .readIssue: out = Self.readIssue(repo: repo, a0, timeline: at(1), sessions: at(2))
         }
@@ -290,24 +291,21 @@ enum MeetTool: String, CaseIterable, Sendable {
         return out
     }
 
-    private static func listFindings(_ answer: JSON) -> JSON {
-        var toFix = 0, notFixed = 0
-        let list: [JSON] = answer["findings"].items.map { f in
-            var o: JSON = ["title": .string(cut(f["title"].string, 200))]
-            if let severity = f["severity"].nonEmpty { o["severity"] = .string(severity) }
-            if let file = f["file"].nonEmpty {
-                let line = f["line"].int32 ?? 0
-                o["place"] = .string(line > 0 ? "\(file) line \(line)" : file)
-            }
-            if let says = f["body"].nonEmpty ?? f["detail"].nonEmpty ?? f["description"].nonEmpty { o["says"] = .string(cut(says, 500)) }
-            let decision = f["decision"].string
-            o["verdict"] = .string(["fix": "fix it", "dismissed": "dismissed", "optional": "optional"][decision ?? ""] ?? "not decided")
-            let fixed = f["fixed"].is(true)
-            if fixed { o["fixed"] = true }
-            if decision == "fix" { toFix += 1; if !fixed { notFixed += 1 } }
+    private static func listCodeReviews(_ answer: JSON) -> JSON {
+        let reviews = CodeReview.parse(answer)
+        if reviews.isEmpty { return ["code_reviews": [], "note": "No code review has run on this pull request."] }
+        return ["code_reviews": .array(reviews.prefix(3).map { r in
+            var o: JSON = ["status": .string(r.status.rawValue), "counts": .string(r.counts.line)]
+            if let summary = r.summary { o["summary"] = .string(cut(summary, 800)) }
+            o["findings"] = .array(r.findings.map { f in
+                var fo: JSON = ["title": .string(cut(f.title, 200)), "severity": .string(f.severity),
+                                "verdict": .string(f.verdict?.rawValue ?? "not verified yet")]
+                if let place = f.location { fo["place"] = .string(place) }
+                if let says = f.body { fo["says"] = .string(cut(says, 500)) }
+                return fo
+            })
             return o
-        }
-        return ["findings": .array(list), "to_fix": JSON(toFix), "to_fix_not_fixed": JSON(notFixed)]
+        })]
     }
 
     private static func listIssues(repo: String, board: JSON, sessions answer: JSON?) -> JSON {

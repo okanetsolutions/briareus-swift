@@ -200,7 +200,11 @@ final class MeetTests: XCTestCase {
         plan = MeetTool.readConversation.calls(json(#"{"session_id":"s1"}"#), repo: repo)
         XCTAssertEqual(plan.calls.map(\.op), ["sessions", "session"]); XCTAssertEqual(plan.calls[1].args["sessionId"].string, "s1")
         // Missing arguments are refused with what to say.
-        plan = MeetTool.listFindings.calls([:], repo: repo)
+        plan = MeetTool.listCodeReviews.calls(json(#"{"number":12}"#), repo: repo)
+        XCTAssertEqual(plan.calls.map(\.op), ["code_reviews"]); XCTAssertNil(plan.refusal)
+        XCTAssertEqual(plan.calls[0].args["repo"].string, repo); XCTAssertEqual(plan.calls[0].args["pr"].int, 12)
+        XCTAssertNotNil(APIRoute.named(plan.calls[0].op))
+        plan = MeetTool.listCodeReviews.calls([:], repo: repo)
         XCTAssertEqual(plan.calls.count, 0)
         XCTAssertTrue(plan.refusal?.contains("pull request") == true)
         XCTAssertEqual(MeetTool.readConversation.calls([:], repo: repo).calls.count, 0)
@@ -273,17 +277,32 @@ final class MeetTests: XCTestCase {
         XCTAssertTrue(o["files"][1]["diff"].string?.contains("binary") == true)
     }
 
-    func testFindingsSayTheirVerdicts() {
-        let findings = #"{"findings":[{"key":"a","title":"Null check","severity":"high","file":"app/x.c","line":4,"decision":"fix","fixed":true},"#
-            + #"{"key":"b","title":"Naming","body":"Rename it","decision":"fix"},{"key":"c","title":"Style"}]}"#
-        let o = run(.listFindings, #"{"number":12}"#, [findings])
-        let list = o["findings"]
-        XCTAssertEqual(list[0]["place"].string, "app/x.c line 4")
-        XCTAssertEqual(list[0]["verdict"].string, "fix it")
-        XCTAssertEqual(list[1]["says"].string, "Rename it")
-        XCTAssertEqual(list[2]["verdict"].string, "not decided")
-        XCTAssertEqual(o["to_fix"].int, 2)
-        XCTAssertEqual(o["to_fix_not_fixed"].int, 1)
+    func testCodeReviewsSayTheirFindingsAndVerdicts() {
+        XCTAssertEqual(MeetTool(rawValue: "list_code_reviews"), .listCodeReviews)
+        XCTAssertNil(MeetTool(rawValue: "list_findings"))
+        let reviews = #"{"codeReviews":[{"id":3,"status":"completed","summary":"Looks fine.","findings":["#
+            + #"{"id":1,"title":"Null check","severity":"high","filePath":"app/x.c","startLine":4,"shouldFix":"fix"},"#
+            + #"{"id":2,"title":"Naming","body":"Rename it","shouldFix":"optional"},{"id":3,"title":"Style"}]},"#
+            + #"{"id":2,"status":"failed","findings":[]},{"id":1,"status":"completed"},{"id":0,"status":"running"}]}"#
+        let o = run(.listCodeReviews, #"{"number":12}"#, [reviews])
+        let list = o["code_reviews"]
+        // At most the three newest.
+        XCTAssertEqual(list.items.map { $0["status"].string }, ["completed", "failed", "completed"])
+        XCTAssertEqual(list[0]["summary"].string, "Looks fine.")
+        XCTAssertEqual(list[0]["counts"].string, CodeReviewCounts(CodeReview.parse(json(reviews))[0].findings).line)
+        let findings = list[0]["findings"]
+        XCTAssertEqual(findings.count, 3)
+        XCTAssertEqual(findings[0]["place"].string, "app/x.c:4")
+        XCTAssertEqual(findings[0]["severity"].string, "high")
+        XCTAssertEqual(findings[0]["verdict"].string, "fix")
+        XCTAssertEqual(findings[1]["says"].string, "Rename it")
+        XCTAssertEqual(findings[1]["verdict"].string, "optional")
+        XCTAssertTrue(findings[1]["place"].isNull)
+        XCTAssertNotNil(findings[2]["verdict"].string)
+        XCTAssertNotEqual(findings[2]["verdict"].string, "fix")
+        let none = run(.listCodeReviews, #"{"number":12}"#, [#"{"codeReviews":[]}"#])
+        XCTAssertEqual(none["code_reviews"].count, 0)
+        XCTAssertNotNil(none["note"].string)
     }
 
     func testIssuesAreListedAndReadWithTheirComments() {

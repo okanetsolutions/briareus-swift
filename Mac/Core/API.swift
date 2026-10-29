@@ -182,6 +182,9 @@ struct APIRoute: Sendable {
         // figures, disks and last hour (StatsLogic.swift).
         .init(name: "sessions_stats", method: "GET", path: "stats/sessions"),
         .init(name: "server_stats", method: "GET", path: "stats/server"),
+        // Observed GitHub checks across the token's projects: totals and trends, and the runs one page at a time (CILogic.swift).
+        .init(name: "ci_stats", method: "GET", path: "stats/ci"),
+        .init(name: "ci_runs", method: "GET", path: "ci/runs"),
         .init(name: "actions", method: "GET", path: "actions"),
         .init(name: "action", method: "POST", path: "actions"),       // an errand on a pull request, named in `action`
         // Pull requests
@@ -194,8 +197,8 @@ struct APIRoute: Sendable {
         .init(name: "pull_comments", method: "GET", path: "pulls/{pr}/comments"),
         .init(name: "pull_reviews", method: "GET", path: "pulls/{pr}/reviews"),
         .init(name: "pull_review_comments", method: "GET", path: "pulls/{pr}/review-comments"),
-        .init(name: "findings", method: "GET", path: "pulls/{pr}/findings"),
-        .init(name: "finding_decision", method: "POST", path: "pulls/{pr}/findings/decision"),
+        // The code reviews Briareus sessions ran on it, newest first, each with its findings and their verdicts (CodeReviewLogic.swift).
+        .init(name: "code_reviews", method: "GET", path: "pulls/{pr}/code-reviews"),
         .init(name: "merge_pull", method: "POST", path: "pulls/{pr}/merge"),
         .init(name: "update_pull", method: "PATCH", path: "pulls/{pr}"),   // its `title`, `body`, `labels` and `assignees`; a list replaces the old one
         .init(name: "update_pull_branch", method: "POST", path: "pulls/{pr}/update-branch"),   // merges its base into it, at the `headSha` and `baseRef` read
@@ -219,7 +222,6 @@ struct APIRoute: Sendable {
         // Sessions. The list has no project parameter: a `repo` argument cuts the answer down here instead.
         .init(name: "sessions", method: "GET", path: "sessions", filter: "repo", list: "sessions"),
         .init(name: "start_session", method: "POST", path: "sessions"),
-        .init(name: "review", method: "POST", path: "sessions", set: "review"),
         .init(name: "qa", method: "POST", path: "sessions", set: "qa"),
         .init(name: "session", method: "GET", path: "sessions/{sessionId}"),
         // What an open session costs the machine now, with its last hour of samples.
@@ -239,13 +241,8 @@ struct APIRoute: Sendable {
         .init(name: "serve", method: "POST", path: "sessions/{sessionId}/serve"),
         .init(name: "compact", method: "POST", path: "sessions/{sessionId}/compact"),
         .init(name: "clear", method: "POST", path: "sessions/{sessionId}/clear"),
-        .init(name: "review_loop", method: "POST", path: "sessions/{sessionId}/review-loop"),
         .init(name: "qa_loop", method: "POST", path: "sessions/{sessionId}/qa-loop"),
         .init(name: "link_pr", method: "POST", path: "sessions/{sessionId}/link-pr"),
-        .init(name: "complete_findings", method: "POST", path: "sessions/{sessionId}/findings/triage"),
-        .init(name: "save_findings", method: "POST", path: "sessions/{sessionId}/findings/save"),
-        .init(name: "reply_finding", method: "POST", path: "sessions/{sessionId}/findings/reply"),
-        .init(name: "delete_finding", method: "POST", path: "sessions/{sessionId}/findings/delete"),
         // The session's shared browser: its state, switched on and off, acted in, and watched (EventStream.swift).
         .init(name: "browser", method: "GET", path: "sessions/{sessionId}/browser"),
         .init(name: "browser_on", method: "POST", path: "sessions/{sessionId}/browser"),

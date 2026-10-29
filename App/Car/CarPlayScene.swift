@@ -40,7 +40,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
     enum Phase: String, CaseIterable { case ready, listening, working, notice }
     /// What a dictation is for, which is what confirming it does.
     enum Purpose {
-        case message, prompt, rename, note, feedback(BoardAction)
+        case message, prompt, rename, feedback(BoardAction)
         /// A comment posted on the issue before it is closed, as not planned or as completed.
         case comment(IssueSummary, notPlanned: Bool)
         /// What the screen says while listening.
@@ -49,7 +49,6 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
             case .message: return "Your message…"
             case .prompt: return "What should the agent work on?"
             case .rename: return "The new name…"
-            case .note: return "Your note for the fix session…"
             case .feedback(let action): return (action.input?.label ?? "Your feedback") + "…"
             case .comment: return "Your comment on the issue…"
             }
@@ -60,7 +59,6 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
             case .message: return ("Send “", "Send")
             case .prompt: return ("Start a paid conversation on “", "Start")
             case .rename: return ("Rename to “", "Rename")
-            case .note: return ("Note for the fix session: “", "Keep")
             case .feedback(let action): return ("Start a paid \(action.label) session with “", "Start")
             case .comment(let issue, _): return ("Comment on #\(issue.number) before closing it: “", "Next")
             }
@@ -97,13 +95,11 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
     var session: Session?
     var transcript = Transcript()
     private var unsaved = false
-    /// Verdicts chosen in the car on the round in hand, and the note that goes with them.
-    var verdicts: [String: String] = [:]
-    var note = ""
     // The pull request in hand.
     var pull: JSON = .null
     var row: PullSummary?
-    var findings: JSON = []
+    /// Its stored code reviews, newest first.
+    var codeReviews: [CodeReview] = []
     var catalog: JSON = .null
     var runs: [Session] = []
 
@@ -218,7 +214,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
     private var talks: Purpose? {
         switch focus {
         case .conversation: return canMessage ? .message : nil
-        case .pull: return offered.first { $0.id == "custom-feedback" }.map(Purpose.feedback)
+        case .pull: return offered.first { $0.input != nil }.map(Purpose.feedback)
         case .issue: return nil
         case .nothing: return project != nil && store.supports("start_session") ? .prompt : nil
         }
@@ -325,7 +321,6 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
         case .message: send(text)
         case .prompt: begin(text)
         case .rename: rename(CarText.title(text))
-        case .note: note = text; tell("Noted. Complete the triage in Actions")
         case .feedback(let action): run(action, input: text)
         case .comment(let issue, let notPlanned): closeIssue(issue, notPlanned: notPlanned, comment: text)
         }
@@ -367,7 +362,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
     func open(_ session: Session) {
         watcher?.cancel(); work?.cancel(); work = nil; ears.drop()
         focus = .conversation; self.session = session
-        transcript = Transcript(); unsaved = false; verdicts = [:]; note = ""
+        transcript = Transcript(); unsaved = false
         if let repo = session.repo, project?.repo != repo { project = ProjectsModel.shared.project(repo) ?? Project(repo: repo) }
         phase = .ready
         show()
@@ -415,7 +410,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
             return done
         }
     }
-    /// Stop, close, reopen, the review loop, dropping a queued message: what is done to the conversation in hand.
+    /// Stop, close, reopen, dropping a queued message: what is done to the conversation in hand.
     func change(_ operation: String, _ extra: JSON = [:], done: String) {
         guard let id = session?.id else { return }
         var args: JSON = ["sessionId": .string(id)]
@@ -446,7 +441,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
     /// Puts down what is in hand, without drawing the screen.
     private func put() {
         watcher?.cancel()
-        focus = .nothing; session = nil; transcript = Transcript(); pull = .null; row = nil; findings = []; runs = []
+        focus = .nothing; session = nil; transcript = Transcript(); pull = .null; row = nil; codeReviews = []; runs = []
     }
     /// Puts down what is in hand.
     func close() {
@@ -476,28 +471,11 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
         guard let project else { return }
         start(["repo": .string(project.repo), "prompt": .string(issuePrompt(issue, repo: project.repo)), "activity": "issue"])
     }
-    /// Completes the round held in the conversation: every finding with its verdict (optional when none was chosen) and
-    /// the note, or, on somebody else's pull request, only takes it off the queue.
-    func triage() {
-        guard let session, let held = session.heldTriage else { return }
-        var args: JSON = ["sessionId": .string(session.id)]
-        args.merge(triageCompletion(held, picked: verdicts, note: note))
-        let mine = triageTakesVerdicts(held)
-        perform { [weak self] in
-            guard let self else { return nil }
-            let answer = try await self.store.call("complete_findings", args)
-            self.verdicts = [:]; self.note = ""
-            try? await self.refresh()
-            await self.resync(session.repo)
-            return mine ? triageOutcomeText(answer).text : "The review is off the queue"
-        }
-    }
-
     // MARK: The pull request or issue in hand
 
     func open(pull number: Int, row: PullSummary? = nil) {
         watcher?.cancel(); work?.cancel(); work = nil; ears.drop()
-        focus = .pull(number); session = nil; pull = .null; self.row = row; findings = []; runs = []
+        focus = .pull(number); session = nil; pull = .null; self.row = row; codeReviews = []; runs = []
         catalog = store.cache.value("actions")?["actions"] ?? .null
         phase = .ready
         show()
@@ -541,7 +519,9 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
         if feed.boardLoaded { row = pullsFind(feed.pulls, number) }
         if let served { catalog = served["actions"] }
         if feed.sessionsLoaded { runs = feed.sessions.filter { $0.pullNumber == number } }
-        if store.supports("findings"), let found = try? await store.call("findings", args), case .pull(number) = focus { findings = found["findings"] }
+        if store.supports("code_reviews"), let found = try? await store.call("code_reviews", args), case .pull(number) = focus {
+            codeReviews = CodeReview.parse(found)
+        }
     }
     /// The errands worth offering on the pull request in hand: an open one with a branch, to a token that may start them.
     var offered: [BoardAction] {
@@ -550,8 +530,8 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
             .filter { store.supports($0.operation) }
     }
     func run(_ action: BoardAction, input: String? = nil) {
-        guard case .pull(let number) = focus, let project, let branch = pull["headRef"].string else { return }
-        let args = action.arguments(repo: project.repo, number: number, branch: branch, input: input)
+        guard case .pull(let number) = focus, let project, pull["headRef"].string != nil else { return }
+        let args = action.arguments(repo: project.repo, number: number, input: input)
         perform { [weak self] in
             guard let self else { return nil }
             let answer = try await self.store.call(action.operation, args, timeout: action.timeoutMs.map { TimeInterval($0) / 1000 })
@@ -559,15 +539,6 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
             guard let started = Session(answer["session"]) else { return "\(action.label) started" }
             self.open(started)
             return nil
-        }
-    }
-    func decide(_ key: String, _ decision: String?) {
-        guard case .pull(let number) = focus, let project else { return }
-        let args: JSON = ["repo": .string(project.repo), "pr": JSON(number), "key": .string(key), "decision": .string(orNull: decision)]
-        perform { [weak self] in
-            guard let answer = try await self?.store.call("finding_decision", args) else { return nil }
-            self?.findings = answer["findings"]
-            return decision == nil ? "The decision is cleared" : "The decision is recorded"
         }
     }
     func merge(_ method: String) {

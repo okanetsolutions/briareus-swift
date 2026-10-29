@@ -40,9 +40,6 @@ final class ConversationModel: ObservableObject {
     @Published private(set) var writeError: String?
     /// Tool and preparation blocks opened, by their first event's sequence.
     @Published var expanded: Set<Int> = []
-    /// Verdicts picked here for the held round, by finding key.
-    @Published var decisions: [String: String] = [:]
-    @Published var triageNote = ""
     /// Bumped to scroll the transcript to its end and keep it there.
     @Published private(set) var scrollToEnd = 0
     /// The find bar (⌘F) while open, its query and its matches; `findTick` is bumped to bring the current one into view.
@@ -277,8 +274,6 @@ final class ConversationModel: ObservableObject {
                 let nav = navigator
                 if nav.top.id == screenID { if nav.stack.count > 1 { nav.pop() } else { nav.clear() } }
                 return
-            case "complete_findings":
-                decisions = [:]; triageNote = ""
             default: break
             }
             post(.sessionsChanged, repo.map { ["repo": $0] } ?? [:])
@@ -316,10 +311,6 @@ final class ConversationModel: ObservableObject {
         if let title, !title.cTrimmed.isEmpty { mutate("rename", ["title": .string(title)]) }
     }
 
-    func toggleLoop() {
-        mutate("review_loop", ["on": .bool(!session.reviewLoopOn)])
-    }
-
     func answer(_ label: String) {
         composer.text = label
         composer.focusNow()
@@ -330,27 +321,6 @@ final class ConversationModel: ObservableObject {
         Task { await refresh(full: false) }
     }
 
-    // MARK: Held findings
-
-    func pick(_ finding: JSON, decision index: Int) {
-        guard let key = finding["key"].string, index >= 0, index < findingDecisionIds.count else { return }
-        decisions[key] = findingDecisionIds[index]
-    }
-    func editNote() {
-        dialogOpen = true
-        let note = Dialogs.text("Note", label: "A note for the pull request and the fix session (optional)", okLabel: "Save", current: triageNote)
-        dialogOpen = false
-        if let note { triageNote = note }
-    }
-    func completeTriage(fixes: Int) {
-        guard let triage = session.heldTriage else { return }
-        let takes = triageTakesVerdicts(triage)
-        dialogOpen = true
-        let ok = Dialogs.confirm(triageConfirmTitle(takesVerdicts: takes, fixes: fixes), nil, continueLabel: "Complete")
-        dialogOpen = false
-        guard ok else { return }
-        mutate("complete_findings", triageCompletion(triage, picked: decisions, note: triageNote))
-    }
 }
 
 // MARK: - The screen
@@ -373,11 +343,11 @@ struct ConversationScreen: View {
         _model = StateObject(wrappedValue: ConversationModel(id: sessionID, initial: initial))
     }
 
-    /// What changes the transcript's height at its end: new events, the queue, the held round, the working line, errors.
+    /// What changes the transcript's height at its end: new events, the queue, the working line, errors.
     private var contentMark: [Int] {
         let s = model.session
         return [model.transcript.events.count, model.transcript.cursor, s.queued.count, s.isActive ? 1 : 0,
-                s.heldTriage?["findings"].count ?? -1, model.error == nil ? 0 : 1, model.writeError == nil ? 0 : 1,
+                model.error == nil ? 0 : 1, model.writeError == nil ? 0 : 1,
                 s.raw["error"].nonEmpty == nil ? 0 : 1, model.loaded ? 1 : 0]
     }
 
@@ -424,7 +394,7 @@ struct ConversationScreen: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     TranscriptColumn(model: model, blocks: model.blocks, session: model.session, expanded: model.expanded,
-                                     decisions: model.decisions, triageNote: model.triageNote, loaded: model.loaded,
+                                     loaded: model.loaded,
                                      error: model.error, writeError: model.writeError, busy: model.busy, loading: model.loading,
                                      uncertain: model.uncertain, canMessage: model.canMessage)
                         .equatable()
@@ -553,21 +523,15 @@ private struct ConversationFooter: View {
     @ObservedObject var voice: VoiceNote
     @ObservedObject private var store = Store.shared
 
-    private func chipShown(_ chip: ComposerChip) -> Bool {
-        if chip == .loop { return store.supports("review_loop") && model.session.canReviewLoop }
-        return !conversationChipText(model.session, chip).isEmpty
-    }
+    private func chipShown(_ chip: ComposerChip) -> Bool { !conversationChipText(model.session, chip).isEmpty }
 
     var body: some View {
         let s = model.session
-        let can = model.can
         FooterColumn {
             VStack(alignment: .leading, spacing: 0) {
                 FlowLayout(spacing: 4, lineSpacing: 4) {
                     ForEach(ComposerChip.allCases.filter(chipShown), id: \.self) { chip in
-                        let live = chip == .loop
-                        ComposerChipView(label: conversationChipText(s, chip), on: live && s.reviewLoopOn, live: live && can,
-                                         action: live && can ? { model.toggleLoop() } : nil)
+                        ComposerChipView(label: conversationChipText(s, chip), live: false)
                     }
                 }
                 .padding(.top, 8).padding(.bottom, 8)

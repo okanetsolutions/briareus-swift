@@ -12,7 +12,7 @@ paths:
 What a row says, which badges and labels it shows, a status's kind, a form's fields and the body a save sends, a filter's result, an errand's prompt: write these as `Sendable`, `Equatable` structs and pure functions (`BoardRow`, `BoardFilter`, `BoardAction`, `SettingsField`, `mergeWarnings`, `issuesNested`). Each app's view maps them to colours, fonts and symbols. This is how the two apps share behaviour without sharing views.
 
 ## Group by domain
-Add to the domain file that owns the concept (`Board.swift` and `BoardLogic.swift`, `ConversationLogic.swift`, `FindingsLogic.swift`, `UsageLogic.swift`, `SettingsLogic.swift`, `AccountSettingsLogic.swift`, `Markdown.swift`, `Diff.swift`, `CarText.swift`), or start a new `<Domain>Logic.swift` for a new concept. A screen's view logic goes in its domain's `*Logic.swift`, tested by the matching `*LogicTests.swift`. Split a domain file by sub-concept once it passes about 700 lines rather than growing a grab bag.
+Add to the domain file that owns the concept (`Board.swift` and `BoardLogic.swift`, `ConversationLogic.swift`, `CodeReviewLogic.swift`, `CILogic.swift`, `UsageLogic.swift`, `SettingsLogic.swift`, `AccountSettingsLogic.swift`, `Markdown.swift`, `Diff.swift`, `CarText.swift`), or start a new `<Domain>Logic.swift` for a new concept. A screen's view logic goes in its domain's `*Logic.swift`, tested by the matching `*LogicTests.swift`. Split a domain file by sub-concept once it passes about 700 lines rather than growing a grab bag.
 
 ## Every rule has a test
 A function or type added or moved here gets a test in `MacTests/` in the same change.

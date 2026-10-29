@@ -53,7 +53,7 @@ struct PullScreen: View {
         }
         .task {
             await poll(every: 30) {
-                if model.busy || model.merging || model.deciding != nil || model.editing || model.updatingBranch || model.dialogOpen { return nil }
+                if model.busy || model.merging || model.editing || model.updatingBranch || model.dialogOpen { return nil }
                 return await model.load()
             }
         }
@@ -350,7 +350,7 @@ private struct StackRow: View {
 
 // MARK: - Tabs
 
-/// `tabnav`: Sessions, PR Body, Conversation, Files changed and Findings with their counts, the Run tab,
+/// `tabnav`: Sessions, PR Body, Conversation, Files changed and Code reviews with their counts, the Run tab,
 /// and the diffstat at the right.
 private struct PullTabs: View {
     @ObservedObject var model: PullModel
@@ -371,7 +371,9 @@ private struct PullTabs: View {
                     else if let url = model.pr["url"].string, safeWebURL(url) {
                         TabNavItem(glyph: Glyph.symbol(0xE8A5), title: "Files changed", count: files, active: false) { openWebURL(url + "/files") }
                     }
-                    if store.supports("findings") { tab(0xE7C1, "Findings", "\(model.findings.count)", .findings) }
+                    if store.supports("code_reviews") {
+                        tab(0xE7C1, "Code reviews", model.codeReviewsRead ? "\(model.codeReviews.count)" : nil, .codeReviews)
+                    }
                     if store.supports("serve_pull") || model.runURL != nil { runTab }
                 }
                 if let add = model.pr["additions"].number, let del = model.pr["deletions"].number {
@@ -485,7 +487,7 @@ private struct PullMain: View {
             } else {
                 switch model.tab {
                 case .conversation: ConversationTab(model: model)
-                case .findings: FindingsTab(model: model)
+                case .codeReviews: PullCodeReviewsTab(model: model)
                 case .sessions: RunsList(model: model)
                 default: Description(model: model)
                 }
@@ -638,86 +640,6 @@ private struct ThreadBox: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 6).fill(Theme.canvas))
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.line, lineWidth: 1))
-    }
-}
-
-// MARK: Findings
-
-/// A column box: 12px in, the rows split by rules.
-private struct ColumnBox<Content: View>: View {
-    @ViewBuilder var content: Content
-    var body: some View { BoardBox(padding: 12, radius: 8) { content } }
-}
-private struct RowGap: View {
-    var body: some View { BoardRule().padding(.vertical, 6) }
-}
-
-private struct FindingsTab: View {
-    @ObservedObject var model: PullModel
-    @ObservedObject private var store = Store.shared
-    private static let decisionIDs = ["", "fix", "optional", "dismissed"]
-    private static let decisionTitles = ["Undecided", "Fix", "Optional", "Dismiss"]
-
-    var body: some View {
-        let findings = model.findings.items
-        ColumnBox {
-            if let e = model.findingsError { Notice(message: e).padding(.bottom, 6) }
-            ForEach(Array(findings.enumerated()), id: \.offset) { i, f in
-                if i > 0 { RowGap() }
-                finding(i, f)
-            }
-            if findings.isEmpty && model.findingsError == nil { Text("No findings reported").font(Theme.callout).foregroundStyle(Theme.muted) }
-            if store.supports("finding_decision") && !findings.isEmpty {
-                Text("Decisions are saved on the server and mirrored to the pull request’s checklist on GitHub.")
-                    .font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 8)
-            }
-            if model.solveFindingsOffered {
-                let fixes = findingsToFix(model.findings)
-                Button(model.busy ? "Starting…" : fixes > 0 ? String("Solve findings · \(fixes) to fix") : "Solve findings") { model.solveFindings() }
-                    .dashButton(.prominent).disabled(model.busy || model.uncertain || model.deciding != nil).padding(.top, 12)
-                Text(fixes > 0 ? "Starts a paid session that addresses the findings marked Fix, pushes the fixes and has them reviewed again."
-                               : "Starts a paid session that addresses the open findings, pushes the fixes and has them reviewed again. Mark what to fix first to narrow it down.")
-                    .font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 6)
-            }
-        }
-    }
-
-    @ViewBuilder private func finding(_ i: Int, _ f: JSON) -> some View {
-        let open = model.openFindings.contains(i)
-        let fixed = f["fixed"].is(true)
-        let decision = f["decision"].string
-        GlyphLabel(glyph: open ? 0xE70D : 0xE76C, text: f["title"].string ?? "Finding")
-            .contentShape(Rectangle()).onTapGesture { model.toggleFinding(i) }.handCursor()
-        let meta: String = {
-            var parts: [String] = []
-            if let s = f["severity"].string { parts.append(s) }
-            if fixed { parts.append("Fixed") }
-            else if let d = decision { parts.append(Self.decisionIDs.firstIndex(of: d).flatMap { $0 > 0 ? Self.decisionTitles[$0] : nil } ?? d) }
-            var m = parts.joined(separator: " · ")
-            if let key = f["key"].string, model.deciding == key { m += " · saving…" }
-            return m
-        }()
-        if !meta.isEmpty {
-            Text(meta).font(Theme.caption).foregroundStyle(fixed ? Theme.ok : decision == "fix" ? Theme.warn : Theme.muted).lineLimit(1)
-                .padding(.leading, 22).padding(.top, 2)
-        }
-        if open {
-            VStack(alignment: .leading, spacing: 4) {
-                if let file = f["file"].string {
-                    Text(f["line"].number.map { "\(file):\(Int($0))" } ?? file).font(Theme.monoSmall).foregroundStyle(Theme.ink)
-                        .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-                }
-                if safeWebURL(f["url"].string) {
-                    Button("Open finding on GitHub") { openWebURL(f["url"].string) }.buttonStyle(.plain).font(Theme.caption).foregroundStyle(Theme.accent).handCursor()
-                }
-                if store.supports("finding_decision"), let key = f["key"].string, !fixed {
-                    let selected = decision.flatMap { Self.decisionIDs.firstIndex(of: $0) } ?? 0
-                    Segments(titles: Self.decisionTitles, selected: selected) { k in model.decide(key, k == 0 ? nil : Self.decisionIDs[k]) }
-                        .disabled(model.deciding != nil).padding(.top, 4)
-                }
-            }
-            .padding(.leading, 22).padding(.top, 4)
-        }
     }
 }
 

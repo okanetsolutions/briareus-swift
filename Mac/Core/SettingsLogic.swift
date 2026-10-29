@@ -69,7 +69,7 @@ enum ProjectTab: Int, CaseIterable, Sendable {
         switch self {
         case .project: return "Project"
         case .database: return "Database"
-        case .review: return "Code review"
+        case .review: return "PR actions"
         case .orchestrator: return "Orchestrator"
         case .env: return "Checkout .env"
         case .run: return "Run"
@@ -78,10 +78,10 @@ enum ProjectTab: Int, CaseIterable, Sendable {
 }
 
 enum ProjectField: Int, CaseIterable, Sendable {
-    case repo, label, enabled, localDir, board
+    case repo, label, enabled, localDir, localLimit, board
     case setup, php, printing
     case dbName, dbExt, dbPool, dbRestore
-    case reviewAuthor, publish, autoLoop, babysit, testSheet, testRun, qaNotes, sheetSteps, feedbackSteps
+    case prAuthor, babysit, testRun, qaNotes, sheetSteps
     case budget, isSelf
     case env
     case run, profiles
@@ -93,6 +93,8 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .enabled: return SettingsField(key: "enabled", kind: .bool, label: "Active: sessions can be started on this project")
         case .localDir: return SettingsField(key: "localDir", kind: .text, label: "Local checkout", cue: "/home/you/www/your-checkout",
             hint: "This machine's own checkout of the repo. A session started in Local mode works directly in it: no clone, no setup steps, no pooled database, and the tree is used exactly as it stands. Leave empty to keep Local mode off for this project.", mono: true)
+        case .localLimit: return SettingsField(key: "localSessionLimit", kind: .number, label: "Local sessions at once", cue: "1",
+            hint: "How many Local mode sessions may work in the local checkout at the same time, 1 to 10, or 0 for no limit. More wait in the queue until one closes.")
         case .board: return SettingsField(key: "projectBoard", kind: .board, label: "GitHub Projects board", cue: "https://github.com/orgs/acme/projects/1/views/2",
             hint: "The board the project's ▦ Board tab shows: its address on GitHub, with the view whose filter and columns it follows. The server's GitHub token needs Projects: read. Leave empty for no Board tab.", mono: true)
         case .printing: return SettingsField(key: "printToolsEnabled", kind: .bool, label: "Allow sessions to print on the server’s printers", hint: "Gives interactive sessions access to the server’s CUPS printers; off by default.")
@@ -107,19 +109,13 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .dbPool: return SettingsField(key: "dbPoolEnabled", kind: .bool, label: "Give each session a database server of its own")
         case .dbRestore: return SettingsField(key: "dbRestoreSql", kind: .text, label: "Restore from .sql", cue: "/home/you/dumps/my_app.sql",
             hint: "A dump on this machine, piped into the database every time a server is claimed, right after it is created, before the setup steps run. Leave empty to skip. The servers themselves are added under Database pool in the sidebar.", mono: true)
-        case .reviewAuthor: return SettingsField(key: "reviewAuthor", kind: .text, label: "PR author", cue: "github-username", mono: true)
-        case .publish: return SettingsField(key: "reviewPublishInstructions", kind: .area, label: "Publish steps",
-            hint: "Sent to the agent as its own turn after a ⌕ Code review: this text and nothing else. Leave empty to run no turn after the review.", rows: 4)
-        case .autoLoop: return SettingsField(key: "autonomousReviewLoop", kind: .bool, label: "Autonomous review loop: fix verified worthwhile findings")
-        case .babysit: return SettingsField(key: "babysitPrs", kind: .bool, label: "Babysit pull requests: start the errand each open one needs")
-        case .testSheet: return SettingsField(key: "reviewTestSheet", kind: .bool, label: "Write a test sheet when the 🎬 QA errand is started")
-        case .testRun: return SettingsField(key: "reviewTestRun", kind: .bool, label: "Execute the test sheet and record a video of each scenario")
+        case .prAuthor: return SettingsField(key: "prAuthor", kind: .text, label: "PR author", cue: "github-username", mono: true)
+        case .babysit: return SettingsField(key: "babysitPrs", kind: .bool, label: "Babysit pull requests: resolve conflicts and failing checks")
+        case .testRun: return SettingsField(key: "qaTestRun", kind: .bool, label: "Execute the test sheet and record a video of each scenario")
         case .qaNotes: return SettingsField(key: "qaNotes", kind: .area, label: "QA notes",
             hint: "Appended to the test sheet and test run prompts: logins, tenants, URLs, whatever a tester needs that the repository does not say.", rows: 4)
         case .sheetSteps: return SettingsField(key: "testSheetInstructions", kind: .area, label: "Test sheet closing steps",
             hint: "Appended to the end of the 📋 Test sheet prompt: what this project wants done once the sheet is on the pull request. Leave empty to add nothing.", rows: 4)
-        case .feedbackSteps: return SettingsField(key: "feedbackInstructions", kind: .area, label: "Feedback closing steps",
-            hint: "Appended to the end of the ⚙ Implement feedback prompt: what this project wants done once the review comments are implemented. Leave empty to add nothing.", rows: 4)
         case .budget: return SettingsField(key: "workerBudgetUsd", kind: .number, label: "Budget (USD)", cue: "no cap",
             hint: "What one orchestration may spend — the supervisor's turns plus every worker's — before it pauses and waits for you. Only turns whose provider reports a cost count. Leave empty for no cap.")
         case .isSelf: return SettingsField(key: "isSelf", kind: .bool, label: "This project is Briareus itself")
@@ -137,12 +133,10 @@ enum ProjectField: Int, CaseIterable, Sendable {
         switch self {
         case .enabled where !on:
             return "Inactive: no session can be started on it and it is left out of the project lists; its settings are kept for when it is switched back on."
-        case .autoLoop where on:
-            return "Independently verified worthwhile findings in a session’s review-loop round are fixed and reviewed again; optional findings do not prolong the loop, and findings without an assessment wait for manual triage. The loop's round limit and repeated-findings check still stop one that cannot converge. Sessions still need their review loop switched on; a standalone ⌕ Code review keeps its manual findings."
         case .babysit where on:
-            return "Every 15 minutes the server starts, once per head commit, the first errand each open non-draft pull request needs: 🔀 Solve conflicts, else 🧪 Fix failing checks, else a ⌕ Code review when the board recommends one. It runs on the code review's runtime and skips pull requests labelled blocked or do-not-merge and those with a session open. With a PR author set, conflicts and checks are fixed only on that author’s pull requests, and new developer feedback is assessed for manual Findings decisions before fixes start."
+            return "Every 15 minutes the server starts, once per head commit, 🔀 Solve conflicts or 🧪 Fix failing checks on each open non-draft pull request that needs one. It runs on the PR actions' runtime and skips pull requests labelled blocked or do-not-merge and those with a session open. With a PR author set, only that author’s pull requests are fixed. No review or feedback agents run."
         case .isSelf:
-            return "Tick it on the repository whose code is running right now, and on no other. An orchestrator on any project that finds a flaw in the tooling running it (a briefing, a worker tool, a loop) can then send a fix worker here, review loop armed, and merge its pull request once the loop approves and the checks are green. The running server keeps its code until you redeploy."
+            return "Tick it on the repository whose code is running right now, and on no other. An orchestrator on any project that finds a flaw in the tooling running it (a briefing, a worker tool, a loop) can then send a fix worker here and merge its pull request once its checks are green. The running server keeps its code until you redeploy."
         default:
             return nil
         }
@@ -150,9 +144,9 @@ enum ProjectField: Int, CaseIterable, Sendable {
     /// The project and how a checkout of it is set up share the first tab.
     var tab: ProjectTab {
         switch self {
-        case .repo, .label, .enabled, .localDir, .board, .setup, .php, .printing: return .project
+        case .repo, .label, .enabled, .localDir, .localLimit, .board, .setup, .php, .printing: return .project
         case .dbName, .dbExt, .dbPool, .dbRestore: return .database
-        case .reviewAuthor, .publish, .autoLoop, .babysit, .testSheet, .testRun, .qaNotes, .sheetSteps, .feedbackSteps: return .review
+        case .prAuthor, .babysit, .testRun, .qaNotes, .sheetSteps: return .review
         case .budget, .isSelf: return .orchestrator
         case .env: return .env
         case .run, .profiles: return .run
@@ -160,19 +154,19 @@ enum ProjectField: Int, CaseIterable, Sendable {
     }
 }
 
-/// The provider, model and effort pickers: the code review's, each errand step's, and the orchestrator's workers'. A flat
+/// The provider, model and effort pickers: the PR actions', each errand step's, and the orchestrator's workers'. A flat
 /// one edits three keys of the project; a step edits its entry in `stepRuntimes`.
 enum ProjectRuntime: Int, CaseIterable, Sendable {
     case review, testSheet, testRun, worker
-    var providerKey: String? { self == .review ? "reviewProviderId" : self == .worker ? "workerProviderId" : nil }
-    var modelKey: String? { self == .review ? "reviewModel" : self == .worker ? "workerModel" : nil }
-    var effortKey: String? { self == .review ? "reviewEffort" : self == .worker ? "workerEffort" : nil }
+    var providerKey: String? { self == .review ? "actionProviderId" : self == .worker ? "workerProviderId" : nil }
+    var modelKey: String? { self == .review ? "actionModel" : self == .worker ? "workerModel" : nil }
+    var effortKey: String? { self == .review ? "actionEffort" : self == .worker ? "workerEffort" : nil }
     var step: String? { self == .testSheet ? "testSheet" : self == .testRun ? "testRun" : nil }
     /// What the provider picker says with no provider picked.
     var none: String {
         switch self {
         case .review: return "Pick a provider"
-        case .testSheet, .testRun: return "Same as the code review"
+        case .testSheet, .testRun: return "Same as the PR actions"
         case .worker: return "Same as the orchestrator"
         }
     }
@@ -274,6 +268,14 @@ struct ProjectFormState: Equatable, Sendable {
                     return .failure(FormProblem(message: "\(f.def.label) must be the board's address on GitHub, such as https://github.com/orgs/acme/projects/1/views/2, or empty for none.", tab: f.tab.rawValue))
                 }
                 body[key] = board
+            case .number where f == .localLimit:
+                // A whole number from 0 (no limit) to 10; left empty, the server keeps what it has.
+                let t = text(f).cTrimmed
+                if t.isEmpty { body.remove(key) }
+                else if let n = Int(t), (0...10).contains(n) { body[key] = JSON(n) }
+                else {
+                    return .failure(FormProblem(message: "\(f.def.label) must be a whole number from 1 to 10, or 0 for no limit.", tab: f.tab.rawValue))
+                }
             case .number:
                 let t = text(f).cTrimmed
                 if t.isEmpty { body[key] = .null }
@@ -287,7 +289,7 @@ struct ProjectFormState: Equatable, Sendable {
         if repo.isEmpty || !repo.contains("/") || repo.hasPrefix("/") || repo.hasSuffix("/") {
             return .failure(FormProblem(message: "Enter the repository as owner/name.", tab: ProjectTab.project.rawValue))
         }
-        // The runtimes. A step left on "Same as the code review" is no entry at all rather than empty strings.
+        // The runtimes. A step left on "Same as the PR actions" is no entry at all rather than empty strings.
         let hasSteps = has("stepRuntimes")
         var steps: JSON = body["stepRuntimes"].isObject ? body["stepRuntimes"] : [:]
         for r in ProjectRuntime.allCases where has(r.presenceKey) {
@@ -356,7 +358,10 @@ struct ProviderFormState: Equatable, Sendable {
     /// The CLIs a provider runs, as the Windows client's Binary select offers them.
     static let binaries: [(id: String, title: String)] = [
         ("claude", "claude (Claude Code)"), ("codex", "codex (Codex)"), ("grok", "grok (Grok)"), ("opencode", "opencode"),
+        ("dsh", "dsh (DeepSeek Harness)"), ("qwen", "qwen (Qwen Code)"),
     ]
+    /// The CLIs whose entry is nothing but an endpoint and its key: no login, no mode to choose.
+    static let keyOnly: Set<String> = ["opencode", "dsh", "qwen"]
     static func == (a: ProviderFormState, b: ProviderFormState) -> Bool {
         a.row == b.row && a.texts == b.texts && a.active == b.active && a.token == b.token && a.binary == b.binary && a.dirty == b.dirty
     }
@@ -384,12 +389,12 @@ struct ProviderFormState: Equatable, Sendable {
 
     func text(_ f: ProviderField) -> String { texts[f] ?? "" }
 
-    /// grok has no token mode and opencode nothing but a key, so only claude and codex choose.
-    static func modeOffered(_ binary: String) -> Bool { binary != "grok" && binary != "opencode" }
-    /// Whether the endpoint and its token are part of the provider: the API token mode, or opencode's key.
-    var usesToken: Bool { binary == "opencode" || (binary != "grok" && token) }
+    /// grok has no token mode and opencode, dsh and qwen nothing but a key, so only claude and codex choose.
+    static func modeOffered(_ binary: String) -> Bool { binary != "grok" && !keyOnly.contains(binary) }
+    /// Whether the endpoint and its token are part of the provider: the API token mode, or a key-only CLI's key.
+    var usesToken: Bool { Self.keyOnly.contains(binary) || (binary != "grok" && token) }
     /// A login is registered against a saved row, so only a saved one logged in through its CLI can log in.
-    var canLogIn: Bool { id != 0 && !usesToken && binary != "opencode" }
+    var canLogIn: Bool { id != 0 && !usesToken && !Self.keyOnly.contains(binary) }
 
     static func binaryTitle(_ binary: String) -> String {
         binaries.first { $0.id == binary }?.title ?? (binary.isEmpty ? "Pick a binary" : binary)
@@ -397,11 +402,15 @@ struct ProviderFormState: Equatable, Sendable {
     static func baseURLHint(_ binary: String) -> String {
         if binary == "claude" { return "Passed to the claude CLI as `ANTHROPIC_BASE_URL`, for a proxy or an Anthropic-compatible endpoint. Leave empty for the Anthropic API." }
         if binary == "opencode" { return "The base URL of the service this entry's models name (`anthropic` for `anthropic/claude-sonnet-4-5`), for a proxy or a compatible gateway; include the `/v1` when the service's own URL carries one. Handed to the CLI as an inline config (`OPENCODE_CONFIG_CONTENT`) alongside the key, so the machine's own opencode config is never touched. Leave empty for the service's own endpoint." }
+        if binary == "dsh" { return "A DeepSeek-compatible endpoint, handed to the CLI each turn with the key below; the entry keeps its own DSH_HOME, so the machine's own ~/.dsh is never touched. Leave empty for DeepSeek's own endpoint." }
+        if binary == "qwen" { return "An OpenAI-compatible endpoint the CLI is pointed at as `OPENAI_BASE_URL`; the entry keeps its own QWEN_HOME, so the machine's own ~/.qwen is never touched. Leave empty for Model Studio." }
         return "A custom API endpoint driven through the codex CLI (Responses wire format). Sessions run with a server-written `CODEX_HOME` pointing codex at it, so the machine's own `~/.codex` login is never touched. Leave empty for the binary's own service."
     }
     static func apiKeyHint(_ binary: String) -> String {
         if binary == "claude" { return "Passed as `ANTHROPIC_API_KEY`, used instead of a login. With a base URL it also goes out as `ANTHROPIC_AUTH_TOKEN`, so gateways that read `Authorization` instead of `x-api-key` see it too." }
         if binary == "opencode" { return "The key for the service this entry's models name: `anthropic` for `anthropic/claude-sonnet-4-5`. It is handed to the CLI as its whole credential store, so the machine's own opencode credentials stay untouched." }
+        if binary == "dsh" { return "Your DeepSeek API key, handed to the CLI each turn. There is no login to keep." }
+        if binary == "qwen" { return "Passed as `OPENAI_API_KEY` for the endpoint above. A local endpoint may need none." }
         return "Authenticates the base URL above."
     }
 

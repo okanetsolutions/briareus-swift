@@ -58,8 +58,6 @@ func actionIcon(_ id: String) -> String {
     case "review": return "⌕"
     case "solve-conflicts": return "🔀"
     case "fix-checks": return "🧪"
-    case "implement-feedback": return "💬"
-    case "custom-feedback": return "✍"
     case "test-sheet": return "📋"
     case "test-run": return "🎬"
     case "pr-body-summary": return "✎"

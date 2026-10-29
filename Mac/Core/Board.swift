@@ -427,19 +427,23 @@ struct BoardAction: Equatable, Sendable {
     var label: String
     var hint: String
     var input: ActionInput?
+    /// The one CLI it runs on, when the server restricts it (`binary`); nil runs on any provider.
+    var binary: String?
 
-    init(id: String, label: String, hint: String = "", input: ActionInput? = nil) { self.id = id; self.label = label; self.hint = hint; self.input = input }
+    init(id: String, label: String, hint: String = "", input: ActionInput? = nil, binary: String? = nil) {
+        self.id = id; self.label = label; self.hint = hint; self.input = input; self.binary = binary
+    }
 
-    /// The call that starts it: `serve_pull` for Run, `review` for Code review, and `action` (with the errand's id) for the rest.
-    var operation: String { id == "run" ? "serve_pull" : id == "review" ? "review" : "action" }
+    /// The call that starts it: `serve_pull` for Run, and `action` (with the errand's id) for the rest.
+    var operation: String { id == "run" ? "serve_pull" : "action" }
+    /// Whether a provider of CLI `binary` may run it.
+    func runs(on binary: String?) -> Bool { self.binary == nil || self.binary == binary }
     /// Run answers only once the workspace is prepared and serving, which takes longer than a request is given. Nil = default.
     var timeoutMs: Int? { id == "run" ? 170_000 : nil }
-    /// Review checks the branch out itself; the rest look the pull request up by number. Input is sent trimmed, and only to
-    /// an errand that asks for it.
-    func arguments(repo: String, number: Int, branch: String? = nil, input: String? = nil) -> JSON {
+    /// Every errand looks the pull request up by number. Input is sent trimmed, and only to an errand that asks for it.
+    func arguments(repo: String, number: Int, input: String? = nil) -> JSON {
         var args: JSON = ["repo": .string(repo), "prNumber": JSON(number)]
-        if id == "review" { if let branch { args["branch"] = .string(branch) } }
-        else if id != "run" { args["action"] = .string(id) }
+        if id != "run" { args["action"] = .string(id) }
         if self.input != nil, let input {
             let trimmed = input.cTrimmed
             if !trimmed.isEmpty { args["input"] = .string(trimmed) }
@@ -450,19 +454,16 @@ struct BoardAction: Equatable, Sendable {
     /// The board's errands, in the order the Windows client shows them.
     static let known: [BoardAction] = [
         BoardAction(id: "run", label: "Run", hint: "Prepare this pull request in a clean workspace and serve the app from it"),
-        BoardAction(id: "review", label: "Code review", hint: "Run the provider\u{2019}s code review on this pull request and publish it"),
+        BoardAction(id: "review", label: "Code review", hint: "Review the pull request with the provider\u{2019}s own review command, publish the findings, then verify each one"),
         BoardAction(id: "solve-conflicts", label: "Solve conflicts", hint: "Merge the base branch in, resolve the conflicts and push the result"),
         BoardAction(id: "fix-checks", label: "Fix failing checks", hint: "Read this pull request\u{2019}s failing CI checks, fix what the branch broke and push the fixes"),
-        BoardAction(id: "implement-feedback", label: "Implement feedback", hint: "Address the review findings on this pull request, push the fixes, and have those changes reviewed automatically"),
-        BoardAction(id: "custom-feedback", label: "Give feedback", hint: "Say in your own words what to change on this pull request, and it is implemented and pushed",
-                    input: ActionInput(label: "Your feedback", placeholder: "What should change on this pull request?", required: true)),
         BoardAction(id: "test-sheet", label: "Test sheet", hint: "Derive the manual QA checklist from this pull request\u{2019}s diff and post it as one editable comment"),
         BoardAction(id: "test-run", label: "Record QA", hint: "Execute this pull request\u{2019}s test sheet in a fresh workspace and record a video of every scenario"),
         BoardAction(id: "pr-body-summary", label: "PR body", hint: "Rewrite this pull request\u{2019}s description from its own diff, following the team template"),
         BoardAction(id: "delete-self-comments", label: "Delete my comments", hint: "Remove every comment and review the configured GitHub account left on this pull request"),
     ]
     /// Errands this app no longer offers, even when the server still lists them.
-    private static let dropped: Set<String> = ["qa"]
+    private static let dropped: Set<String> = ["qa", "implement-feedback", "custom-feedback"]
 
     /// The errands worth offering on one pull request. `catalog` is what the server's `actions` lists; null or empty before it
     /// is known, when every errand this app knows is offered. `failedChecks` is the pull request's count of failed checks.
@@ -471,7 +472,7 @@ struct BoardAction: Equatable, Sendable {
         var served: [BoardAction] = []
         for entry in catalog.items {
             guard let id = entry["id"].string, let label = entry["label"].string else { continue }
-            var a = BoardAction(id: id, label: label, hint: entry["hint"].string ?? "")
+            var a = BoardAction(id: id, label: label, hint: entry["hint"].string ?? "", binary: entry["binary"].nonEmpty)
             if let inputLabel = entry["input"]["label"].string {
                 a.input = ActionInput(label: inputLabel, placeholder: entry["input"]["placeholder"].string ?? "", required: entry["input"]["required"].is(true))
             }
@@ -481,16 +482,16 @@ struct BoardAction: Equatable, Sendable {
         for k in known {
             let s = served.first { $0.id == k.id }
             let offered: Bool
-            // Run and Review have routes of their own; the rest are errands the server has to list.
-            if !served.isEmpty && s == nil && k.id != "run" && k.id != "review" { offered = false }
+            // Run has a route of its own; the rest are errands the server has to list.
+            if !served.isEmpty && s == nil && k.id != "run" { offered = false }
             else if k.id == "solve-conflicts" { offered = pull?.hasConflicts ?? true }
             else if k.id == "fix-checks" { offered = failedChecks > 0 || (pull?.checksFailed ?? false) }
-            else if k.id == "implement-feedback" { offered = pull?.awaitsFeedback ?? true }
             else { offered = true }
             guard offered else { continue }
             // The server words the question and adds errands this app predates.
             var a = k
             if let s, s.input != nil { a.input = s.input }
+            if let s { a.binary = s.binary }
             out.append(a)
         }
         for s in served where !known.contains(where: { $0.id == s.id }) && !dropped.contains(s.id) { out.append(s) }

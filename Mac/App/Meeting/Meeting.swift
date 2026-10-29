@@ -1,6 +1,6 @@
 // The meeting assistant (the Windows client's app/meeting.c): one meeting at a time, joined from a project, held by an
 // ElevenLabs agent speaking in the user's voice, which looks the project up with read-only tools (its conversations, pull
-// requests, findings and issues). It runs on until left, whatever screen is shown. Its settings and the ElevenLabs API
+// requests, code reviews and issues). It runs on until left, whatever screen is shown. Its settings and the ElevenLabs API
 // key are this Mac's, and every meeting is recorded here with its time and cost.
 import AppKit
 import Foundation

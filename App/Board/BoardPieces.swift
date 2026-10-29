@@ -53,8 +53,6 @@ func errandSymbol(_ id: String) -> String {
     case "review": return "text.magnifyingglass"
     case "solve-conflicts": return "arrow.triangle.merge"
     case "fix-checks": return "wrench.and.screwdriver"
-    case "implement-feedback": return "hammer"
-    case "custom-feedback": return "square.and.pencil"
     case "test-sheet": return "checklist"
     case "test-run": return "video"
     case "pr-body-summary": return "doc.text"
@@ -67,7 +65,6 @@ func errandSymbol(_ id: String) -> String {
 struct PendingErrand: Identifiable {
     var action: BoardAction
     var number: Int
-    var branch: String
     var input: String?
     var id: String { "\(number):\(action.id)" }
 }
@@ -87,9 +84,9 @@ final class ErrandRunner: ObservableObject {
     init(repo: String) { self.repo = repo }
 
     /// Asks for the errand's input when it takes one, else for a yes.
-    func ask(_ action: BoardAction, number: Int, branch: String) {
-        guard !busy, !uncertain, !branch.isEmpty else { return }
-        let p = PendingErrand(action: action, number: number, branch: branch)
+    func ask(_ action: BoardAction, number: Int) {
+        guard !busy, !uncertain else { return }
+        let p = PendingErrand(action: action, number: number)
         if action.input != nil { asking = p } else { confirming = p }
     }
 
@@ -98,7 +95,7 @@ final class ErrandRunner: ObservableObject {
         guard !busy, !uncertain else { return nil }
         busy = true; starting = p
         defer { busy = false; starting = nil }
-        let args = p.action.arguments(repo: repo, number: p.number, branch: p.branch, input: p.input)
+        let args = p.action.arguments(repo: repo, number: p.number, input: p.input)
         do {
             let v = try await Store.shared.call(p.action.operation, args, timeout: p.action.timeoutMs.map { TimeInterval($0) / 1000 })
             writeError = nil

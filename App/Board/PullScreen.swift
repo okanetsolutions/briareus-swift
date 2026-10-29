@@ -1,6 +1,6 @@
 // One pull request on a phone (the Mac's PullScreen): what it is and where it stands at the top, a scrolling section
 // picker in place of GitHub's tabs (description, files, reviews and comments, the issues it closes and the project
-// boards they are on, findings, the conversations run on it, and ▶ Run), the errands in the toolbar, its edits and Update
+// boards they are on, code reviews, the conversations run on it, and ▶ Run), the errands in the toolbar, its edits and Update
 // branch in the More menu, and a squash merge that says first what stands in its way.
 import SwiftUI
 
@@ -15,11 +15,9 @@ struct PullScreen: View {
     @StateObject private var model: PullScreenModel
     @StateObject private var errands: ErrandRunner
     @Environment(\.navigate) private var navigate
-    @State private var confirmingSolve: PendingErrand?
     @State private var deleting: Session?
     @State private var deletingServed = false
     @State private var stackOpen = false
-    @State private var openFindings: Set<Int> = []
     @State private var editPrompt: ItemEdit?
     @State private var confirmingUpdate = false
 
@@ -49,7 +47,7 @@ struct PullScreen: View {
         .toolbar { toolbar }
         .task {
             await poll(every: 30) {
-                if errands.busy || model.merging || model.deciding != nil || model.mergeQuestion != nil || model.editing || model.updatingBranch { return nil }
+                if errands.busy || model.merging || model.mergeQuestion != nil || model.editing || model.updatingBranch { return nil }
                 return await reading { try await model.load() }
             }
         }
@@ -74,14 +72,6 @@ struct PullScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: { q in
             Text(q.notes.isEmpty ? "Its commits are squashed into one on \(q.base) on GitHub. This cannot be undone from the app." : q.notes.joined(separator: " "))
-        }
-        .alert(solveTitle, isPresented: Binding(get: { confirmingSolve != nil }, set: { if !$0 { confirmingSolve = nil } }), presenting: confirmingSolve) { p in
-            Button("Solve findings") {
-                Task { if let s = await errands.run(p) { navigate(.conversation(id: s.id, session: s.raw)) } }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text(verbatim: "The agent addresses the findings on PR #\(number), pushes the fixes to its branch and has them reviewed again. Uses the provider and model configured for this project.")
         }
         .alert("Permanently delete this conversation and its transcript?",
                isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { s in
@@ -112,12 +102,6 @@ struct PullScreen: View {
         }
     }
 
-    private var solveTitle: String {
-        let fixes = findingsToFix(model.findings), open = findingsUnfixed(model.findings)
-        return fixes > 0 ? "Start a paid fix session for \(fixes) finding\(fixes == 1 ? "" : "s")?"
-            : "Start a paid fix session for \(open) open finding\(open == 1 ? "" : "s")?"
-    }
-
     private var list: some View {
         List {
             notices
@@ -132,7 +116,7 @@ struct PullScreen: View {
                 case .reviews: reviews
                 case .issues: issues
                 case .projects: PullProjectsSection(entries: model.issueProjects.entries)
-                case .findings: findings
+                case .codeReviews: PullCodeReviewsTab(reviews: model.codeReviews, error: model.codeReviewsError)
                 case .conversations: conversations
                 case .run: EmptyView()
                 }
@@ -152,14 +136,14 @@ struct PullScreen: View {
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         let actions = model.actions(catalog.catalog)
         let row = model.boardRow
-        if !actions.isEmpty, let branch = model.pr["headRef"].string {
+        if !actions.isEmpty {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     if let s = actions.first(where: { $0.isSuggested(for: row) }) {
-                        Section("Suggested") { errandButton(s, branch: branch, suggested: true) }
+                        Section("Suggested") { errandButton(s, suggested: true) }
                     }
                     Section {
-                        ForEach(actions.filter { !$0.isSuggested(for: row) }, id: \.id) { errandButton($0, branch: branch, suggested: false) }
+                        ForEach(actions.filter { !$0.isSuggested(for: row) }, id: \.id) { errandButton($0, suggested: false) }
                     } footer: {
                         Text("Errands run paid agents on this project’s configured model and may write to GitHub.")
                     }
@@ -234,9 +218,9 @@ struct PullScreen: View {
         }
     }
 
-    private func errandButton(_ a: BoardAction, branch: String, suggested: Bool) -> some View {
+    private func errandButton(_ a: BoardAction, suggested: Bool) -> some View {
         Button(role: a.isDestructive ? .destructive : nil) {
-            errands.ask(a, number: number, branch: branch)
+            errands.ask(a, number: number)
         } label: {
             Label(a.label, systemImage: suggested ? "sparkles" : errandSymbol(a.id))
         }
@@ -319,9 +303,9 @@ struct PullScreen: View {
         let row = model.boardRow
         if row?.recommended == "run", sections.contains(.run) {
             Button { withAnimation(.snappy) { model.select(.run) } } label: { suggestedLabel("Run") }
-        } else if let a = model.actions(catalog.catalog).first(where: { $0.isSuggested(for: row) }), let branch = model.pr["headRef"].string {
+        } else if let a = model.actions(catalog.catalog).first(where: { $0.isSuggested(for: row) }) {
             Button(role: a.isDestructive ? .destructive : nil) {
-                errands.ask(a, number: number, branch: branch)
+                errands.ask(a, number: number)
             } label: { suggestedLabel(a.label) }
             .disabled(errands.busy || errands.uncertain)
         }
@@ -393,7 +377,7 @@ struct PullScreen: View {
             case .reviews: return !model.pr.isNull
             case .issues: return !model.closes.isEmpty
             case .projects: return store.supports("issue") && !model.linkedIssues().isEmpty
-            case .findings: return store.supports("findings")
+            case .codeReviews: return store.supports("code_reviews")
             case .run: return model.runOffered && (model.isOpen || model.runURL != nil)
             }
         }
@@ -404,7 +388,7 @@ struct PullScreen: View {
         case .reviews: return model.commentCount ?? model.pr["reviews"].count
         case .issues: return model.closes.count
         case .projects: return model.issueProjects.entries.map { $0.reduce(0) { $0 + $1.projects.count } }
-        case .findings: return model.findings.count
+        case .codeReviews: return model.codeReviews.count
         case .conversations: return model.runs.count
         default: return nil
         }
@@ -535,81 +519,6 @@ struct PullScreen: View {
         var bare: JSON = ["number": JSON(link.number), "title": .string(link.title)]
         if let url = link.url { bare["url"] = .string(url) }
         return bare
-    }
-
-    private static let decisionIDs = ["", "fix", "optional", "dismissed"]
-    private static let decisionTitles = ["Undecided", "Fix", "Optional", "Dismiss"]
-
-    @ViewBuilder private var findings: some View {
-        let list = model.findings.items
-        let canDecide = store.supports("finding_decision")
-        Section {
-            if let e = model.findingsError { ErrorNotice(message: e) }
-            ForEach(Array(list.enumerated()), id: \.offset) { i, f in
-                DisclosureGroup(isExpanded: Binding(get: { openFindings.contains(i) }, set: { if $0 { openFindings.insert(i) } else { openFindings.remove(i) } })) {
-                    if let file = f["file"].string {
-                        Text(verbatim: f["line"].int.map { "\(file):\($0)" } ?? file).font(.caption.monospaced()).textSelection(.enabled)
-                    }
-                    if let body = f["body"].string.map(visibleMarkdown), !body.isEmpty { MarkdownText(body).font(.callout) }
-                    if safeWebURL(f["url"].string) {
-                        Button { boardOpenWeb(f["url"].string) } label: { Label("Open finding on GitHub", systemImage: "arrow.up.right") }
-                    }
-                    if canDecide, let key = f["key"].string, !f["fixed"].is(true) {
-                        Picker("Decision", selection: Binding(
-                            get: { f["decision"].string ?? "" },
-                            set: { d in Task { await model.decide(key, d.isEmpty ? nil : d) } })) {
-                            ForEach(0..<Self.decisionIDs.count, id: \.self) { k in Text(Self.decisionTitles[k]).tag(Self.decisionIDs[k]) }
-                        }
-                        .pickerStyle(.segmented)
-                        .disabled(model.deciding != nil)
-                    }
-                } label: {
-                    findingLabel(f)
-                }
-            }
-            if list.isEmpty && model.findingsError == nil { Text("No findings reported").foregroundStyle(.secondary) }
-        } footer: {
-            if canDecide && !list.isEmpty { Text("Decisions are saved on the server and mirrored to the pull request’s checklist on GitHub.") }
-        }
-        .listRowBackground(Theme.row)
-        if let solve = model.solveFindings(catalog.catalog) {
-            let fixes = findingsToFix(model.findings)
-            Section {
-                Button { confirmingSolve = solve } label: {
-                    HStack {
-                        Label(fixes > 0 ? "Solve findings · \(fixes) to fix" : "Solve findings", systemImage: "hammer").fontWeight(.semibold)
-                        if errands.busy { Spacer(); ProgressView() }
-                    }
-                }
-                .disabled(errands.busy || errands.uncertain || model.deciding != nil)
-            } footer: {
-                Text(fixes > 0 ? "Starts a paid session that addresses the findings marked Fix, pushes the fixes and has them reviewed again."
-                     : "Starts a paid session that addresses the open findings, pushes the fixes and has them reviewed again. Mark what to fix first to narrow it down.")
-            }
-            .listRowBackground(Theme.row)
-        }
-    }
-
-    private func findingLabel(_ f: JSON) -> some View {
-        let fixed = f["fixed"].is(true)
-        let decision = f["decision"].string
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(verbatim: f["title"].string ?? "Finding")
-            HStack(spacing: 6) {
-                if let severity = f["severity"].string {
-                    let label = findingSeverityLabel(severity)
-                    Text(label).font(.caption2.weight(.bold))
-                        .foregroundStyle(label == "CRIT" || label == "HIGH" ? Theme.danger : label == "LOW" ? Color.secondary : Theme.warn)
-                }
-                if fixed { Text("Fixed").foregroundStyle(Theme.ok) }
-                else if let d = decision {
-                    Text(Self.decisionIDs.firstIndex(of: d).map { Self.decisionTitles[$0] } ?? d.asciiCapitalized)
-                        .foregroundStyle(d == "fix" ? Theme.warn : Color.secondary)
-                }
-                if let key = f["key"].string, model.deciding == key { ProgressView().controlSize(.mini) }
-            }
-            .font(.caption).foregroundStyle(.secondary)
-        }
     }
 
     @ViewBuilder private var conversations: some View {

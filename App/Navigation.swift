@@ -4,7 +4,7 @@ import SwiftUI
 
 /// A screen another one can open. Each case's `id` names what it shows, so a repeated choice is not reopened.
 enum Destination: Hashable, Identifiable {
-    /// A project's conversations, with its board, findings and a new conversation above them.
+    /// A project's conversations, with its board and a new conversation above them.
     case project(repo: String)
     /// Conversations across every project this device can read.
     case allSessions
@@ -22,8 +22,6 @@ enum Destination: Hashable, Identifiable {
     case pullFiles(repo: String, number: Int)
     /// An issue, with its board row.
     case issue(repo: String, issue: JSON)
-    /// The review rounds waiting for a decision: one project's, or every project's with nil.
-    case findings(repo: String?)
     /// What every project spent over a window.
     case usage
     /// The settings forms: `row` is the server's record (nil with `defaults` for a new one).
@@ -43,6 +41,8 @@ enum Destination: Hashable, Identifiable {
     case sessionStats(session: JSON)
     /// The Server dashboard: the machine, the Briareus process, its disks and the open sessions.
     case serverStats
+    /// CI/CD history across the projects: totals, trends and the runs themselves.
+    case ciStats
     case sshMonitoring(serverID: Double?)
     case personalConnection(PersonalConnectionKind)
     case sharing
@@ -62,7 +62,6 @@ enum Destination: Hashable, Identifiable {
         case .pullFiles(let repo, let n): return "files:\(repo)#\(n)"
         case .branchRun(let repo): return "branch-run:\(repo)"
         case .issue(let repo, let issue): return "issue:\(repo)#\(issue["number"].int ?? 0)"
-        case .findings(let repo): return "findings:\(repo ?? "")"
         case .usage: return "usage"
         case .projectSettings(let row, _): return "project-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
@@ -75,6 +74,7 @@ enum Destination: Hashable, Identifiable {
         case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
         case .sessionStats(let session): return "session-stats:\(session["id"].string ?? "")"
         case .serverStats: return "server-stats"
+        case .ciStats: return "ci-stats"
         case .sshMonitoring(let id): return "ssh-monitoring:\(id.map { String($0) } ?? "all")"
         case .personalConnection(let kind): return "personal:\(kind.rawValue)"
         case .sharing: return "sharing"
@@ -97,7 +97,6 @@ enum Destination: Hashable, Identifiable {
         case .pullFiles(let repo, let number): PullFilesScreen(repo: repo, number: number)
         case .branchRun(let repo): BranchRunScreen(repo: repo)
         case .issue(let repo, let issue): IssueScreen(repo: repo, issue: issue)
-        case .findings(let repo): FindingsScreen(repo: repo)
         case .usage: UsageScreen()
         case .projectSettings(let row, let defaults): ProjectSettingsScreen(row: row, defaults: defaults)
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)
@@ -110,6 +109,7 @@ enum Destination: Hashable, Identifiable {
         case .webhook(let session): WebhookScreen(session: session)
         case .sessionStats(let session): SessionStatsScreen(session: session)
         case .serverStats: ServerStatsScreen()
+        case .ciStats: CIStatsScreen()
         case .sshMonitoring(let id): SSHMonitoringScreen(serverID: id)
         case .personalConnection(let kind): PersonalConnectionScreen(kind: kind)
         case .sharing: SharingScreen()

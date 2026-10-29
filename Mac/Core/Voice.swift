@@ -63,14 +63,12 @@ enum Voice {
     full, implements it and opens a pull request that closes it. Before starting one, say if a conversation or a pull \
     request is already on that issue.
 
-    ## Reviews and feedback
-    run_errand starts what the board's buttons start on a pull request: review runs the code review, \
-    implement-feedback first assesses incoming feedback for manual Findings decisions; completing that assessment fixes only findings explicitly marked fix, fix-checks fixes failing checks, solve-conflicts resolves \
-    conflicts. A pull request's findings are read with list_findings; the user says yes (fix), no (dismissed) or \
-    optional to each, recorded one by one with decide_finding, then complete the held assessment to start fixes for the yeses. A review \
-    round a conversation holds (waiting_findings) is read with read_review_round and completed with \
-    complete_review_round, with the keys the user said yes and no to. Read the findings briefly, one at a time when the \
-    user is deciding, and never decide one the user did not.
+    ## Reviews
+    run_errand starts what the board's buttons start on a pull request: review runs the code review, which publishes \
+    its findings and then verifies each one; fix-checks fixes failing checks; solve-conflicts resolves conflicts. A pull \
+    request's code reviews and the findings they registered, each with the verify step's verdict (fix, optional or \
+    dismissed), are read with list_code_reviews. The verdicts are the review's own: read them briefly, and when the user \
+    wants something changed, send it to a conversation rather than deciding it here.
 
     ## Ready to merge
     A pull request is ready to be merged only when list_pull_requests marks it ready_to_merge: it carries the \
@@ -201,7 +199,7 @@ extension Voice {
     static func holding(_ args: JSON, _ tool: VoiceTool, to session: String, pull: Int?) -> JSON {
         var args = args
         args["session_id"] = .string(session)
-        if tool == .readPullRequest { args["number"] = pull.map { JSON($0) } ?? .null }
+        if tool == .readPullRequest || tool == .listCodeReviews { args["number"] = pull.map { JSON($0) } ?? .null }
         return args
     }
 
@@ -300,11 +298,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
     case listPullRequests = "list_pull_requests"
     case readPullRequest = "read_pull_request"
     case mergePullRequest = "merge_pull_request"
-    case waitingFindings = "waiting_findings"
-    case readReviewRound = "read_review_round"
-    case completeReviewRound = "complete_review_round"
-    case listFindings = "list_findings"
-    case decideFinding = "decide_finding"
+    case listCodeReviews = "list_code_reviews"
     case runErrand = "run_errand"
     case listIssues = "list_issues"
     case readIssue = "read_issue"
@@ -318,11 +312,8 @@ enum VoiceTool: String, CaseIterable, Sendable {
     /// The client API call each tool makes.
     var operation: String {
         switch self {
-        case .listConversations, .waitingFindings, .readReviewRound: return "sessions"
-        case .completeReviewRound: return "complete_findings"
-        case .listFindings: return "findings"
-        case .decideFinding: return "finding_decision"
-        // The errand's own call, `review` or `action`, is chosen by the phone; this is the one most errands make.
+        case .listConversations: return "sessions"
+        case .listCodeReviews: return "code_reviews"
         case .runErrand: return "action"
         case .readConversation: return "session"
         case .listPullRequests, .listIssues: return "pulls"
@@ -341,17 +332,16 @@ enum VoiceTool: String, CaseIterable, Sendable {
     /// Changes something on the server, so the project's conversations are read again after it.
     var changes: Bool {
         [.startConversation, .workOnIssue, .sendMessage, .stopConversation, .closeConversation, .deleteConversation,
-         .mergePullRequest, .completeReviewRound, .runErrand, .decideFinding].contains(self)
+         .mergePullRequest, .runErrand].contains(self)
     }
     /// Acts on a conversation named by id, which must be the project's: the phone checks before it answers.
     var namesConversation: Bool {
-        [.readConversation, .sendMessage, .stopConversation, .closeConversation, .deleteConversation, .completeReviewRound]
-            .contains(self)
+        [.readConversation, .sendMessage, .stopConversation, .closeConversation, .deleteConversation].contains(self)
     }
 
-    /// The tools of a call held to one conversation: that conversation's, its pull request's and its review round's.
+    /// The tools of a call held to one conversation: that conversation's and its pull request's.
     static let conversationCases: [VoiceTool] = [.readConversation, .sendMessage, .stopConversation, .readPullRequest,
-                                                 .readReviewRound, .completeReviewRound]
+                                                 .listCodeReviews]
 
     /// A provider-independent function tool schema.
     var definition: JSON { definition(held: false) }
@@ -362,7 +352,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
         var properties: [String: JSON] = [:]
         var required: [String] = []
         func add(_ name: String, _ type: String, _ about: String, required isRequired: Bool = true) {
-            if held && (name == "session_id" || (self == .readPullRequest && name == "number")) { return }
+            if held && (name == "session_id" || ([.readPullRequest, .listCodeReviews].contains(self) && name == "number")) { return }
             properties[name] = ["type": .string(type), "description": .string(about)]
             if isRequired { required.append(name) }
         }
@@ -383,30 +373,11 @@ enum VoiceTool: String, CaseIterable, Sendable {
         case .readPullRequest:
             description = "What one of the project's pull requests changes: how many files, lines added and removed, its description, and each changed file's name with its diff, to summarize what it touches."
             add("number", "integer", "The pull request's number.")
-        case .waitingFindings:
-            description = "The project's review rounds waiting for the user's decision."
-        case .readReviewRound:
-            description = "The findings of the review round a conversation holds for the user's decision: each one's key, severity, place, what it says and the verdict drafted for it."
-            add("session_id", "string", "The conversation's id, from waiting_findings or list_conversations.")
-        case .completeReviewRound:
-            description = "Completes a conversation's review round with the user's verdicts: the findings to fix are sent to be fixed, the dismissed ones are dropped, the rest stay optional. With nothing to fix, the pull request is approved."
-            add("session_id", "string", "The conversation's id.")
-            properties["fix"] = ["type": "array", "items": ["type": "string"], "description": "Keys of the findings the user said yes to: they are fixed."]
-            required.append("fix")
-            properties["dismiss"] = ["type": "array", "items": ["type": "string"], "description": "Keys of the findings the user said no to."]
-            required.append("dismiss")
-            add("note", "string", "What the user wants the fix session told, if anything.", required: false)
-        case .listFindings:
-            description = "The review findings left on one of the project's pull requests: each one's key, severity, place, what it says, the user's verdict (yes to fix, no, or optional) and whether it is fixed."
+        case .listCodeReviews:
+            description = "The code reviews run on one of the project's pull requests, newest first: each one's status, what it ran on and its summary, and every finding it registered with its severity, place, what it says and the verify step's verdict (fix, optional or dismissed)."
             add("number", "integer", "The pull request's number.")
-        case .decideFinding:
-            description = "Records the user's yes or no on one finding of a pull request: fix (yes, implement it), dismissed (no) or optional. Only on the user's own word; run_errand implement-feedback starts an assessment for manual Findings decisions; completing that assessment starts only selected fixes."
-            add("number", "integer", "The pull request's number.")
-            add("key", "string", "The finding's key, from list_findings.")
-            properties["decision"] = ["type": "string", "enum": ["fix", "dismissed", "optional"], "description": "fix for yes, dismissed for no, optional to leave it to the implementer."]
-            required.append("decision")
         case .runErrand:
-            description = "Starts an errand on one of the project's pull requests, as the board's buttons do: review (run the code review and publish it), implement-feedback (assess feedback for manual Findings decisions; fixes start only after completing those decisions), fix-checks (fix failing CI checks) or solve-conflicts (merge the base in and resolve the conflicts)."
+            description = "Starts an errand on one of the project's pull requests, as the board's buttons do: review (run the code review, publish its findings and verify them), fix-checks (fix failing CI checks) or solve-conflicts (merge the base in and resolve the conflicts)."
             add("number", "integer", "The pull request's number.")
             properties["errand"] = ["type": "string", "enum": .array(Voice.errands.map { .string($0) }), "description": "Which errand."]
             required.append("errand")
@@ -443,8 +414,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
         case .sendMessage where held: said = "Sends a message to this conversation's agent, or answers its question. A busy agent gets it in its running turn or the next."
         case .stopConversation where held: said = "Stops this conversation's running turn. The conversation stays open."
         case .readPullRequest where held: said = "What this conversation's pull request changes: how many files, lines added and removed, its description, and each changed file's name with its diff."
-        case .readReviewRound where held: said = "The findings of the review round this conversation holds for the user's decision: each one's key, severity, place, what it says and the verdict drafted for it."
-        case .completeReviewRound where held: said = "Completes this conversation's review round with the user's verdicts: the findings to fix are sent to be fixed, the dismissed ones are dropped, the rest stay optional. With nothing to fix, the pull request is approved."
+        case .listCodeReviews where held: said = "The code reviews run on this conversation's pull request, newest first, with every finding each one registered and the verify step's verdict on it."
         default: said = description
         }
         return ["type": "function", "name": .string(rawValue), "description": .string(said),
@@ -460,7 +430,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
         }
         let confirmed = args["confirmed"].is(true)
         switch self {
-        case .listConversations, .waitingFindings, .listPullRequests, .listIssues:
+        case .listConversations, .listPullRequests, .listIssues:
             return .call(["repo": .string(repo)])
         case .readIssue:
             guard let number = args["issue"].int, number >= 1 else { return .refuse("issue is missing.") }
@@ -469,30 +439,14 @@ enum VoiceTool: String, CaseIterable, Sendable {
             guard let number = args["issue"].int, number >= 1 else { return .refuse("issue is missing.") }
             // The board is read first: the conversation's prompt is made from the issue's row there.
             return .call(["repo": .string(repo), "issue": JSON(number)])
-        case .readPullRequest, .listFindings:
+        case .readPullRequest, .listCodeReviews:
             guard let number = args["number"].int, number >= 1 else { return .refuse("number is missing.") }
             return .call(["repo": .string(repo), "pr": JSON(number)])
-        case .readReviewRound:
-            guard text("session_id") != nil else { return .refuse("session_id is missing.") }
-            return .call(["repo": .string(repo)])
-        case .completeReviewRound:
-            guard let id = text("session_id") else { return .refuse("session_id is missing.") }
-            let fix = args["fix"].strings, dismiss = args["dismiss"].strings
-            // The phone reads the round and makes the verdicts from these keys before the call.
-            var call: JSON = ["sessionId": .string(id), "fix": JSON(fix), "dismiss": JSON(dismiss)]
-            if let note = text("note") { call["note"] = .string(note) }
-            return .call(call)
-        case .decideFinding:
-            guard let number = args["number"].int, number >= 1, let key = text("key") else { return .refuse("number and key are needed.") }
-            guard let decision = text("decision"), findingDecisionIds.contains(decision) else { return .refuse("decision must be fix, dismissed or optional.") }
-            let call: JSON = ["repo": .string(repo), "pr": JSON(number), "key": .string(key), "decision": .string(decision)]
-            return .call(call)
         case .runErrand:
             guard let number = args["number"].int, number >= 1 else { return .refuse("number is missing.") }
             guard let errand = text("errand"), let action = Voice.errand(errand) else {
                 return .refuse("errand must be one of \(Voice.errands.joined(separator: ", ")).")
             }
-            // Code review checks the branch out itself: the phone adds it from the board before the call.
             return .call(action.arguments(repo: repo, number: number))
         case .mergePullRequest:
             // The phone reads the pull request before either answer: the read-back says what stands in the way, and the
@@ -561,31 +515,13 @@ enum VoiceTool: String, CaseIterable, Sendable {
         case .readPullRequest:
             guard let page = PullFilesPage(answer) else { return ["error": "The server did not return the pull request's files."] }
             return Voice.changes(page, description: answer["description"].string)
-        case .readReviewRound:
-            guard let id = args["session_id"].string, let s = (Session.parseList(answer) ?? []).first(where: { $0.id == id }) else {
-                return ["error": "That conversation is not one of this project's."]
-            }
-            guard let held = s.heldTriage else { return ["error": "That conversation holds no review round waiting for a decision."] }
-            var out: JSON = ["title": .string(s.displayTitle), "mine": .bool(triageTakesVerdicts(held)),
-                             "findings": .array(held["findings"].items.map { Voice.finding($0, verdict: triageDecision(held, $0, picked: [:])) })]
-            if let pr = s.pullNumber { out["pull_request"] = JSON(pr) }
-            if !triageTakesVerdicts(held) { out["note"] = "This round is on someone else's pull request: completing it only takes it off the queue." }
-            return out
-        case .completeReviewRound:
-            return ["done": true, "result": .string(triageOutcomeText(answer).text)]
-        case .listFindings, .decideFinding:
-            let findings = answer["findings"].items
-            return ["findings": .array(findings.map { Voice.finding($0, verdict: $0["decision"].string ?? "") }),
-                    "to_fix": JSON(findingsToFix(answer["findings"])), "not_fixed": JSON(findingsUnfixed(answer["findings"]))]
+        case .listCodeReviews:
+            let reviews = CodeReview.parse(answer)
+            if reviews.isEmpty { return ["code_reviews": [], "note": "No code review has run on this pull request."] }
+            return ["code_reviews": .array(reviews.prefix(3).map(Voice.codeReview))]
         case .runErrand:
             guard let session = Session(answer["session"]) else { return ["done": true] }
             return ["done": true, "session_id": .string(session.id), "title": .string(session.displayTitle)]
-        case .waitingFindings:
-            let held = CarText.holdingFindings(Session.parseList(answer) ?? [])
-            return ["waiting": .array(held.map { s in
-                ["session_id": .string(s.id), "title": .string(s.displayTitle),
-                 "findings": JSON(s.heldTriage?["findings"].count ?? 0)]
-            })]
         case .listIssues:
             let issues = IssueSummary.parseList(answer["issues"])
             return ["issues": .array(issues.prefix(20).map { issue in
@@ -705,31 +641,24 @@ extension Voice {
         return out
     }
     /// The errands the voice can start on a pull request, by the board's ids.
-    static let errands = ["review", "implement-feedback", "fix-checks", "solve-conflicts"]
+    static let errands = ["review", "fix-checks", "solve-conflicts"]
     static func errand(_ id: String) -> BoardAction? {
         errands.contains(id) ? BoardAction.known.first { $0.id == id } : nil
     }
-    /// What `complete_findings` is sent for a held round from the keys the user said yes and no to; the rest stay
-    /// optional. A round on someone else's pull request takes no verdicts.
-    static func roundCompletion(_ held: JSON, fix: [String], dismiss: [String], note: String?) -> JSON {
-        var picked: [String: String] = [:]
-        for key in dismiss { picked[key] = "dismissed" }
-        for key in fix { picked[key] = "fix" }
-        return triageCompletion(held, picked: picked, note: note ?? "")
+    /// A code review as the model reads it: how it ended, what it ran on, its summary and its findings.
+    static func codeReview(_ r: CodeReview) -> JSON {
+        var out: JSON = ["status": .string(r.status.rawValue), "ran_on": .string(r.meta),
+                         "findings": .array(r.findings.map(finding))]
+        if let summary = r.summary { out["summary"] = .string(cut(CarText.inline(summary), 800)) }
+        return out
     }
-    /// A finding as the model reads it: its key, severity, place and words, and the verdict given it in plain terms.
-    static func finding(_ f: JSON, verdict: String) -> JSON {
-        var out: JSON = ["key": .string(f["key"].string ?? ""), "title": .string(CarText.inline(f["title"].string ?? ""))]
-        if let severity = f["severity"].nonEmpty { out["severity"] = .string(severity) }
-        if let place = findingLocation(f) { out["place"] = .string(place) }
-        if let body = (f["body"].nonEmpty ?? f["detail"].nonEmpty ?? f["description"].nonEmpty) {
-            out["says"] = .string(cut(CarText.inline(body), 500))
-        }
-        out["verdict"] = .string(["fix": "yes, fix it", "dismissed": "no", "optional": "optional"][verdict] ?? "not decided")
-        if f["fixed"].is(true) { out["fixed"] = true }
-        if f["assessment"].isObject {
-            out["assessment"] = f["assessment"]; out["recommendation"] = f["recommendation"]; out["source_feedback"] = f["sourceBody"]
-        }
+    /// A finding as the model reads it: its severity, place and words, and the verify step's verdict in plain terms.
+    static func finding(_ f: CodeReviewFinding) -> JSON {
+        var out: JSON = ["title": .string(CarText.inline(f.title)), "severity": .string(f.severity),
+                         "verdict": .string(f.verdict?.rawValue ?? "not verified yet")]
+        if let place = f.location { out["place"] = .string(place) }
+        if let body = f.body { out["says"] = .string(cut(CarText.inline(body), 500)) }
+        if let why = f.comments { out["why"] = .string(cut(CarText.inline(why), 300)) }
         return out
     }
     /// The label a reviewer sets once the code is approved.

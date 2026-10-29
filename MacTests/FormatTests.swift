@@ -17,16 +17,6 @@ final class FormatTests: XCTestCase {
         XCTAssertEqual(findingSeverityLabel(nil), "MED")
         XCTAssertEqual(findingSeverityLabel("blocker"), "MED")
     }
-    func testDecisionsAreIndexedByTheirAPISpelling() {
-        XCTAssertEqual(findingDecisionIndex("fix"), 0)
-        XCTAssertEqual(findingDecisionIndex("optional"), 1)
-        XCTAssertEqual(findingDecisionIndex("dismissed"), 2)
-        XCTAssertEqual(findingDecisionTitles, ["Fix", "Optional", "Dismiss"])
-        for (k, id) in findingDecisionIds.enumerated() { XCTAssertEqual(findingDecisionIndex(id), k) }
-    }
-    func testUnknownDecisionsHaveNoIndex() {
-        for d in ["Fix", "dismiss", "undecided", "", nil] { XCTAssertNil(findingDecisionIndex(d), d ?? "(nil)") }
-    }
     func testSessionSubtitleIsStatusAndModel() {
         XCTAssertEqual(sessionSubtitle(Session(j(#"{"id":"s1","status":"waiting","model":"opus"}"#))!), "Waiting \u{00B7} opus")
         XCTAssertEqual(sessionSubtitle(Session(j(#"{"id":"s2","status":"idle"}"#))!), "Idle")

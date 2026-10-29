@@ -71,7 +71,7 @@ final class ProjectFeed: ObservableObject {
         remove(id)
     }
     /// A record from the live stream, in its row's place or first when new; the overview and its badge follow it, as a
-    /// turn starting or ending, a question asked or a review round held all change them.
+    /// turn starting or ending or a question asked all change them.
     func upsert(_ s: Session) {
         let saved = Store.shared.cache.upsertSession(s, repo: repo)
         guard let list = saved ?? sessions.upserting(s) else { return }
@@ -162,7 +162,7 @@ final class ProjectFeed: ObservableObject {
     }
 }
 
-/// The projects this device can read, and what waits for you and what is working across them, for the Findings tab and
+/// The projects this device can read, and what waits for you and what is working across them, for the Status tab and
 /// its badge, and every screen that picks a project.
 @MainActor
 final class ProjectsModel: ObservableObject {
@@ -171,7 +171,7 @@ final class ProjectsModel: ObservableObject {
     @Published private(set) var projects: [Project] = []
     /// What `projects` answered, whole: the run profiles and other per-project fields ride along.
     @Published private(set) var raw: JSON = .null
-    /// What waits for you and what is working across the projects, for the Findings tab's status and its badge.
+    /// What waits for you and what is working across the projects, for the Status tab and its badge.
     @Published private(set) var overview = SessionOverview([])
     /// The list has been read, from the saved copy or the server.
     @Published private(set) var loaded = false
