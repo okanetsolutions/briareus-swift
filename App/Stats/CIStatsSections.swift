@@ -75,7 +75,10 @@ struct CIRunsSection: View {
 
     var body: some View {
         Section {
-            if let error = model.runsError { ErrorNotice(message: error) }
+            if let error = model.runsError {
+                ErrorNotice(message: error)
+                Button("Retry") { Task { await model.retryRuns() } }.disabled(model.loading || model.loadingMore)
+            }
             ForEach(model.runs) { CIRunRow(run: $0) }
             if model.runs.isEmpty && model.runsError == nil && !model.loading {
                 Text("No runs in this window.").foregroundStyle(.secondary)

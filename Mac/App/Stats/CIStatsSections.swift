@@ -110,7 +110,10 @@ struct CIRunsList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             SectionTitle(title: "Recent runs")
-            if let e = model.runsError { Notice(message: e) }
+            if let e = model.runsError {
+                Notice(message: e)
+                Button("Retry") { model.retryRuns() }.dashButton(.bordered).disabled(model.loading || model.loadingMore)
+            }
             if model.runs.isEmpty && !model.loading && model.runsError == nil {
                 EmptyNote(title: "No runs in this window.")
             }

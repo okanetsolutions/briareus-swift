@@ -7,11 +7,8 @@ import Foundation
 final class CIStatsModel: ObservableObject {
     @Published private(set) var filter = CIFilter()
     @Published private(set) var stats: CIStats?
-    @Published private(set) var runs: [CIRun] = []
-    /// Where the next page of runs starts; nil at the end of the list.
-    @Published private(set) var nextOffset: Int?
-    /// The server stopped counting runs before the end of the window.
-    @Published private(set) var truncated = false
+    /// The window's runs read so far, and which page to read next or again.
+    @Published private(set) var feed = CIRunsFeed()
     @Published private(set) var loading = false
     @Published private(set) var loadingMore = false
     @Published private(set) var error: String?
@@ -21,6 +18,10 @@ final class CIStatsModel: ObservableObject {
     /// The query the figures were read with, which each page of runs repeats.
     private var window: JSON = [:]
     private var generation = 0
+
+    var runs: [CIRun] { feed.runs }
+    var nextOffset: Int? { feed.nextOffset }
+    var truncated: Bool { feed.truncated }
 
     static var offered: Bool { Store.shared.supports("ci_stats") }
     var runsOffered: Bool { Store.shared.supports("ci_runs") }
@@ -54,6 +55,12 @@ final class CIStatsModel: ObservableObject {
         filter.repo = repo
         reload()
     }
+    /// Back to the default window, every project and checks.
+    func clearFilters() {
+        guard filter.isFiltered else { return }
+        filter = CIFilter()
+        reload()
+    }
 
     // MARK: Reading
 
@@ -76,16 +83,25 @@ final class CIStatsModel: ObservableObject {
             case .failure(let e): if e.kind != .cancelled { error = e.description }
             }
             switch p {
-            case .success(let v)?: adopt(CIRunsPage(v), appending: false)
-            case .failure(let e)?: if e.kind != .cancelled { runsError = e.description }
-            case nil: runs = []; nextOffset = nil; truncated = false
+            case .success(let v)?: feed.receive(CIRunsPage(v), offset: 0)
+            case .failure(let e)?: if e.kind != .cancelled { runsError = e.description; feed.fail(offset: 0) }
+            case nil: feed = CIRunsFeed()
             }
         }
     }
 
     /// The next page of runs in the same window.
     func loadMoreRuns() {
-        guard let offset = nextOffset, !loadingMore, !loading, runsOffered else { return }
+        guard let offset = nextOffset else { return }
+        readMore(from: offset)
+    }
+    /// The page of runs that failed, read again without reading the figures.
+    func retryRuns() {
+        guard let offset = feed.failedOffset else { return }
+        readMore(from: offset)
+    }
+    private func readMore(from offset: Int) {
+        guard !loadingMore, !loading, runsOffered else { return }
         let mine = generation
         loadingMore = true; runsError = nil
         Task {
@@ -93,16 +109,10 @@ final class CIStatsModel: ObservableObject {
             guard mine == generation else { return }
             loadingMore = false
             switch r {
-            case .success(let v): adopt(CIRunsPage(v), appending: true)
-            case .failure(let e): if e.kind != .cancelled { runsError = e.description }
+            case .success(let v): feed.receive(CIRunsPage(v), offset: offset)
+            case .failure(let e): if e.kind != .cancelled { runsError = e.description; feed.fail(offset: offset) }
             }
         }
-    }
-
-    private func adopt(_ page: CIRunsPage, appending: Bool) {
-        runs = appending ? runs + page.runs : page.runs
-        nextOffset = page.nextOffset
-        truncated = page.truncated
     }
 
     /// A run's page on GitHub.

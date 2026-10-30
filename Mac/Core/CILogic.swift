@@ -18,6 +18,9 @@ struct CIFilter: Equatable, Sendable {
     /// The windows the screens offer.
     static let windows = [7, 30, 90]
 
+    /// Whether the window, project, source or branch differs from the default, so an empty answer offers to clear them.
+    var isFiltered: Bool { self != CIFilter() }
+
     /// The shared query: `since` and `until` pinned to `now`, so paging keeps one window.
     func query(now: Date = Date()) -> JSON {
         let until = Int64(now.timeIntervalSince1970 * 1000)
@@ -211,6 +214,30 @@ struct CIRunsPage: Equatable, Sendable {
         runs = j["runs"].items.compactMap(CIRun.init)
         nextOffset = j["nextOffset"].int
         truncated = j["truncated"].is(true)
+    }
+}
+
+/// The runs a CI screen lists for one window, read a page at a time: where the next page starts, and which page to read
+/// again after a read failed. The first page replaces the list, as a new window's runs, and a later one extends it.
+struct CIRunsFeed: Equatable, Sendable {
+    private(set) var runs: [CIRun] = []
+    /// Where the next page starts; nil at the end.
+    private(set) var nextOffset: Int?
+    /// The server stopped listing runs before the window's end.
+    private(set) var truncated = false
+    /// The page whose read failed, which Retry reads again; nil when the last read worked.
+    private(set) var failedOffset: Int?
+
+    mutating func receive(_ page: CIRunsPage, offset: Int) {
+        runs = offset == 0 ? page.runs : runs + page.runs
+        nextOffset = page.nextOffset
+        truncated = page.truncated
+        failedOffset = nil
+    }
+    /// A failed first page empties the list, whose runs belong to the window read before; a later one keeps what was read.
+    mutating func fail(offset: Int) {
+        if offset == 0 { runs = []; nextOffset = nil; truncated = false }
+        failedOffset = offset
     }
 }
 

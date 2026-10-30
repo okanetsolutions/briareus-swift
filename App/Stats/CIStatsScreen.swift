@@ -25,9 +25,14 @@ struct CIStatsScreen: View {
         }
         if let stats = model.stats {
             if stats.totals.total == 0 {
-                ContentUnavailableView("No runs observed", systemImage: "checkmark.seal",
-                                       description: Text("Nothing ran in this window for these filters."))
-                    .frame(maxWidth: .infinity).listRowBackground(Color.clear)
+                ContentUnavailableView {
+                    Label("No runs observed", systemImage: "checkmark.seal")
+                } description: {
+                    Text("Nothing ran in this window for these filters.")
+                } actions: {
+                    if model.filter.isFiltered { Button("Clear filters") { model.clearFilters() } }
+                }
+                .frame(maxWidth: .infinity).listRowBackground(Color.clear)
             } else {
                 CISummarySection(totals: stats.totals)
                 if !stats.daily.isEmpty { Section("Runs per day") { CIDailyChart(days: stats.daily) }.listRowBackground(Theme.row) }
