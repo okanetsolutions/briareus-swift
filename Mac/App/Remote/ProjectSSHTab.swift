@@ -131,7 +131,7 @@ struct SSHSessionsPane: View {
                     .frame(minHeight: 200)
             } else {
                 EmptyNote(title: "No open sessions",
-                          detail: "Click a server on the left to open an SSH session here. It connects from this Mac straight to the server with your own OpenSSH client, so your keys, ssh-agent and ~/.ssh/config apply, and password prompts appear in the terminal.")
+                          detail: "Click a server on the left to open an SSH session here. It connects from this Mac straight to the server with your own OpenSSH client, so your keys, ssh-agent and ~/.ssh/config apply, though a new server\u{2019}s host key is saved without asking, and password prompts appear in the terminal.")
                     .padding(.top, 40)
                 Spacer(minLength: 0)
             }

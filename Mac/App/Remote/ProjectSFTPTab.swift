@@ -94,7 +94,7 @@ struct ProjectSFTPTab: View {
             }
         } else {
             EmptyNote(title: "No open sessions",
-                      detail: "Click a server on the left to browse its files here, and upload and download them. It connects from this Mac straight to the server with your own OpenSSH client, so your keys, ssh-agent and ~/.ssh/config apply; passwords are asked for in a window.")
+                      detail: "Click a server on the left to browse its files here, and upload and download them. It connects from this Mac straight to the server with your own OpenSSH client, so your keys, ssh-agent and ~/.ssh/config apply, though a new server\u{2019}s host key is saved without asking; passwords are asked for in a window.")
                 .padding(.top, 40)
         }
     }
@@ -104,7 +104,7 @@ struct ProjectSFTPTab: View {
         if state == .connecting {
             VStack(spacing: 8) {
                 LoadingNote(text: "Connecting to \(s.display)\u{2026}")
-                Text("New host keys are accepted automatically. A password is asked for in a window of its own.")
+                Text("A new server\u{2019}s host key is saved automatically. A password, or a jump host to trust, is asked for in a window of its own.")
                     .font(Theme.caption).foregroundStyle(Theme.muted).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }
