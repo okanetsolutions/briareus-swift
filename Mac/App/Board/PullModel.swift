@@ -156,10 +156,11 @@ final class PullModel: ObservableObject {
             // The description is its own read, once per visit and on refresh.
             if pr["body"].string == nil && !bodyRead && !readingBody && Store.shared.supports("pull_description") { Task { await loadBody() } }
             if Store.shared.supports("code_reviews") {
+                let mark = codeReviews.writes
                 let c = await boardCall("code_reviews", args)
                 guard gen == pullGen else { return nil }
                 switch c {
-                case .success(let v): codeReviews.take(v["codeReviews"])
+                case .success(let v): codeReviews.take(v["codeReviews"], readAt: mark)
                 case .failure(let e): if e.kind != .cancelled { codeReviews.failed(e.description) }
                 }
             }
