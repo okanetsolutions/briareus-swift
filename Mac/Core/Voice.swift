@@ -65,7 +65,8 @@ enum Voice {
 
     ## Reviews
     run_errand starts what the board's buttons start on a pull request: review runs the code review, which publishes \
-    its findings and then verifies each one; fix-checks fixes failing checks; solve-conflicts resolves conflicts. A pull \
+    its findings and then verifies each one; implement-feedback fixes what the pull request's open review feedback asks \
+    for and replies on each thread; fix-checks fixes failing checks; solve-conflicts resolves conflicts. A pull \
     request's code reviews and the findings they registered, each with the verify step's verdict (fix, optional or \
     dismissed), are read with list_code_reviews. The verdicts are the review's own: read them briefly, and when the user \
     wants something changed, send it to a conversation rather than deciding it here.
@@ -377,7 +378,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
             description = "The code reviews run on one of the project's pull requests, newest first: each one's status, what it ran on and its summary, and every finding it registered with its severity, place, what it says and the verify step's verdict (fix, optional or dismissed)."
             add("number", "integer", "The pull request's number.")
         case .runErrand:
-            description = "Starts an errand on one of the project's pull requests, as the board's buttons do: review (run the code review, publish its findings and verify them), fix-checks (fix failing CI checks) or solve-conflicts (merge the base in and resolve the conflicts)."
+            description = "Starts an errand on one of the project's pull requests, as the board's buttons do: review (run the code review, publish its findings and verify them), implement-feedback (fix what the open review feedback asks for and reply on each thread), fix-checks (fix failing CI checks) or solve-conflicts (merge the base in and resolve the conflicts)."
             add("number", "integer", "The pull request's number.")
             properties["errand"] = ["type": "string", "enum": .array(Voice.errands.map { .string($0) }), "description": "Which errand."]
             required.append("errand")
@@ -641,7 +642,7 @@ extension Voice {
         return out
     }
     /// The errands the voice can start on a pull request, by the board's ids.
-    static let errands = ["review", "fix-checks", "solve-conflicts"]
+    static let errands = ["review", "implement-feedback", "fix-checks", "solve-conflicts"]
     static func errand(_ id: String) -> BoardAction? {
         errands.contains(id) ? BoardAction.known.first { $0.id == id } : nil
     }
@@ -649,6 +650,8 @@ extension Voice {
     static func codeReview(_ r: CodeReview) -> JSON {
         var out: JSON = ["status": .string(r.status.rawValue), "ran_on": .string(r.meta),
                          "findings": .array(r.findings.map(finding))]
+        // Whether someone has dealt with its findings, on a server that tracks it.
+        if let handling = r.handling { out["handling"] = .string(handling.rawValue) }
         if let summary = r.summary { out["summary"] = .string(cut(CarText.inline(summary), 800)) }
         return out
     }

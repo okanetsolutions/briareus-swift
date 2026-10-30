@@ -116,7 +116,9 @@ final class PullScreenModel: ObservableObject {
         profiles = runProfilesParse(ProjectsModel.shared.raw, repo: repo)
         restore()
         codeReviews.changed = { [weak self] in self?.save() }
-        sinks.append(codeReviews.objectWillChange.sink { [weak self] _ in MainActor.assumeIsolated { self?.objectWillChange.send() } })
+        // Only the tab's count is drawn outside the tab, so only a change to it redraws the screen.
+        sinks.append(codeReviews.$reviews.combineLatest(codeReviews.$read).map { $1 ? $0.count : -1 }.removeDuplicates().dropFirst()
+            .sink { [weak self] _ in MainActor.assumeIsolated { self?.objectWillChange.send() } })
         take(feed.board)
         runs = feed.sessions.filter { $0.pullNumber == number }
         // The feed is shared with the board: what either reads shows on both.

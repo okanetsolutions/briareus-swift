@@ -13,12 +13,15 @@ final class CodeReviewsModel: ObservableObject {
     private(set) var raw: JSON = []
     /// Whether the reviews have been read, or restored from the last visit: until then the tab is loading.
     @Published private(set) var read = false
-    @Published var error: String?
-    /// The review or finding being saved (`review:5`, `finding:7`), and why the last save failed.
+    @Published private(set) var error: String?
+    /// The review or finding being saved (`review:5`, `finding:7`).
     @Published private(set) var saving: String?
-    @Published var saveError: String?
-    /// The finding whose verdict is being overruled, in its editor; nil when none is open.
-    @Published var editing: CodeReviewFindingEdit?
+    /// Why the last Mark handled or Reopen failed, shown on the tab.
+    @Published private(set) var saveError: String?
+    /// The finding whose verdict is being overruled, in its sheet; nil when none is open. Closing it drops its error.
+    @Published var editing: CodeReviewFindingEdit? { didSet { if editing == nil { editError = nil } } }
+    /// Why the last verdict save failed, shown in the sheet.
+    @Published private(set) var editError: String?
     /// Counts each write's start and end. A `code_reviews` read that began before a write, or while one was under way,
     /// may predate it and would put back what it changed; the mark it began at tells (`take(_:readAt:)`).
     private(set) var writes = 0
@@ -27,8 +30,17 @@ final class CodeReviewsModel: ObservableObject {
 
     init(repo: String, number: Int) { self.repo = repo; self.number = number }
 
-    var canHandle: Bool { Store.shared.supports("update_code_review") }
-    var canEditFindings: Bool { Store.shared.supports("update_code_review_finding") }
+    /// The server offers each write and this token may make it.
+    private var canHandle: Bool { Store.shared.supports("update_code_review") }
+    private var canEditFindings: Bool { Store.shared.supports("update_code_review_finding") }
+
+    /// What the tab says went wrong: the read first, then the last handling save.
+    var notice: String? { error ?? saveError }
+    /// Mark handled or Reopen, when this token and server can change the review's handling.
+    func handlingAction(for review: CodeReview) -> CodeReviewHandlingAction? { canHandle ? review.handlingAction : nil }
+    func isSaving(_ review: CodeReview) -> Bool { saving == "review:\(review.id)" }
+    /// Change verdict is offered on a stopped review's findings, and not while another save is under way.
+    func canEdit(_ review: CodeReview) -> Bool { canEditFindings && review.canEditFindings && saving == nil }
 
     // MARK: Reading
 
@@ -48,39 +60,42 @@ final class CodeReviewsModel: ObservableObject {
 
     // MARK: Writing
 
-    func setHandled(_ review: CodeReview, _ handled: Bool) {
-        guard saving == nil, canHandle, review.canChangeHandling else { return }
-        let args = review.handlingArguments(repo: repo, number: number, handled: handled)
-        write("review:\(review.id)", "update_code_review", args) { CodeReview.replacing(review: $0["review"], in: $1) }
+    func setHandled(_ review: CodeReview) {
+        guard saving == nil, let action = handlingAction(for: review) else { return }
+        let args = review.handlingArguments(repo: repo, number: number, action)
+        write("review:\(review.id)", "update_code_review", args, failure: \.saveError) {
+            CodeReview.replacing(review: $0["review"], in: $1)
+        }
     }
 
-    /// Opens the editor on a finding of a review that has stopped running.
+    /// Opens the sheet on a finding of a review that has stopped running.
     func edit(_ finding: CodeReviewFinding, of review: CodeReview) {
-        guard saving == nil, canEditFindings, review.canEditFindings else { return }
-        saveError = nil
+        guard canEdit(review) else { return }
+        editError = nil
         editing = CodeReviewFindingEdit(finding, review: review.id)
     }
-    /// Saves an overruled verdict; the editor closes once the server took it, and stays open with the reason when not.
+    /// Saves an overruled verdict; the sheet closes once the server took it, and stays open with the reason when not.
     func save(_ edit: CodeReviewFindingEdit) {
         guard saving == nil, canEditFindings, edit.canSave else { return }
         editing = edit
         let args = edit.arguments(repo: repo, number: number)
-        write("finding:\(edit.findingID)", "update_code_review_finding", args, fold: {
+        write("finding:\(edit.findingID)", "update_code_review_finding", args, failure: \.editError, fold: {
             CodeReview.replacing(finding: $0["finding"], inReview: edit.reviewID, in: $1)
         }, done: { [weak self] saved in
             if saved, self?.editing?.id == edit.id { self?.editing = nil }
         })
     }
 
-    /// One write, its answer folded into the list, then `done` with whether the server took it. It counts as saving from
-    /// the tap, so a second tap waits. A failure that is not a refusal may still have been saved.
-    private func write(_ key: String, _ call: String, _ args: JSON, fold: @escaping (JSON, JSON) -> JSON,
-                       done: @escaping @MainActor (Bool) -> Void = { _ in }) {
-        saving = key; saveError = nil
+    /// One write, its answer folded into the list, then `done` with whether the server took it; a failure lands on
+    /// `failure`. It counts as saving from the tap, so a second tap waits.
+    private func write(_ key: String, _ call: String, _ args: JSON, failure: ReferenceWritableKeyPath<CodeReviewsModel, String?>,
+                       fold: @escaping (JSON, JSON) -> JSON, done: @escaping @MainActor (Bool) -> Void = { _ in }) {
+        saving = key; saveError = nil; editError = nil
         writes += 1
-        Task { done(await send(call, args, fold: fold)) }
+        Task { done(await send(call, args, failure: failure, fold: fold)) }
     }
-    private func send(_ call: String, _ args: JSON, fold: (JSON, JSON) -> JSON) async -> Bool {
+    private func send(_ call: String, _ args: JSON, failure key: ReferenceWritableKeyPath<CodeReviewsModel, String?>,
+                      fold: (JSON, JSON) -> JSON) async -> Bool {
         defer { saving = nil; writes += 1 }
         do {
             let answer = try await Store.shared.call(call, args)
@@ -88,8 +103,7 @@ final class CodeReviewsModel: ObservableObject {
             changed()
             return true
         } catch {
-            guard let said = failure(error) else { return false }
-            saveError = SettingsWritePolicy.isUncertain(error) ? "\(said) It may still have been saved; refresh before trying again." : said
+            if let said = failure(error) { self[keyPath: key] = SettingsWritePolicy.failureText(said, error) }
             return false
         }
     }

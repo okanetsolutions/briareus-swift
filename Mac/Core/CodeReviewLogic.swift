@@ -23,6 +23,9 @@ enum CodeReviewVerdict: String, Equatable, Sendable, CaseIterable {
         case .dismiss: return .muted
         }
     }
+    /// What a verdict editor offers, in the same order on both apps; nil leaves the finding unverified.
+    static let choices: [CodeReviewVerdict?] = allCases.map(Optional.some) + [nil]
+    static func choiceTitle(_ verdict: CodeReviewVerdict?) -> String { verdict?.title ?? "None" }
 }
 
 /// Whether an independent check reproduced a finding, or it is only likely.
@@ -91,6 +94,17 @@ enum CodeReviewHandling: String, Equatable, Sendable {
 
     var title: String { self == .handled ? "Handled" : "Pending" }
     var tone: RowTone { self == .handled ? .ok : .muted }
+}
+
+/// What a person can do to a stopped review's handling: mark it handled, or reopen a handled one as pending.
+enum CodeReviewHandlingAction: Equatable, Sendable {
+    case markHandled, reopen
+
+    var title: String { self == .markHandled ? "Mark handled" : "Reopen" }
+    /// The SF Symbol before it.
+    var symbol: String { self == .markHandled ? "checkmark.circle" : "arrow.uturn.backward" }
+    /// The handling it sets: handled, or back to pending.
+    var handles: Bool { self == .markHandled }
 }
 
 /// How a code review run ended.
@@ -173,15 +187,19 @@ struct CodeReview: Equatable, Sendable, Identifiable {
     /// How many findings carry each verdict, and how many wait for one.
     var counts: CodeReviewCounts { CodeReviewCounts(findings) }
 
-    /// It can be marked handled or reopened once it stopped running: a running review is still writing its findings.
-    var canChangeHandling: Bool { handling != nil && status != .running }
+    /// What can be done to its handling once it stopped running (a running review is still writing its findings); nil
+    /// while it runs, or from a server that does not track handling.
+    var handlingAction: CodeReviewHandlingAction? {
+        guard let handling, status != .running else { return nil }
+        return handling == .handled ? .reopen : .markHandled
+    }
     /// Its findings' verdicts can be overruled once it stopped running, when its own verify step is done with them.
     var canEditFindings: Bool { status != .running }
 
     /// What `update_code_review` sends to mark it handled, or to reopen it as pending.
-    func handlingArguments(repo: String, number: Int, handled: Bool) -> JSON {
+    func handlingArguments(repo: String, number: Int, _ action: CodeReviewHandlingAction) -> JSON {
         ["repo": .string(repo), "pr": JSON(number), "reviewId": JSON(id),
-         "handlingStatus": .string((handled ? CodeReviewHandling.handled : .pending).rawValue)]
+         "handlingStatus": .string((action.handles ? CodeReviewHandling.handled : .pending).rawValue)]
     }
 
     /// The `code_reviews` list with `review` (as `update_code_review` answers it, findings and all) in place of the one with
@@ -232,6 +250,8 @@ struct CodeReviewFindingEdit: Equatable, Sendable, Identifiable {
     /// Not fixing a finding has to say why.
     var needsReason: Bool { verdict == .optional || verdict == .dismiss }
     var canSave: Bool { isDirty && (!needsReason || !reason.cTrimmed.isEmpty) }
+    /// What the reason box asks for: why it will not be fixed, once that is the verdict.
+    var reasonPrompt: String { needsReason ? "Why it will not be fixed" : "Why the verdict is what it is" }
 
     /// The verdict and reason that changed, with the review and finding they belong to; null clears either.
     func arguments(repo: String, number: Int) -> JSON {
@@ -271,10 +291,7 @@ struct CodeReviewCounts: Equatable, Sendable {
 }
 
 extension Array where Element == CodeReview {
-    /// The findings of the newest completed review, what a pull request still carries: a clean one carries none, and
-    /// neither does one someone marked handled. While none has completed, the newest review's findings so far.
-    var latestFindings: [CodeReviewFinding] {
-        guard let latest = first(where: { $0.status == .completed }) ?? first, latest.handling != .handled else { return [] }
-        return latest.findings
-    }
+    /// The findings of the newest completed review, what a pull request still carries: a clean one carries none. While
+    /// none has completed, the newest review's findings so far.
+    var latestFindings: [CodeReviewFinding] { (first { $0.status == .completed } ?? first)?.findings ?? [] }
 }

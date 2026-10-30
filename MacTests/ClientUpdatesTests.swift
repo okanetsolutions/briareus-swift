@@ -73,6 +73,12 @@ final class ClientUpdatesTests: XCTestCase {
         }
         XCTAssertTrue(SettingsWritePolicy.isUncertain(CancellationError()))
     }
+    func testAFailedWriteSaysMoreOnlyWhenItMayStillHaveLanded() {
+        XCTAssertEqual(SettingsWritePolicy.failureText("Refused.", APIError(.http, status: 400)), "Refused.")
+        let uncertain = SettingsWritePolicy.failureText("Lost.", APIError(.network))
+        XCTAssertTrue(uncertain.hasPrefix("Lost."))
+        XCTAssertGreaterThan(uncertain.count, "Lost.".count)
+    }
     func testPersonalConnectionRecoveryKeepsAddressAndClearsSecret() throws {
         var form = PersonalConnectionFormState()
         let saved = try XCTUnwrap(PersonalConnectionStatus(["connected": false]))

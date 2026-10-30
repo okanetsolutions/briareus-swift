@@ -10,9 +10,7 @@ struct PullCodeReviewsTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let e = model.error { Notice(message: e) }
-            // A failed verdict save shows in its editor.
-            if let e = model.saveError, model.editing == nil { Notice(message: e) }
+            if let e = model.notice { Notice(message: e) }
             if !model.read {
                 LoadingNote(text: "Loading code reviews\u{2026}")
             } else if model.reviews.isEmpty && model.error == nil {
@@ -44,13 +42,7 @@ private struct CodeReviewCard: View {
                 if let sid = review.openableSessionID {
                     Button("Open session") { openSession(sid) }.dashButton(.bordered)
                 }
-                if model.canHandle && review.canChangeHandling {
-                    let handled = review.handling == .handled
-                    Button(model.saving == "review:\(review.id)" ? "Saving\u{2026}" : handled ? "Reopen" : "Mark handled") {
-                        model.setHandled(review, !handled)
-                    }
-                    .dashButton(.bordered).disabled(model.saving != nil)
-                }
+                if let action = model.handlingAction(for: review) { HandlingButton(review: review, action: action, model: model) }
             }
             if !review.meta.isEmpty {
                 Text(review.meta).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.tail).padding(.top, 6)
@@ -61,14 +53,38 @@ private struct CodeReviewCard: View {
             }
             if !review.findings.isEmpty {
                 BoardRule().padding(.vertical, 10)
-                VStack(alignment: .leading, spacing: 8) {
-                    let editable = model.canEditFindings && review.canEditFindings
-                    ForEach(review.findings) { finding in
-                        CodeReviewFindingRow(finding: finding, edit: editable ? { model.edit(finding, of: review) } : nil)
-                        if let edit = model.editing, edit.reviewID == review.id, edit.findingID == finding.id {
-                            CodeReviewFindingEditor(model: model, edit: edit).padding(.leading, 22)
-                        }
-                    }
+                CodeReviewFindingList(review: review, model: model)
+            }
+        }
+    }
+}
+
+/// Mark handled, or Reopen a handled review; Saving… while it is saved.
+private struct HandlingButton: View {
+    var review: CodeReview
+    var action: CodeReviewHandlingAction
+    @ObservedObject var model: CodeReviewsModel
+
+    var body: some View {
+        Button { model.setHandled(review) } label: {
+            Label(model.isSaving(review) ? "Saving\u{2026}" : action.title, systemImage: action.symbol)
+        }
+        .dashButton(.bordered).disabled(model.saving != nil)
+    }
+}
+
+/// A review's findings, the verdict editor open under the one being changed.
+private struct CodeReviewFindingList: View {
+    var review: CodeReview
+    @ObservedObject var model: CodeReviewsModel
+
+    var body: some View {
+        let editable = model.canEdit(review)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(review.findings) { finding in
+                CodeReviewFindingRow(finding: finding, edit: editable ? { model.edit(finding, of: review) } : nil)
+                if let edit = model.editor(for: finding, of: review) {
+                    CodeReviewFindingEditor(model: model, edit: edit).padding(.leading, 22)
                 }
             }
         }

@@ -93,7 +93,9 @@ final class PullModel: ObservableObject {
         profiles = runProfilesParse(ProjectsModel.shared.raw, repo: repo)
         serve.want = UserDefaults.standard.string(forKey: runWantKey)
         codeReviews.changed = { [weak self] in self?.save() }
-        codeReviewsSink = codeReviews.objectWillChange.sink { [weak self] _ in MainActor.assumeIsolated { self?.objectWillChange.send() } }
+        // Only the tab's count is drawn outside the tab, so only a change to it redraws the screen.
+        codeReviewsSink = codeReviews.$reviews.combineLatest(codeReviews.$read).map { $1 ? $0.count : -1 }.removeDuplicates().dropFirst()
+            .sink { [weak self] _ in MainActor.assumeIsolated { self?.objectWillChange.send() } }
     }
 
     var id: String { "pull:\(repo)#\(number)" }

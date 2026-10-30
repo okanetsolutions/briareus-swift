@@ -10,8 +10,7 @@ struct PullCodeReviewsTab: View {
 
     var body: some View {
         let reviews = model.reviews, error = model.error
-        // A failed save shows in the editor while it is open.
-        if let message = error ?? (model.editing == nil ? model.saveError : nil) {
+        if let message = model.notice {
             Section { ErrorNotice(message: message) }.listRowBackground(Theme.row)
         }
         if reviews.isEmpty {
@@ -42,11 +41,11 @@ private struct CodeReviewSection: View {
                     Label("Open session", systemImage: "bubble.left.and.bubble.right")
                 }
             }
-            if model.canHandle && review.canChangeHandling { HandlingButton(review: review, model: model) }
+            if let action = model.handlingAction(for: review) { HandlingButton(review: review, action: action, model: model) }
             if let summary = review.summary.map(visibleMarkdown), !summary.isEmpty {
                 DisclosureGroup("Summary") { MarkdownText(summary).font(.callout) }
             }
-            let editable = model.canEditFindings && review.canEditFindings
+            let editable = model.canEdit(review)
             ForEach(review.findings) { finding in
                 CodeReviewFindingRow(finding: finding, edit: editable ? { model.edit(finding, of: review) } : nil)
             }
@@ -58,14 +57,14 @@ private struct CodeReviewSection: View {
 /// Mark handled, or Reopen a handled review; a spinner while it is saved.
 private struct HandlingButton: View {
     let review: CodeReview
+    let action: CodeReviewHandlingAction
     @ObservedObject var model: CodeReviewsModel
 
     var body: some View {
-        let handled = review.handling == .handled
-        Button { model.setHandled(review, !handled) } label: {
+        Button { model.setHandled(review) } label: {
             HStack {
-                Label(handled ? "Reopen" : "Mark handled", systemImage: handled ? "arrow.uturn.backward" : "checkmark.circle")
-                if model.saving == "review:\(review.id)" { Spacer(); ProgressView() }
+                Label(action.title, systemImage: action.symbol)
+                if model.isSaving(review) { Spacer(); ProgressView() }
             }
         }
         .disabled(model.saving != nil)

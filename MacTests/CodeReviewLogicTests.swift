@@ -185,14 +185,10 @@ final class CodeReviewLogicTests: XCTestCase {
         XCTAssertEqual(CodeReview.parse(j(#"{"codeReviews":[{"id":1,"findings":[]}]}"#)).latestFindings, [])
     }
 
-    func testAHandledReviewLeavesNothingCarriedAndAnOlderOneDoesNotSpeakForIt() {
-        let handled = CodeReview.parse(j(#"""
-        {"codeReviews":[{"id":2,"status":"completed","handlingStatus":"handled","findings":[{"id":20,"shouldFix":"fix"}]},
-                        {"id":1,"status":"completed","handlingStatus":"pending","findings":[{"id":10}]}]}
-        """#))
-        XCTAssertEqual(handled.latestFindings, [])
-        let reopened = CodeReview.parse(j(#"{"codeReviews":[{"id":2,"status":"completed","handlingStatus":"pending","findings":[{"id":20}]}]}"#))
-        XCTAssertEqual(reopened.latestFindings.map(\.id), [20])
+    func testAHandledReviewStillCarriesItsFindings() {
+        // Handling is a person's note on the review; what it found is still what CarPlay and the voice read.
+        let handled = CodeReview.parse(j(#"{"codeReviews":[{"id":2,"status":"completed","handlingStatus":"handled","findings":[{"id":20}]}]}"#))
+        XCTAssertEqual(handled.latestFindings.map(\.id), [20])
     }
 
     // MARK: - Handling
@@ -206,21 +202,23 @@ final class CodeReviewLogicTests: XCTestCase {
     }
 
     func testOnlyAStoppedReviewOnAServerThatTracksHandlingCanChangeIt() {
-        XCTAssertTrue(review(#"{"id":1,"status":"completed","handlingStatus":"pending"}"#)!.canChangeHandling)
-        XCTAssertTrue(review(#"{"id":1,"status":"failed","handlingStatus":"handled"}"#)!.canChangeHandling)
-        XCTAssertFalse(review(#"{"id":1,"status":"running","handlingStatus":"pending"}"#)!.canChangeHandling)
-        XCTAssertFalse(review(#"{"id":1,"status":"completed"}"#)!.canChangeHandling)
+        XCTAssertEqual(review(#"{"id":1,"status":"completed","handlingStatus":"pending"}"#)!.handlingAction, .markHandled)
+        XCTAssertEqual(review(#"{"id":1,"status":"failed","handlingStatus":"handled"}"#)!.handlingAction, .reopen)
+        XCTAssertNil(review(#"{"id":1,"status":"running","handlingStatus":"pending"}"#)!.handlingAction)
+        XCTAssertNil(review(#"{"id":1,"status":"completed"}"#)!.handlingAction)
+        XCTAssertTrue(CodeReviewHandlingAction.markHandled.handles); XCTAssertFalse(CodeReviewHandlingAction.reopen.handles)
+        XCTAssertNotEqual(CodeReviewHandlingAction.markHandled.symbol, CodeReviewHandlingAction.reopen.symbol)
         XCTAssertTrue(review(#"{"id":1,"status":"completed"}"#)!.canEditFindings)
         XCTAssertFalse(review(#"{"id":1,"status":"running"}"#)!.canEditFindings)
     }
 
     func testMarkingHandledSendsOnlyWhatTheRouteTakes() throws {
         let r = review(#"{"id":5,"repo":"O/R","status":"completed","handlingStatus":"pending"}"#)!
-        let a = r.handlingArguments(repo: "o/r", number: 9, handled: true)
+        let a = r.handlingArguments(repo: "o/r", number: 9, .markHandled)
         XCTAssertEqual(a.count, 4)
         XCTAssertEqual(a["repo"].string, "o/r"); XCTAssertEqual(a["pr"].int, 9); XCTAssertEqual(a["reviewId"].int, 5)
         XCTAssertEqual(a["handlingStatus"].string, "handled")
-        XCTAssertEqual(r.handlingArguments(repo: "o/r", number: 9, handled: false)["handlingStatus"].string, "pending")
+        XCTAssertEqual(r.handlingArguments(repo: "o/r", number: 9, .reopen)["handlingStatus"].string, "pending")
         // The pull request and review go in the path; the server refuses any body field but these.
         let (path, rest) = try APIClient.resolve(try XCTUnwrap(APIRoute.named("update_code_review")), a)
         XCTAssertEqual(path, "pulls/9/code-reviews/5")
@@ -282,6 +280,11 @@ final class CodeReviewLogicTests: XCTestCase {
         XCTAssertEqual(Set(rest.keys), ["repo", "shouldFix", "comments"])
     }
 
+    func testEveryVerdictIsAChoiceAndNoneComesLast() {
+        XCTAssertEqual(CodeReviewVerdict.choices, [.fix, .optional, .dismiss, nil])
+        XCTAssertEqual(Set(CodeReviewVerdict.choices.map(CodeReviewVerdict.choiceTitle)).count, CodeReviewVerdict.choices.count)
+    }
+
     func testNotFixingAFindingNeedsAReason() {
         var e = CodeReviewFindingEdit(finding(#"{"id":1,"shouldFix":"fix"}"#)!, review: 1)
         for verdict in [CodeReviewVerdict.optional, .dismiss] {
@@ -290,8 +293,10 @@ final class CodeReviewLogicTests: XCTestCase {
             e.reason = "Refuted by the guard on line 4."
             XCTAssertTrue(e.canSave)
         }
+        let asksWhyNotFixed = e.reasonPrompt
         e.verdict = nil; e.reason = ""
         XCTAssertFalse(e.needsReason); XCTAssertTrue(e.canSave)
+        XCTAssertNotEqual(e.reasonPrompt, asksWhyNotFixed)
     }
 
     func testClearingAVerdictOrAReasonSendsNull() {

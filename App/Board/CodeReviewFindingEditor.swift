@@ -25,8 +25,7 @@ private struct CodeReviewFindingEditor: View {
                 Section {
                     Text(edit.title).font(.subheadline)
                     Picker("Verdict", selection: $edit.verdict) {
-                        Text("None").tag(CodeReviewVerdict?.none)
-                        ForEach(CodeReviewVerdict.allCases, id: \.self) { Text($0.title).tag(Optional($0)) }
+                        ForEach(CodeReviewVerdict.choices, id: \.self) { Text(CodeReviewVerdict.choiceTitle($0)).tag($0) }
                     }
                     .pickerStyle(.segmented)
                 } header: {
@@ -34,8 +33,8 @@ private struct CodeReviewFindingEditor: View {
                 }
                 .listRowBackground(Theme.row)
                 Section {
-                    TextField("Why the verdict is what it is", text: $edit.reason, axis: .vertical).lineLimit(3...10)
-                    if let error = model.saveError { ErrorNotice(message: error) }
+                    TextField(edit.reasonPrompt, text: $edit.reason, axis: .vertical).lineLimit(3...10)
+                    if let error = model.editError { ErrorNotice(message: error) }
                 } header: {
                     Text("Reason")
                 } footer: {
