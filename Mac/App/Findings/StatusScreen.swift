@@ -1,6 +1,6 @@
 // The ◉ Status screen, Quest's status panel: how many conversations need you, are working and are ready, then every one
-// waiting for you, with the agent's question, its options as buttons and a reply field (a held review round links to its
-// conversation to decide it), then what is working now. It reads the sessions the sidebar keeps live (the /events stream,
+// waiting for you, with the agent's question, its options as buttons and a reply field, the approvals and other items the
+// server's attention inbox holds, then what is working now. It reads the sessions the sidebar keeps live (the /events stream,
 // or its poll), so it needs no loop of its own; only a waiting conversation's question is read from its transcript.
 import SwiftUI
 
@@ -29,11 +29,12 @@ final class StatusQuestions: ObservableObject {
 struct StatusScreen: View {
     @ObservedObject private var projects = ProjectsModel.shared
     @ObservedObject private var store = Store.shared
+    @ObservedObject private var attention = AttentionModel.shared
 
     var body: some View {
         let o = projects.overview
         VStack(spacing: 0) {
-            PaneHeader(title: "\u{25C9} Status", subtitle: subtitle(o), buttons: serverButton)
+            PaneHeader(title: "\u{25C9} Status", subtitle: subtitle(o), buttons: headerButtons)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     Color.clear.frame(height: 4)
@@ -44,6 +45,7 @@ struct StatusScreen: View {
                     }
                     if !o.needingYou.isEmpty { heading("Waiting for you") }
                     ForEach(o.needingYou, id: \.id) { WaitingCard(session: $0) }
+                    AttentionSection(model: attention).padding(.top, 6)
                     if !o.working.isEmpty { heading("Working") }
                     ForEach(o.working, id: \.id) { WorkingRow(session: $0) }
                     if o.quiet && projects.loaded {
@@ -62,12 +64,20 @@ struct StatusScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .refreshScreen)) { _ in Task { await projects.load() } }
     }
 
-    /// What the machine spends on the sessions working here, on a server that reports it.
-    private var serverButton: [HeaderButton] {
-        guard store.supports("server_stats") else { return [] }
-        return [HeaderButton(glyph: "gauge.with.dots.needle.33percent", label: "\u{25A4} Server", tip: "The server's CPU, memory and disks") {
-            Navigator.shared.push(.serverStats)
-        }]
+    /// What the machine spends on the sessions working here, and the CI/CD history, on a server that reports each.
+    private var headerButtons: [HeaderButton] {
+        var buttons: [HeaderButton] = []
+        if store.supports("ci_stats") {
+            buttons.append(HeaderButton(glyph: "checkmark.seal", label: "CI/CD", tip: "Checks and their runs across the projects") {
+                Navigator.shared.push(.ciStats)
+            })
+        }
+        if store.supports("server_stats") {
+            buttons.append(HeaderButton(glyph: "gauge.with.dots.needle.33percent", label: "\u{25A4} Server", tip: "The server's CPU, memory and disks") {
+                Navigator.shared.push(.serverStats)
+            })
+        }
+        return buttons
     }
     private func subtitle(_ o: SessionOverview) -> String {
         if o.quiet { return "nothing waits for you" }
@@ -120,7 +130,7 @@ private struct SessionHeading: View {
     }
 }
 
-/// A conversation waiting for you: the question and a quick reply, or a link to decide its findings.
+/// A conversation waiting for you: the question and a quick reply.
 private struct WaitingCard: View {
     var session: Session
     @ObservedObject private var questions = StatusQuestions.shared
@@ -137,9 +147,7 @@ private struct WaitingCard: View {
                 Text(text).font(Theme.footnote).foregroundStyle(Theme.muted).lineLimit(5).truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if session.state == .findings {
-                Button("Decide the findings \u{2192}") { openSession(session) }.dashButton(.bordered)
-            } else if canAnswer {
+            if canAnswer {
                 if let options = question?.options, !options.isEmpty {
                     FlowLayout(spacing: 6, lineSpacing: 6) {
                         ForEach(Array(options.enumerated()), id: \.offset) { _, label in

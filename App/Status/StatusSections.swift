@@ -1,8 +1,7 @@
-// ◉ Status at the top of the Findings tab, the Mac's Status screen laid out for a phone: how many conversations need you,
-// are working and are ready, then every one waiting for your answer, with the agent's question, its options as buttons
-// and a reply field, then what is working now. The review rounds held for a decision are the tab's queue below it, each
-// opening its triage card. It reads the sessions the projects' feeds already keep (the tab's own reading of every
-// project), so it needs no loop of its own; only a waiting conversation's question is read from its transcript.
+// ◉ Status, the Mac's Status screen laid out for a phone: how many conversations need you, are working and are ready,
+// then every one waiting for your answer, with the agent's question, its options as buttons and a reply field, then what
+// is working now. It reads the sessions the projects' feeds already keep (the Status tab's own reading of every project),
+// so it needs no loop of its own; only a waiting conversation's question is read from its transcript.
 import SwiftUI
 
 /// The questions the waiting conversations left, read from each transcript: the saved lines and what came since.
@@ -27,7 +26,7 @@ final class StatusQuestions: ObservableObject {
     }
 }
 
-/// The counts, the conversations waiting for an answer and those working, as sections of the Findings list.
+/// The counts, the conversations waiting for an answer and those working, as sections of the Status list.
 struct StatusSections: View {
     @ObservedObject private var projects = ProjectsModel.shared
 

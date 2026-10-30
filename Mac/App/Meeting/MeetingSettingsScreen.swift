@@ -135,7 +135,7 @@ struct MeetingSettingsScreen: View {
                     NoticeBox(message: m.text).padding(.bottom, 14)
                 }
             }
-            SettingsNote(text: "On a project, 🎙 Meet joins your meeting: the assistant hears the meeting app, speaks through a virtual microphone, and looks up the project's conversations, pull requests, findings and issues. It only reads: it never starts, messages, merges or closes anything.")
+            SettingsNote(text: "On a project, 🎙 Meet joins your meeting: the assistant hears the meeting app, speaks through a virtual microphone, and looks up the project's conversations, pull requests, code reviews and issues. It only reads: it never starts, messages, merges or closes anything.")
             SettingsPair { field(.key) } right: { field(.voice) }
             SettingsPair { field(.name) } right: { field(.wake) }
             SettingsCheck(label: "Act independently: take part on my behalf and answer what is asked of me", on: model.independent) { model.toggle(true) }

@@ -226,12 +226,10 @@ final class BoardLogicTests: XCTestCase {
         XCTAssertEqual(tree.nodes[rows[4].node].file, 1)
     }
 
-    func testFindingsCountsAndCatalog() {
-        let f = j(#"[{"fixed":true,"decision":"fix"},{"decision":"fix"},{"decision":"optional"},{}]"#)
-        XCTAssertEqual(findingsUnfixed(f), 3)
-        XCTAssertEqual(findingsToFix(f), 1)
-        XCTAssertTrue(catalogLists(.null, "implement-feedback"))
-        XCTAssertFalse(catalogLists(j(#"[{"id":"review"}]"#), "implement-feedback"))
+    func testCatalogAndDiffstat() {
+        XCTAssertTrue(catalogLists(.null, "fix-checks"))
+        XCTAssertTrue(catalogLists(j(#"[{"id":"review"}]"#), "review"))
+        XCTAssertFalse(catalogLists(j(#"[{"id":"review"}]"#), "fix-checks"))
         XCTAssertTrue(diffstatBlocks(additions: 30, deletions: 10) == (3, 1))
         XCTAssertTrue(diffstatBlocks(additions: 0, deletions: 0) == (0, 0))
     }
@@ -270,8 +268,10 @@ extension BoardLogicTests {
         XCTAssertTrue(actions.errands.contains { $0.id == "run" })
         XCTAssertFalse(actions.menuErrands.contains { $0.id == "run" })
         XCTAssertTrue(actions.menuErrands.contains { $0.id == "review" })
-        let withoutReview = BoardPullActions(pull: pull, catalog: [], canManage: true, supports: { $0 != "review" })
-        XCTAssertNil(withoutReview.suggested)
+        // Code review starts through `action` like every errand, so a server without it has nothing to suggest.
+        let withoutActions = BoardPullActions(pull: pull, catalog: [], canManage: true, supports: { $0 != "action" })
+        XCTAssertNil(withoutActions.suggested)
+        XCTAssertFalse(withoutActions.menuErrands.contains { $0.id == "review" })
     }
 
     func testDraftAndMissingBranchHaveIndependentRestrictions() {

@@ -42,7 +42,6 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(WorkspaceMode.local.noBranchLabel(defaultBranch: "main"), "Current branch")
         XCTAssertEqual(WorkspaceMode.orchestrator.noBranchLabel(defaultBranch: nil), "New branch off main")
         XCTAssertEqual(WorkspaceMode.local.menuTitle(hasLocal: false), "\u{2302} Local: no local checkout set in Settings")
-        XCTAssertEqual(WorkspaceMode.allCases.filter(\.hasReviewLoop), [.worktree])
     }
     func testProjectWithoutLabel() {
         let p = Project(j(#"{"repo":"o/b"}"#))!
@@ -96,29 +95,6 @@ final class ModelsTests: XCTestCase {
             let s = session(off); XCTAssertFalse(s.liveInput); XCTAssertTrue(s.queued.isNull)
         }
     }
-    func testSessionReviewLoopFlags() {
-        var s = session(#"{"id":"a","status":"idle","reviewLoop":{"on":true}}"#)
-        XCTAssertTrue(s.reviewLoopOn); XCTAssertTrue(s.canReviewLoop)
-        s = session(#"{"id":"a","status":"idle"}"#); XCTAssertFalse(s.reviewLoopOn); XCTAssertTrue(s.canReviewLoop)
-        // Every flag that marks a session as not started from scratch on a task rules the loop out; an unset value does not.
-        let flags = [#""reviewBranch":"f""#, #""qaBranch":"q""#, #""autoClose":true"#, #""loopParentId":"p""#, #""local":true"#, #""orchestrator":1"#]
-        let unset = [#""reviewBranch":"""#, #""qaBranch":null"#, #""autoClose":false"#, #""loopParentId":null"#, #""local":false"#, #""orchestrator":0"#]
-        for i in 0..<6 {
-            XCTAssertFalse(session(#"{"id":"a","status":"idle",\#(flags[i])}"#).canReviewLoop, flags[i])
-            XCTAssertTrue(session(#"{"id":"a","status":"idle",\#(unset[i])}"#).canReviewLoop, unset[i])
-        }
-        XCTAssertFalse(session(#"{"id":"a","status":"closed"}"#).canReviewLoop)
-    }
-    func testHeldTriageNeedsFindingsAndPrefersTheStandaloneReview() {
-        var s = session(#"{"id":"a","status":"idle","reviewTriage":{"findings":[{"key":"own"}]},"reviewLoop":{"triage":{"findings":[{"key":"loop"}]}}}"#)
-        XCTAssertEqual(s.heldTriage?["findings"][0]["key"].string, "own")
-        // The Findings screen's round prefers the loop's.
-        XCTAssertEqual(s.heldRound?["findings"][0]["key"].string, "loop")
-        s = session(#"{"id":"a","status":"idle","reviewTriage":{"findings":[]},"reviewLoop":{"triage":{"findings":[{"key":"loop"}]}}}"#)
-        XCTAssertEqual(s.heldTriage?["findings"][0]["key"].string, "loop")
-        s = session(#"{"id":"a","status":"idle","reviewTriage":{},"reviewLoop":{"triage":{"findings":[]}}}"#)
-        XCTAssertNil(s.heldTriage); XCTAssertNotNil(s.heldRound)
-    }
     func testSessionPullNumberIgnoresWhatIsNotAPullRequest() {
         XCTAssertNil(session(#"{"id":"s","status":"idle","prStatus":{"number":-3}}"#).pullNumber)
         XCTAssertNil(session(#"{"id":"s","status":"idle","startedOnPr":"4"}"#).pullNumber)
@@ -131,80 +107,6 @@ final class ModelsTests: XCTestCase {
                      (#"{"id":"s","status":"idle","title":"Issue #12"}"#, false)]
         for (text, expected) in cases { XCTAssertEqual(session(text).onIssue(12), expected, text) }
         XCTAssertFalse(session(cases[0].0).onIssue(0))
-    }
-
-    // MARK: - Findings
-
-    func testHeldRoundsOfAnEmptyList() {
-        XCTAssertEqual(Session.heldRounds([]).count, 0)
-        let s = session(#"{"id":"a","status":"idle","reviewTriage":"held","reviewLoop":{"triage":[]}}"#)
-        XCTAssertNil(s.heldRound)
-        XCTAssertEqual(Session.heldRounds([s]).count, 0)
-    }
-    func testHeldRoundsWithEqualHoldsKeepTheListOrder() {
-        let s = Session.parseList(j(#"[{"id":"a","status":"idle","reviewTriage":{"heldAt":"2026-09-29T10:00:00Z"}},"#
-            + #"{"id":"b","status":"idle"},"#
-            + #"{"id":"c","status":"idle","reviewTriage":{"heldAt":"2026-09-29T09:00:00Z"}},"#
-            + #"{"id":"d","status":"idle","reviewTriage":{"heldAt":"2026-09-29T10:00:00Z"}},"#
-            + #"{"id":"e","status":"idle","reviewTriage":{"heldAt":"2026-09-29T09:00:00Z"}}]"#))!
-        let r = Session.heldRounds(s)
-        XCTAssertEqual(r.map(\.index), [2, 4, 0, 3])
-        XCTAssertEqual(r[0].held, s[2].heldRound)
-    }
-    func testHeldRoundURLReusesTheConversationsOwnLinkOnlyForItsPullRequest() {
-        let held7 = j(#"{"prNumber":7}"#), held9 = j(#"{"prNumber":9}"#), none = j("{}")
-        var s = session(#"{"id":"a","status":"idle","repo":"o/r","prStatus":{"number":7,"url":"https://ghe.example/o/r/pull/7"}}"#)
-        XCTAssertEqual(s.heldRoundPRURL(held7), "https://ghe.example/o/r/pull/7")
-        XCTAssertEqual(s.heldRoundPRURL(held9), "https://github.com/o/r/pull/9")
-        // An empty link or one without a number is built from the round's number.
-        s = session(#"{"id":"a","status":"idle","repo":"o/r","prStatus":{"number":7,"url":""}}"#)
-        XCTAssertEqual(s.heldRoundPRURL(held7), "https://github.com/o/r/pull/7")
-        s = session(#"{"id":"a","status":"idle","repo":"o/r","prStatus":{"url":"https://ghe.example/x"}}"#)
-        XCTAssertEqual(s.heldRoundPRURL(held7), "https://github.com/o/r/pull/7")
-        s = session(#"{"id":"a","status":"idle"}"#)
-        XCTAssertEqual(s.heldRoundPRURL(held9), "https://github.com//pull/9")
-        // A round without a number has the conversation's own link, or none.
-        s = session(#"{"id":"a","status":"idle","repo":"o/r","prStatus":{"number":7,"url":"https://ghe.example/o/r/pull/7"}}"#)
-        XCTAssertEqual(s.heldRoundPRURL(none), "https://ghe.example/o/r/pull/7")
-        XCTAssertNil(session(#"{"id":"a","status":"idle","repo":"o/r"}"#).heldRoundPRURL(none))
-        XCTAssertEqual(heldRoundPRNumber(held7), 7); XCTAssertNil(heldRoundPRNumber(none)); XCTAssertNil(heldRoundPRNumber(.null))
-        XCTAssertNil(heldRoundPRNumber(j(#"{"prNumber":0}"#))); XCTAssertNil(heldRoundPRNumber(j(#"{"prNumber":"7"}"#)))
-    }
-    func testHeldRoundIsMineUnlessAStandaloneReviewSaysOtherwise() {
-        for m in ["{}", #"{"mine":false}"#, #"{"standalone":false,"mine":false}"#, #"{"standalone":null}"#, #"{"standalone":true,"mine":true}"#] {
-            XCTAssertTrue(heldRoundIsMine(j(m)), m)
-        }
-        for t in [#"{"standalone":true}"#, #"{"standalone":true,"mine":false}"#, #"{"standalone":true,"mine":"yes"}"#, #"{"standalone":1,"mine":1}"#] {
-            XCTAssertFalse(heldRoundIsMine(j(t)), t)
-        }
-    }
-    func testTriageOutcomeTextCoversEveryOutcome() {
-        let failed = "Verdicts recorded, but no fix session started. The session\u{2019}s log says why."
-        let cases: [(String, String, Bool)] = [
-            (#"{"completed":true,"prNumber":12}"#, "Review completed; what it found stays on PR #12 for its author.", false),
-            (#"{"completed":true}"#, "Review completed; what it found stays on the pull request for its author.", false),
-            (#"{"completed":true,"prNumber":"12"}"#, "Review completed; what it found stays on the pull request for its author.", false),
-            (#"{"converged":true,"approved":true}"#, "Verdicts recorded; nothing was left to fix, so code-approved was added and the loop converged.", false),
-            (#"{"approved":true,"fixing":true}"#, "Verdicts recorded; nothing was left to fix, so code-approved was added.", false),
-            (#"{"fixing":"session-id"}"#, "Verdicts recorded; a fix session is running.", false),
-            (#"{"reviewing":true,"deferred":true}"#, "Verdicts recorded; nothing was left to fix, but the branch had moved, so the new commits are being reviewed.", false),
-            (#"{"deferred":true}"#, "Verdicts recorded; nothing was left to fix, but the branch had moved. The new commits are reviewed once the session settles idle.", false),
-            (#"{"completed":false,"converged":null,"fixing":"","deferred":0}"#, failed, true),
-            ("{}", failed, true),
-        ]
-        for (outcome, text, danger) in cases {
-            let r = triageOutcomeText(j(outcome))
-            XCTAssertEqual(r.text, text, outcome); XCTAssertEqual(r.danger, danger, outcome)
-        }
-        XCTAssertEqual(triageOutcomeText(.null).text, failed); XCTAssertTrue(triageOutcomeText(.null).danger)
-    }
-    func testFindingsSubtitleCountsReviewsAndPullRequests() {
-        XCTAssertEqual(findingsSubtitle(rounds: 0, pullRequests: 0), "nothing is waiting")
-        XCTAssertEqual(findingsSubtitle(rounds: 0, pullRequests: 3), "nothing is waiting")
-        XCTAssertEqual(findingsSubtitle(rounds: 1, pullRequests: 1), "1 review waiting for a decision")
-        XCTAssertEqual(findingsSubtitle(rounds: 2, pullRequests: 2), "2 reviews waiting for a decision")
-        XCTAssertEqual(findingsSubtitle(rounds: 2, pullRequests: 1), "2 reviews on 1 pull request waiting for a decision")
-        XCTAssertEqual(findingsSubtitle(rounds: 5, pullRequests: 3), "5 reviews on 3 pull requests waiting for a decision")
     }
 
     // MARK: - Events and transcript
@@ -379,17 +281,6 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(c.offered(RuntimeChoice(providerId: 1, model: "gpt")))
         XCTAssertNil(c.offered(RuntimeChoice(providerId: 2)))
     }
-    func testLastReviewLoopIsOnUntilTurnedOff() {
-        let d = UserDefaults(suiteName: "LastReviewLoopTests")!
-        d.removePersistentDomain(forName: "LastReviewLoopTests")
-        XCTAssertTrue(LastReviewLoop.load(d))
-        LastReviewLoop.save(false, d)
-        XCTAssertFalse(LastReviewLoop.load(d))
-        LastReviewLoop.save(true, d)
-        XCTAssertTrue(LastReviewLoop.load(d))
-        d.removePersistentDomain(forName: "LastReviewLoopTests")
-    }
-
     func testLastRuntimeRoundTripsAndForgets() {
         let d = UserDefaults(suiteName: "LastRuntimeTests")!
         d.removePersistentDomain(forName: "LastRuntimeTests")

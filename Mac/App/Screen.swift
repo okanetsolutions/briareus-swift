@@ -22,8 +22,6 @@ enum Screen: Hashable, Identifiable {
     case pullFiles(repo: String, number: Int)
     /// An issue, with its board row.
     case issue(repo: String, issue: JSON)
-    /// The review rounds waiting for a decision across every project.
-    case findings
     /// What every project spent over a window.
     case usage
     /// The conversations waiting for you, with their questions to answer, and those working now.
@@ -55,6 +53,8 @@ enum Screen: Hashable, Identifiable {
     case sessionStats(session: JSON)
     /// The Server dashboard: the machine, the Briareus process, its disks and the open sessions.
     case serverStats
+    /// CI/CD history across the token's projects: totals, a daily chart, repositories, failing checks and recent runs.
+    case ciStats
     case sshMonitoring(serverID: Double?)
     case personalConnection(PersonalConnectionKind)
     case sharing
@@ -71,7 +71,6 @@ enum Screen: Hashable, Identifiable {
         case .pull(let repo, let n, _, _): return "pull:\(repo)#\(n)"
         case .pullFiles(let repo, let n): return "files:\(repo)#\(n)"
         case .issue(let repo, let issue): return "issue:\(repo)#\(issue["number"].int ?? 0)"
-        case .findings: return "findings"
         case .usage: return "usage"
         case .status: return "status"
         case .webApp(let app): return app.rawValue
@@ -92,6 +91,7 @@ enum Screen: Hashable, Identifiable {
         case .mailWake(let session): return "mail-wake:\(session["id"].string ?? "")"
         case .sessionStats(let session): return "session-stats:\(session["id"].string ?? "")"
         case .serverStats: return "server-stats"
+        case .ciStats: return "ci-stats"
         case .sshMonitoring(let id): return "ssh-monitoring:\(id.map { String($0) } ?? "all")"
         case .personalConnection(let kind): return "personal:\(kind.rawValue)"
         case .sharing: return "sharing"

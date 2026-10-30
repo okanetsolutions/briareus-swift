@@ -1,5 +1,5 @@
 // The Windows client's opening view (screen_new_session.c): "Welcome back", and the composer that starts a session, with its
-// row of chips for the project, branch, provider, model, effort and the review loop.
+// row of chips for the workspace, project, branch, provider, model and effort.
 import AppKit
 import SwiftUI
 
@@ -19,10 +19,6 @@ final class NewSessionModel: ObservableObject {
     /// Nil: a new branch off the default (a worktree), or the checkout's current branch (local).
     @Published private(set) var branch: String?
     @Published private(set) var workspace = WorkspaceMode.worktree
-    /// Starts as it was last set, and is remembered for the next new session whenever it changes.
-    @Published var reviewLoop = LastReviewLoop.load() {
-        didSet { if reviewLoop != oldValue { LastReviewLoop.save(reviewLoop) } }
-    }
     @Published private(set) var busy = false
     @Published private(set) var uncertain = false
     @Published private(set) var error: String?
@@ -134,7 +130,6 @@ final class NewSessionModel: ObservableObject {
             if let eff, let m = catalog?.model(for: eff) { return m.title }
             return eff?.model ?? "Model"
         case .effort: return eff?.effort ?? "effort"
-        case .loop: return reviewLoopChipText(reviewLoop)
         }
     }
     func chipShown(_ chip: ComposerChip) -> Bool {
@@ -142,12 +137,9 @@ final class NewSessionModel: ObservableObject {
         case .provider, .model: return !(catalog?.providers.isEmpty ?? true)
         case .effort: return effective.map { !(catalog?.efforts(for: $0).isEmpty ?? true) } ?? false
         case .branch: return workspace != .orchestrator && Store.shared.supports("branches")
-        case .loop: return workspace.hasReviewLoop && Store.shared.supports("review_loop")
         default: return true
         }
     }
-    static func isPicker(_ chip: ComposerChip) -> Bool { chip != .loop }
-
     func pick(_ chip: ComposerChip) {
         if busy { return }
         let eff = effective
@@ -181,7 +173,6 @@ final class NewSessionModel: ObservableObject {
             let rows = efforts.map { MenuRow(title: $0, checked: eff.effort == $0) }
             guard let i = popUpMenu(rows) else { return }
             runtime = RuntimeChoice(providerId: eff.providerId, model: eff.model, effort: efforts[i])
-        case .loop: reviewLoop.toggle()
         case .workspace:
             let hasLocal = project?.hasLocal ?? false
             let modes = WorkspaceMode.allCases
@@ -201,7 +192,6 @@ final class NewSessionModel: ObservableObject {
         args.merge(workspace.arguments(branch: branch))
         if let runtime { args.merge(runtime.arguments) }
         busy = true; error = nil
-        let loop = reviewLoop, ownLoop = workspace.hasReviewLoop
         startTask = Task {
             do {
                 let answer = try await Store.shared.call("start_session", args)
@@ -210,11 +200,6 @@ final class NewSessionModel: ObservableObject {
                 guard let started = Session(answer["session"]) else { error = "The server returned an unexpected response."; return }
                 composer.text = ""
                 files.sent(args["attachments"].isNull ? nil : args["attachments"])
-                // The loop the chip asked for that the server does not arm by default. Only a worktree session has the chip;
-                // a local session or an orchestrator never has a loop of its own.
-                if ownLoop && !loop && Store.shared.supports("review_loop") && started.canReviewLoop {
-                    Task { _ = try? await Store.shared.call("review_loop", ["sessionId": .string(started.id), "on": false]) }
-                }
                 post(.sessionsChanged, ["repo": p.repo])
                 Navigator.shared.show(.conversation(id: started.id, session: started.raw))
             } catch {
@@ -296,8 +281,7 @@ private struct NewSessionFooter: View {
             VStack(alignment: .leading, spacing: 0) {
                 FlowLayout(spacing: 4, lineSpacing: 4) {
                     ForEach(ComposerChip.allCases.filter(model.chipShown), id: \.self) { chip in
-                        ComposerChipView(label: model.chipLabel(chip), on: chip == .loop && model.reviewLoop,
-                                         live: !model.busy, picker: NewSessionModel.isPicker(chip),
+                        ComposerChipView(label: model.chipLabel(chip), live: !model.busy, picker: true,
                                          action: { model.pick(chip) })
                     }
                 }

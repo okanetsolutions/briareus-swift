@@ -45,17 +45,12 @@ enum CarText {
         if asking && parts != ["Asks you a question"] { parts.append("Asks you a question") }
         let queued = session.queued.count
         if queued > 0 { parts.append("\(queued) queued") }
-        if let findings = session.heldTriage?["findings"].count { parts.append(count(findings, "finding")) }
         return parts.joined(separator: " · ")
     }
     /// What a message sent now does: it goes into the running turn, waits for the next one, or starts one.
     static func sent(_ session: Session?) -> String {
         guard let session, session.isActive else { return "Sent" }
         return session.liveInput ? "Sent into the running turn" : "Queued for the next turn"
-    }
-    /// The conversations holding a review round with findings for a decision, the oldest hold first.
-    static func holdingFindings(_ sessions: [Session]) -> [Session] {
-        Session.heldRounds(sessions).map { sessions[$0.index] }.filter { $0.heldTriage != nil }
     }
 
     // MARK: Pull requests
@@ -87,13 +82,11 @@ enum CarText {
         let status = row.map { ReviewStatus(decision: $0.reviewDecision, reviewers: $0.reviewers) } ?? ReviewStatus(decision: nil, reviews: pr["reviews"])
         return status == .none ? nil : status.text
     }
-    /// A finding's verdict, severity and file, as the line under its title.
-    static func finding(_ finding: JSON, verdict: String?) -> String {
-        [finding["fixed"].bool == true ? "Fixed" : verdict, finding["severity"].string,
-         finding["file"].string?.split(separator: "/").last.map(String.init)].compactMap { $0 }.joined(separator: " · ")
+    /// A code review finding's verdict, severity and file, as the line under its title.
+    static func finding(_ finding: CodeReviewFinding) -> String {
+        [finding.verdict?.title ?? "Not verified", finding.severity,
+         finding.filePath?.split(separator: "/").last.map(String.init)].compactMap { $0 }.joined(separator: " · ")
     }
-    /// The title a verdict's button shows, by its API spelling.
-    static func verdictTitle(_ decision: String) -> String? { findingDecisionIndex(decision).map { findingDecisionTitles[$0] } }
 
     /// A merge is always a squash, unless the repository refuses squashes: then the first method it accepts. Nothing
     /// `allowed` means GitHub did not say, and a squash is tried.

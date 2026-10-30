@@ -1,6 +1,6 @@
 // A project's conversations, as the Mac sidebar's second screen (SidebarSessions, SidebarRows): found by their title, the
 // closed ones on request, those at work first; each row marked by its pull request where it has one. Above them the
-// project's board, its findings waiting and a new conversation, and ▶ Run on its default branch; a swipe closes, reopens,
+// project's board and a new conversation, and ▶ Run on its default branch; a swipe closes, reopens,
 // renames or deletes one, and Select closes or deletes several, as ☑ Select does. The menu also opens the project's Laravel Forge.
 import SwiftUI
 
@@ -45,7 +45,6 @@ struct ProjectView: View {
     private var editing: Bool { editMode.isEditing }
     private var shown: [Session] { conversationsShown(feed.sessions, search: search, showClosed: showClosed) }
     private var canSelect: Bool { store.canManage && (store.supports("close") || store.supports("delete")) && !feed.sessions.isEmpty }
-    private var waiting: Int { feed.sessions.filter { $0.heldRound != nil }.count }
 
     var body: some View {
         dialogs(chrome(List(selection: editing ? $picked : nil) { sections }))
@@ -149,10 +148,6 @@ struct ProjectView: View {
                 if store.supports("pulls") {
                     Button { navigate(.board(repo: repo)) } label: { Image(systemName: "arrow.triangle.pull") }
                         .accessibilityLabel("Pull requests and issues")
-                }
-                if waiting > 0 {
-                    Button { navigate(.findings(repo: repo)) } label: { FindingsCountIcon(count: waiting) }
-                        .accessibilityLabel("Findings, \(waiting) waiting")
                 }
                 if store.supports("start_session") {
                     Button { composing = true } label: { Image(systemName: "square.and.pencil") }

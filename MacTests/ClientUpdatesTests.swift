@@ -154,45 +154,6 @@ final class ClientUpdatesTests: XCTestCase {
         XCTAssertEqual(series.isolatedPoints.map(\.value), [0])
         XCTAssertEqual(series.points.map(\.segment), [1, 2, 2])
     }
-    private var assessment: JSON {
-        ["externalFeedback": true, "standalone": true, "mine": false, "prNumber": 42,
-         "findings": [["key": "a", "title": "Check authorization", "recommendation": "fix",
-                       "sourceBody": "A developer's original feedback", "reviewAuthorLogin": "reviewer",
-                       "assessment": ["verified": true, "worthFixing": true, "evidence": "Checked the route", "reason": "Prevents a regression"]],
-                      ["key": "b", "title": "A second claim", "recommendation": "dismissed"]]]
-    }
-    func testExternalFeedbackAllowsManualVerdictsRegardlessOfPRAuthor() {
-        XCTAssertTrue(triageTakesVerdicts(assessment))
-        XCTAssertTrue(heldRoundIsMine(assessment))
-        let completed = PhoneFindings.completion(assessment, picked: ["a": "fix", "b": "dismissed"], reasons: ["a": "Confirmed"], note: "Only the selected fix")
-        XCTAssertEqual(completed["verdicts"][0], ["key": "a", "decision": "fix", "reason": "Confirmed"])
-        XCTAssertEqual(completed["verdicts"][1]["decision"], "dismissed")
-        XCTAssertEqual(completed["note"], "Only the selected fix")
-        // Ordinary reviews of another author's PR keep their existing read/reply flow.
-        var ordinary = assessment; ordinary["externalFeedback"] = false
-        XCTAssertFalse(triageTakesVerdicts(ordinary)); XCTAssertFalse(heldRoundIsMine(ordinary))
-        XCTAssertEqual(PhoneFindings.completion(ordinary, picked: ["a": "fix"], reasons: [:], note: ""), [:])
-    }
-    func testRecommendationsAreNeverAutomaticallyAppliedAsVerdicts() {
-        let completed = triageCompletion(assessment, picked: [:], note: "")
-        XCTAssertEqual(completed["verdicts"].items.map { $0["decision"] }, ["optional", "optional"])
-        XCTAssertTrue(triageDecision(assessment, assessment["findings"][0], picked: [:]).isEmpty)
-        var saved = assessment
-        saved["drafts"] = ["verdicts": ["a": ["decision": "dismissed"]]]
-        XCTAssertEqual(triageDecision(saved, saved["findings"][0], picked: [:]), "dismissed")
-    }
-    func testAssessmentRetainsOriginalFeedbackAndIndependentEvidence() throws {
-        let details = try XCTUnwrap(FeedbackAssessmentDetails(assessment["findings"][0]))
-        XCTAssertEqual(details.source, "A developer's original feedback")
-        XCTAssertEqual(details.author, "reviewer")
-        XCTAssertTrue(details.verified); XCTAssertTrue(details.worthFixing)
-        XCTAssertEqual(details.evidence, "Checked the route")
-        XCTAssertEqual(details.reason, "Prevents a regression")
-        var unverified = assessment["findings"][0]
-        unverified["assessment"]["verified"] = false
-        XCTAssertFalse(try XCTUnwrap(FeedbackAssessmentDetails(unverified)).verified)
-        XCTAssertNil(FeedbackAssessmentDetails(["title": "Legacy finding"]))
-    }
     private func session(_ id: String, created: String, pinned: String? = nil, status: String = "idle") -> Session {
         Session(["id": .string(id), "repo": "o/r", "status": .string(status), "createdAt": .string(created), "pinnedAt": .string(orNull: pinned)])!
     }
@@ -336,10 +297,6 @@ final class ClientUpdatesTests: XCTestCase {
         XCTAssertEqual(groups.active.map(\.id), ["working"])
         XCTAssertEqual(groups.recent.map(\.id), ["recent"])
         XCTAssertEqual((groups.pinned + groups.active + groups.recent).count, 4)
-    }
-    func testStaleFeedbackDiscardsTheAssessmentWhileOrdinaryRoundsReviewTheNewHead() {
-        XCTAssertEqual(triageStaleResolution(["externalFeedback": true, "stale": true]), .discardAssessment)
-        XCTAssertEqual(triageStaleResolution(["standalone": true, "mine": true, "stale": true]), .reviewMovedHead)
     }
     func testSharingSaveReplacesOnlyOneResourceAndRejectsMismatchedEchoes() throws {
         let previous: JSON = [["kind": "project", "id": "5", "userId": 2], ["kind": "sshServer", "id": "5", "userId": 3], ["kind": "project", "id": "6", "userId": 4]]

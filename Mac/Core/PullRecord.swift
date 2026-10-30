@@ -111,30 +111,31 @@ struct PullRecord {
     }
 }
 
-/// What a pull request's screen saves to open again at once: the pull request, its findings, its board row and stack, and
+/// What a pull request's screen saves to open again at once: the pull request, its code reviews, its board row and stack, and
 /// its description and who wrote it.
 struct PullSnapshot {
     var pr: JSON
-    var findings: JSON
+    /// The `code_reviews` answer's list, as read.
+    var codeReviews: JSON
     var row: PullSummary?
     var stack: StackPosition?
     var body: String?
     var bodyAuthor: String?
 
-    init(pr: JSON, findings: JSON, row: PullSummary?, stack: StackPosition?, body: String?, bodyAuthor: String?) {
-        self.pr = pr; self.findings = findings; self.row = row; self.stack = stack; self.body = body; self.bodyAuthor = bodyAuthor
+    init(pr: JSON, codeReviews: JSON, row: PullSummary?, stack: StackPosition?, body: String?, bodyAuthor: String?) {
+        self.pr = pr; self.codeReviews = codeReviews; self.row = row; self.stack = stack; self.body = body; self.bodyAuthor = bodyAuthor
     }
     /// What `json` saved; nil for nothing saved.
     init?(_ saved: JSON?) {
         guard let saved, saved.isObject else { return nil }
-        pr = saved["pr"]; findings = saved["findings"]
+        pr = saved["pr"]; codeReviews = saved["codeReviews"]
         row = PullSummary(saved["row"]); stack = StackPosition(restoring: saved["stack"])
         body = saved["body"].string; bodyAuthor = saved["bodyAuthor"].string
     }
     /// Nil until the pull request has been read: there is nothing worth saving before.
     var json: JSON? {
         guard !pr.isNull else { return nil }
-        var saved: JSON = ["pr": pr, "findings": findings, "row": row?.raw ?? .null, "stack": stack?.json ?? .null]
+        var saved: JSON = ["pr": pr, "codeReviews": codeReviews, "row": row?.raw ?? .null, "stack": stack?.json ?? .null]
         if let body { saved["body"] = .string(body) }
         if let bodyAuthor { saved["bodyAuthor"] = .string(bodyAuthor) }
         return saved

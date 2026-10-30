@@ -381,8 +381,8 @@ struct ProviderSettingsScreen: View {
             }
         } else if state.binary == "grok" {
             SettingsNote(text: "grok signs in with its own login; it takes no API token.", rich: true, after: 12)
-        } else {
-            SettingsNote(text: "opencode authenticates with an API key per service and has no login of its own.", rich: true, after: 12)
+        } else if ProviderFormState.keyOnly.contains(state.binary) {
+            SettingsNote(text: "\(state.binary) authenticates with an API key and has no login of its own.", rich: true, after: 12)
         }
         if !state.usesToken {
             if state.id == 0 {

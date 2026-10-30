@@ -1,12 +1,12 @@
-// What the pull request screen reads and writes (the Mac's PullModel): the pull request itself, its description, findings
-// and conversation, its board row and conversations through the project's feed, the merge, the edits of its title,
+// What the pull request screen reads and writes (the Mac's PullModel): the pull request itself, its description, code
+// reviews and conversation, its board row and conversations through the project's feed, the merge, the edits of its title,
 // description, labels and assignees, Update branch, and the Run tab that serves it in an embedded browser.
 import Combine
 import SwiftUI
 
 /// The parts of the pull request screen, as the section picker lists them.
 enum PullSection: String, CaseIterable, Identifiable {
-    case description, files, reviews, issues, projects, findings, conversations, run
+    case description, files, reviews, issues, projects, codeReviews, conversations, run
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -15,7 +15,7 @@ enum PullSection: String, CaseIterable, Identifiable {
         case .reviews: return "Reviews"
         case .issues: return "Issues"
         case .projects: return "Projects"
-        case .findings: return "Findings"
+        case .codeReviews: return "Code reviews"
         case .conversations: return "Conversations"
         case .run: return "Run"
         }
@@ -27,7 +27,7 @@ enum PullSection: String, CaseIterable, Identifiable {
         case .reviews: return "text.bubble"
         case .issues: return "link"
         case .projects: return "rectangle.split.3x1"
-        case .findings: return "flag"
+        case .codeReviews: return "checklist"
         case .conversations: return "bubble.left.and.bubble.right"
         case .run: return "play.fill"
         }
@@ -60,10 +60,14 @@ final class PullScreenModel: ObservableObject {
     @Published private(set) var descriptionAuthor: String?
     @Published private(set) var bodyRead = false
     private var readingBody = false
-    @Published private(set) var findings: JSON = []
+    /// The stored code reviews, newest first, and the `code_reviews` list they were read from (saved with the snapshot).
+    @Published private(set) var codeReviews: [CodeReview] = []
+    private var codeReviewsRaw: JSON = []
+    /// Whether the reviews have been read, or restored from the last visit: until then the tab is loading.
+    @Published private(set) var codeReviewsRead = false
     @Published private(set) var runs: [Session] = []
     @Published var error: String?
-    @Published var findingsError: String?
+    @Published var codeReviewsError: String?
     @Published var mergeError: String?
     @Published private(set) var merging = false
     @Published var mergeQuestion: MergeQuestion?
@@ -73,7 +77,6 @@ final class PullScreenModel: ObservableObject {
     /// Update branch is under way, and what GitHub was asked to do once it took the request.
     @Published private(set) var updatingBranch = false
     @Published var branchNote: String?
-    @Published private(set) var deciding: String?
     @Published private(set) var readingPull = false
     @Published private(set) var deletingRun: String?
     @Published var runError: String?
@@ -165,13 +168,13 @@ final class PullScreenModel: ObservableObject {
 
     private var key: String { PullSnapshot.key(repo: repo, number: number) }
     private func save() {
-        let snapshot = PullSnapshot(pr: pr, findings: findings, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
+        let snapshot = PullSnapshot(pr: pr, codeReviews: codeReviewsRaw, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
         if let saved = snapshot.json { Store.shared.cache.store(saved, key) }
     }
     private func restore() {
         guard let saved = PullSnapshot(Store.shared.cache.value(key)) else { return }
         pr = saved.pr
-        findings = saved.findings
+        if saved.codeReviews.isArray { takeCodeReviews(saved.codeReviews) }
         descriptionBody = saved.body
         descriptionAuthor = saved.bodyAuthor
         savedRow = saved.row
@@ -182,7 +185,7 @@ final class PullScreenModel: ObservableObject {
 
     private var args: JSON { ["repo": .string(repo), "pr": JSON(number)] }
 
-    /// The pull request and its findings; the board, the conversations and the errands beside them.
+    /// The pull request and its code reviews; the board, the conversations and the errands beside them.
     func load(fresh: Bool = false) async throws {
         let store = Store.shared
         if store.supports("pulls") {
@@ -201,6 +204,8 @@ final class PullScreenModel: ObservableObject {
         do { v = try await store.call("pull", args) }
         catch {
             if gen == pullGen, let said = failure(error) { self.error = said }
+            // The reviews are read after the pull request: without it there is nothing more to wait for.
+            if gen == pullGen { codeReviewsRead = true }
             throw error
         }
         guard gen == pullGen else { return }
@@ -209,16 +214,22 @@ final class PullScreenModel: ObservableObject {
         issueProjects.load()
         // The description is its own read, once per visit and on refresh.
         if pr["body"].string == nil && !bodyRead && !readingBody && store.supports("pull_description") { Task { await loadBody() } }
-        if store.supports("findings") {
+        if store.supports("code_reviews") {
             do {
-                let f = try await store.call("findings", args)
+                let f = try await store.call("code_reviews", args)
                 guard gen == pullGen else { return }
-                findings = f["findings"]; findingsError = nil
+                takeCodeReviews(f["codeReviews"]); codeReviewsError = nil
             } catch {
-                if gen == pullGen, let said = failure(error) { findingsError = said }
+                if gen == pullGen, let said = failure(error) { codeReviewsError = said; codeReviewsRead = true }
             }
         }
         save()
+    }
+    private func takeCodeReviews(_ list: JSON) {
+        codeReviewsRaw = list.isArray ? list : []
+        let parsed = CodeReview.parse(["codeReviews": codeReviewsRaw])
+        if parsed != codeReviews { codeReviews = parsed }
+        codeReviewsRead = true
     }
     private func loadBody() async {
         readingBody = true
@@ -297,34 +308,6 @@ final class PullScreenModel: ObservableObject {
     private func commentsCancel() {
         for i in commentTasks.indices { commentTasks[i]?.cancel(); commentTasks[i] = nil }
         for i in comments.indices where comments[i].loading { comments[i].fail(nil) }
-    }
-
-    // MARK: Findings
-
-    func decide(_ key: String, _ decision: String?) async {
-        guard deciding == nil else { return }
-        deciding = key
-        defer { deciding = nil }
-        var a = args
-        a["key"] = .string(key); a["decision"] = .string(orNull: decision)
-        do {
-            let v = try await Store.shared.call("finding_decision", a)
-            findings = v["findings"]; findingsError = nil
-            save()
-        } catch {
-            if let said = failure(error) { findingsError = said }
-        }
-    }
-
-    /// Solve findings is the board's implement-feedback errand started from the findings themselves: offered on an open
-    /// pull request with findings still to fix, to a token that may start errands on a server that lists this one.
-    func solveFindings(_ catalog: JSON) -> PendingErrand? {
-        guard Store.shared.canManage, Store.shared.supports("action"), catalogLists(catalog, "implement-feedback") else { return nil }
-        guard pr["state"].string == "open", let branch = pr["headRef"].string, findingsUnfixed(findings) > 0 else { return nil }
-        // The errand as the server words it when it is on offer, else as this app knows it.
-        guard let action = actions(catalog).first(where: { $0.id == "implement-feedback" })
-                ?? BoardAction.known.first(where: { $0.id == "implement-feedback" }) else { return nil }
-        return PendingErrand(action: action, number: number, branch: branch)
     }
 
     // MARK: Merge
