@@ -18,6 +18,7 @@ struct CIDashboardScreen: View {
                     StatTiles(width: width, tiles: reading.totals.tiles)
                     if reading.totals.total == 0 {
                         EmptyNote(title: "No observed checks", detail: "Try another project, source or window.")
+                        if model.query.isFiltered { Button("Clear filters") { model.clearFilters() }.dashButton(.bordered) }
                     } else {
                         SectionTitle(title: "Daily executions · UTC")
                         CIDailyChart(days: reading.daily)
@@ -39,7 +40,7 @@ struct CIDashboardScreen: View {
     private var filters: some View {
         HStack {
             Picker("Window", selection: $model.query.days) {
-                ForEach([7, 30, 90], id: \.self) { Text("\($0) days").tag($0) }
+                ForEach(CIQuery.windows, id: \.self) { Text("\($0) days").tag($0) }
             }
             Picker("Project", selection: $model.query.repo) {
                 Text("All projects").tag("")
@@ -48,6 +49,7 @@ struct CIDashboardScreen: View {
             Picker("Source", selection: $model.query.kind) {
                 ForEach(CIKind.allCases, id: \.self) { Text($0.title).tag($0) }
             }
+            Button("Clear filters") { model.clearFilters() }.dashButton(.bordered).disabled(!model.query.isFiltered)
             Button("Refresh") { Task { await model.load() } }.dashButton(.bordered).disabled(model.loading)
         }.font(Theme.body)
     }
@@ -55,7 +57,10 @@ struct CIDashboardScreen: View {
     private var history: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "Execution history")
-            if let error = model.historyError { Notice(message: error) }
+            if let error = model.historyError {
+                Notice(message: error)
+                Button("Retry") { Task { await model.retryHistory() } }.dashButton(.bordered).disabled(model.loading || model.loadingMore)
+            }
             ForEach(model.history.runs) { run in CIRunRow(run: run) }
             if !model.loading && model.history.runs.isEmpty && model.historyError == nil {
                 EmptyNote(title: "No executions in this window.")
@@ -106,21 +111,13 @@ private struct CIDailyChart: View {
     let days: [CIGroup]
     var body: some View {
         Chart(days) { day in
-            BarMark(x: .value("UTC day", day.title), y: .value("Passed", day.metrics.succeeded))
-                .foregroundStyle(by: .value("Result", "Passed"))
-            BarMark(x: .value("UTC day", day.title), y: .value("Failed", day.metrics.failed))
-                .foregroundStyle(by: .value("Result", "Failed"))
-            BarMark(x: .value("UTC day", day.title), y: .value("Pending", day.metrics.pending))
-                .foregroundStyle(by: .value("Result", "Pending"))
-            BarMark(x: .value("UTC day", day.title), y: .value("Cancelled", day.metrics.cancelled))
-                .foregroundStyle(by: .value("Result", "Cancelled"))
-            BarMark(x: .value("UTC day", day.title), y: .value("Skipped", day.metrics.skipped))
-                .foregroundStyle(by: .value("Result", "Skipped"))
-            BarMark(x: .value("UTC day", day.title), y: .value("Other", day.metrics.other))
-                .foregroundStyle(by: .value("Result", "Other"))
+            ForEach(CISeries.allCases, id: \.self) { series in
+                BarMark(x: .value("UTC day", day.title), y: .value(series.label, series.count(day.metrics)))
+                    .foregroundStyle(by: .value("Result", series.label))
+            }
         }
-        .chartForegroundStyleScale(domain: ["Passed", "Failed", "Pending", "Cancelled", "Skipped", "Other"],
-                                   range: [Theme.ok, Theme.danger, Theme.accent, Theme.warn, Theme.muted, Theme.dot])
+        .chartForegroundStyleScale(domain: CISeries.allCases.map(\.label),
+                                   range: CISeries.allCases.map { Theme.color($0.tone) })
         .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
         .frame(height: 210)
         .accessibilityLabel("Observed CI executions by UTC day")

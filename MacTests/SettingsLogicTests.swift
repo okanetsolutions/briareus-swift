@@ -220,6 +220,75 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertEqual(DBServerFormState.poolText(capacity: 1, total: 3),
                        "1 server in the pool, so 1 session with a database may be open at once. 2 more are listed but taken out of the pool.")
     }
+
+    func testActionSettingsReadEditAndSaveCurrentNames() throws {
+        var form = ProjectFormState(row: ["repo": "o/r", "prAuthor": "author", "qaTestRun": true,
+                                          "actionProviderId": 3, "actionModel": "model", "actionEffort": "high",
+                                          "stepRuntimes": [:]])
+        XCTAssertEqual(form.text(.reviewAuthor), "author")
+        XCTAssertTrue(form.bool(.testRun))
+        XCTAssertEqual(form.pick(.review), RuntimePick(providerId: 3, model: "model", effort: "high"))
+        XCTAssertFalse(form.tabChanged(.review))
+        for field in [ProjectField.publish, .autoLoop, .testSheet, .feedbackSteps] { XCTAssertFalse(form.offered(field)) }
+        XCTAssertTrue(form.stepEnabled(.testSheet))
+        form.texts[.reviewAuthor] = " new-author "
+        form.bools[.testRun] = false
+        form.picks[.review] = RuntimePick(providerId: 5, model: "other", effort: "low")
+        XCTAssertTrue(form.tabChanged(.review))
+        XCTAssertFalse(form.stepEnabled(.testRun))
+        let body = try form.body().get()
+        XCTAssertEqual(body["prAuthor"], "new-author")
+        XCTAssertEqual(body["qaTestRun"], false)
+        XCTAssertEqual(body["actionProviderId"], 5)
+        XCTAssertEqual(body["actionModel"], "other")
+        XCTAssertEqual(body["actionEffort"], "low")
+        for key in ["reviewAuthor", "reviewTestRun", "reviewProviderId", "reviewModel", "reviewEffort", "reviewTestSheet", "autonomousReviewLoop"] {
+            XCTAssertNil(body.object?[key])
+        }
+    }
+
+    func testLegacySettingsKeepTheirOriginalKeysAndOptionalSteps() throws {
+        var form = ProjectFormState(row: ["repo": "o/r", "reviewAuthor": "old", "reviewTestRun": true,
+                                          "reviewTestSheet": false, "reviewProviderId": 2, "reviewModel": "legacy", "reviewEffort": "max"])
+        XCTAssertEqual(form.text(.reviewAuthor), "old")
+        XCTAssertTrue(form.bool(.testRun))
+        XCTAssertFalse(form.stepEnabled(.testSheet))
+        XCTAssertTrue(form.offered(.review))
+        form.texts[.reviewAuthor] = "updated"
+        form.picks[.review] = RuntimePick(providerId: 4, model: "next", effort: "low")
+        let body = try form.body().get()
+        XCTAssertEqual(body["reviewAuthor"], "updated")
+        XCTAssertEqual(body["reviewProviderId"], 4)
+        XCTAssertEqual(body["reviewModel"], "next")
+        XCTAssertNil(body.object?["actionProviderId"])
+        XCTAssertNil(body.object?["prAuthor"])
+    }
+
+    func testKeyOnlyProvidersKeepCredentialsAndCannotOfferLogin() throws {
+        for binary in ["dsh", "qwen"] {
+            XCTAssertTrue(ProviderFormState.binaries.contains { $0.id == binary })
+            var form = ProviderFormState(row: ["id": 1, "label": "Agent", "binary": .string(binary)])
+            XCTAssertTrue(form.usesToken)
+            XCTAssertFalse(form.canLogIn)
+            XCTAssertTrue(ProviderFormState.keyOnly(binary))
+            XCTAssertFalse(ProviderFormState.modeOffered(binary))
+            form.texts[.baseUrl] = " https://endpoint.example/v1 "
+            form.texts[.apiKey] = " key "
+            let body = try form.body().get()
+            XCTAssertEqual(body["binary"], .string(binary))
+            XCTAssertEqual(body["baseUrl"], "https://endpoint.example/v1")
+            XCTAssertEqual(body["apiKey"], "key")
+        }
+    }
+
+    func testUnknownProviderBinaryRetainsItsExistingTokenConfiguration() throws {
+        let form = ProviderFormState(row: ["label": "Future agent", "binary": "future-cli", "apiKey": "saved-key", "baseUrl": "https://endpoint.example"])
+        XCTAssertTrue(form.usesToken)
+        XCTAssertTrue(ProviderFormState.modeOffered("future-cli"))
+        XCTAssertFalse(ProviderFormState.keyOnly("future-cli"))
+        XCTAssertFalse(ProviderFormState.keyOnly("grok"))
+        XCTAssertEqual(try form.body().get()["apiKey"], "saved-key")
+    }
 }
 
 private extension Result where Failure == FormProblem {

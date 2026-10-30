@@ -451,4 +451,14 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(Voice.agentNews(failed, after: 6)!.said, "Agent update: The agent's turn ended with an error. Out of credits")
         XCTAssertEqual(Voice.agentNews([e(8, "result")], after: 7)!.said, "Agent update: The agent finished its turn without saying anything.")
     }
+
+    func testVoiceErrandsRespectTheCatalogAndLegacyReviewCapability() throws {
+        let current: JSON = [["id": "review", "label": "Review", "binary": "claude"], ["id": "fix-checks", "label": "Fix checks"]]
+        XCTAssertEqual(Voice.offeredErrand("review", catalog: current, legacyReviews: false)?.operation, "action")
+        XCTAssertEqual(Voice.offeredErrand("fix-checks", catalog: current, legacyReviews: false)?.operation, "action")
+        XCTAssertNil(Voice.offeredErrand("implement-feedback", catalog: current, legacyReviews: false))
+        XCTAssertNil(Voice.offeredErrand("review", catalog: [], legacyReviews: false))
+        XCTAssertEqual(Voice.offeredErrand("review", catalog: [], legacyReviews: true)?.operation, "review")
+        XCTAssertNil(Voice.offeredErrand("delete-self-comments", catalog: current, legacyReviews: true))
+    }
 }

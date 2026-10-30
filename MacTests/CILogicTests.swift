@@ -88,4 +88,24 @@ final class CILogicTests: XCTestCase {
         XCTAssertEqual(UsageDashboardTab.ci.resolved(in: [.usage]), .usage)
         XCTAssertNil(UsageDashboardTab.ci.serverTab)
     }
+
+    func testDefaultQueryIsUnfilteredAndAnyChangedControlIsAFilter() {
+        XCTAssertFalse(CIQuery().isFiltered)
+        XCTAssertTrue(CIQuery.windows.contains(CIQuery().days))
+        XCTAssertTrue(CIQuery(days: CIQuery.windows[0]).isFiltered)
+        XCTAssertTrue(CIQuery(repo: "o/r").isFiltered)
+        XCTAssertTrue(CIQuery(kind: .statuses).isFiltered)
+    }
+
+    func testChartSeriesPlotEveryBucketOnceWithDistinctLabelsAndTones() {
+        let metrics = CIMetrics(["total": 21, "succeeded": 1, "failed": 2, "pending": 3, "cancelled": 4, "skipped": 5, "other": 6])
+        XCTAssertEqual(CISeries.allCases.map { $0.count(metrics) }, [1, 2, 3, 4, 5, 6])
+        XCTAssertEqual(CISeries.allCases.map { $0.count(metrics) }.reduce(0, +), metrics.total)
+        XCTAssertEqual(Set(CISeries.allCases.map(\.label)).count, CISeries.allCases.count)
+        XCTAssertEqual(CISeries.succeeded.tone, .ok)
+        XCTAssertEqual(CISeries.failed.tone, .danger)
+        let tones = CISeries.allCases.map(\.tone)
+        XCTAssertEqual(tones.count, CISeries.allCases.count)
+        for (i, tone) in tones.enumerated() { XCTAssertFalse(tones[(i + 1)...].contains(tone)) }
+    }
 }

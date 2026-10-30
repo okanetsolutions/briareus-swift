@@ -8,7 +8,7 @@ struct CIDashboardScreen: View {
 
     var body: some View {
         List {
-            CIDashboardFilters(query: $model.query, projects: projects.projects)
+            CIDashboardFilters(query: $model.query, projects: projects.projects, clear: model.clearFilters)
             if let error = model.error {
                 ErrorNotice(message: error)
                 Button("Retry") { Task { await model.load() } }
@@ -16,7 +16,13 @@ struct CIDashboardScreen: View {
             if let reading = model.reading {
                 Section("Totals") { StatTiles(tiles: reading.totals.tiles).listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
                 if reading.totals.total == 0 {
-                    ContentUnavailableView("No observed checks", systemImage: "checkmark.circle", description: Text("Try another project, source or window."))
+                    ContentUnavailableView {
+                        Label("No observed checks", systemImage: "checkmark.circle")
+                    } description: {
+                        Text("Try another project, source or window.")
+                    } actions: {
+                        if model.query.isFiltered { Button("Clear filters") { model.clearFilters() } }
+                    }
                 } else {
                     Section("Daily executions · UTC") { CIDailyChart(days: reading.daily) }
                     CIGroupSection(title: "Projects", groups: reading.repositories)
@@ -28,7 +34,7 @@ struct CIDashboardScreen: View {
                 Section("Execution history") {
                     if let error = model.historyError {
                         ErrorNotice(message: error)
-                        Button("Retry") { Task { await model.load() } }
+                        Button("Retry") { Task { await model.retryHistory() } }
                     }
                     ForEach(model.history.runs) { run in CIRunRow(run: run) }
                     if !model.loading && model.history.runs.isEmpty && model.historyError == nil {
@@ -81,21 +87,13 @@ private struct CIDailyChart: View {
     let days: [CIGroup]
     var body: some View {
         Chart(days) { day in
-            BarMark(x: .value("UTC day", day.title), y: .value("Passed", day.metrics.succeeded))
-                .foregroundStyle(by: .value("Result", "Passed"))
-            BarMark(x: .value("UTC day", day.title), y: .value("Failed", day.metrics.failed))
-                .foregroundStyle(by: .value("Result", "Failed"))
-            BarMark(x: .value("UTC day", day.title), y: .value("Pending", day.metrics.pending))
-                .foregroundStyle(by: .value("Result", "Pending"))
-            BarMark(x: .value("UTC day", day.title), y: .value("Cancelled", day.metrics.cancelled))
-                .foregroundStyle(by: .value("Result", "Cancelled"))
-            BarMark(x: .value("UTC day", day.title), y: .value("Skipped", day.metrics.skipped))
-                .foregroundStyle(by: .value("Result", "Skipped"))
-            BarMark(x: .value("UTC day", day.title), y: .value("Other", day.metrics.other))
-                .foregroundStyle(by: .value("Result", "Other"))
+            ForEach(CISeries.allCases, id: \.self) { series in
+                BarMark(x: .value("UTC day", day.title), y: .value(series.label, series.count(day.metrics)))
+                    .foregroundStyle(by: .value("Result", series.label))
+            }
         }
-        .chartForegroundStyleScale(domain: ["Passed", "Failed", "Pending", "Cancelled", "Skipped", "Other"],
-                                   range: [Theme.ok, Theme.danger, Theme.accent, Theme.warn, Theme.muted, Theme.dot])
+        .chartForegroundStyleScale(domain: CISeries.allCases.map(\.label),
+                                   range: CISeries.allCases.map { Theme.color($0.tone) })
         .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
         .frame(height: 210)
         .accessibilityLabel("Observed CI executions by UTC day")

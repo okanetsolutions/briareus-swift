@@ -13,6 +13,8 @@ final class CIDashboardModel: ObservableObject {
     @Published private(set) var historyError: String?
     private var window: JSON = [:]
     private var generation = 0
+    /// The history page whose read failed, so Retry reads that page again instead of reloading the totals.
+    private var failedOffset: Int?
 
     var hasStats: Bool { Store.shared.supports("ci_stats") }
     var hasHistory: Bool { Store.shared.supports("ci_runs") }
@@ -23,7 +25,7 @@ final class CIDashboardModel: ObservableObject {
         let gen = generation, connection = connectionID
         window = query.arguments(now: Store.shared.client?.serverNow ?? Date())
         let args = window
-        reading = nil; history = CIHistory(); error = nil; historyError = nil
+        reading = nil; history = CIHistory(); error = nil; historyError = nil; failedOffset = nil
         loading = true; loadingMore = false
         defer { if gen == generation { loading = false } }
         if hasStats {
@@ -45,8 +47,16 @@ final class CIDashboardModel: ObservableObject {
         guard !loading, !loadingMore, let offset = history.nextOffset else { return }
         await page(offset: offset, generation: generation, connection: connectionID)
     }
+    func retryHistory() async {
+        guard !loading, !loadingMore, let offset = failedOffset else { return }
+        await page(offset: offset, generation: generation, connection: connectionID)
+    }
+
+    /// Back to the default window, every project and checks; the dashboard reloads when the query changes.
+    func clearFilters() { query = CIQuery() }
+
     private func page(offset: Int, generation gen: Int, connection: ObjectIdentifier?) async {
-        loadingMore = true; historyError = nil
+        loadingMore = true; historyError = nil; failedOffset = nil
         defer { if gen == generation { loadingMore = false } }
         let args = CIHistory.arguments(window: window, offset: offset)
         do {
@@ -56,6 +66,7 @@ final class CIDashboardModel: ObservableObject {
         } catch {
             guard gen == generation, connection == connectionID, !Task.isCancelled else { return }
             historyError = (error as? APIError)?.description ?? error.localizedDescription
+            failedOffset = offset
         }
     }
 }

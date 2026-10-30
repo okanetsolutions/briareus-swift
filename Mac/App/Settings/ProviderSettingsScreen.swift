@@ -381,7 +381,7 @@ struct ProviderSettingsScreen: View {
             }
         } else if state.binary == "grok" {
             SettingsNote(text: "grok signs in with its own login; it takes no API token.", rich: true, after: 12)
-        } else {
+        } else if ProviderFormState.keyOnly(state.binary) {
             SettingsNote(text: ProviderFormState.keyOnlyHint(state.binary), rich: true, after: 12)
         }
         if !state.usesToken {

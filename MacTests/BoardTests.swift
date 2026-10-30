@@ -921,4 +921,18 @@ final class BoardTests: XCTestCase {
             XCTAssertEqual(cooldown.deadline("o/r", now: now), now.addingTimeInterval(60))
         }
     }
+
+    func testClaudeReviewActionUsesActionsRatherThanTheRemovedSessionFlag() throws {
+        let catalog: JSON = [["id": "review", "label": "Code review", "binary": "claude", "hint": "Claude review"]]
+        let review = try XCTUnwrap(BoardAction.startable(catalog: catalog, pull: nil, failedChecks: 0,
+                                                        canManage: true, supports: { $0 == "action" }).first)
+        XCTAssertEqual(review.id, "review")
+        XCTAssertEqual(review.binary, "claude")
+        XCTAssertEqual(review.operation, "action")
+        XCTAssertEqual(review.arguments(repo: "o/r", number: 8, branch: "feature"), ["repo": "o/r", "prNumber": 8, "action": "review"])
+        let legacy = try XCTUnwrap(APIRoute.named("review"))
+        XCTAssertFalse(Route.supportsBodyField([Route(method: "POST", path: "sessions", access: "manage", bodyFields: ["prompt", "qa"])], route: legacy))
+        XCTAssertTrue(Route.supportsBodyField([Route(method: "POST", path: "sessions", access: "manage", bodyFields: ["review"])], route: legacy))
+        XCTAssertEqual(BoardAction.startable(catalog: catalog, pull: nil, failedChecks: 0, canManage: false, supports: { _ in true }), [])
+    }
 }

@@ -63,6 +63,18 @@ struct CIDashboardCheck {
         await model.load()
         precondition(model.reading?.totals.total == 7 && model.error == nil && model.historyError != nil)
 
+        // Retrying history reads only the failed page again and keeps the totals that loaded.
+        store.respond = { name, _ in
+            precondition(name == "ci_runs", "Retrying history reloaded the totals")
+            return ["runs": .array([run]), "nextOffset": nil]
+        }
+        await model.retryHistory()
+        precondition(model.reading?.totals.total == 7 && model.historyError == nil && model.history.runs.count == 1)
+        precondition(store.calls.last?.1["offset"].int == 0)
+        let settled = store.calls.count
+        await model.retryHistory()
+        precondition(store.calls.count == settled, "Retried history with nothing failed")
+
         // A late response for the previous selection cannot replace the new window's totals or runs.
         var release: CheckedContinuation<JSON, Error>?
         store.respond = { _, _ in try await withCheckedThrowingContinuation { release = $0 } }

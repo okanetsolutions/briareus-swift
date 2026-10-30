@@ -404,10 +404,12 @@ struct ProviderFormState: Equatable, Sendable {
 
     func text(_ f: ProviderField) -> String { texts[f] ?? "" }
 
-    /// grok has no token mode and opencode nothing but a key, so only claude and codex choose.
-    static func modeOffered(_ binary: String) -> Bool { !["grok", "opencode", "dsh", "qwen"].contains(binary) }
-    /// Whether the endpoint and its token are part of the provider: the API token mode, or opencode's key.
-    var usesToken: Bool { ["opencode", "dsh", "qwen"].contains(binary) || (Self.modeOffered(binary) && token) }
+    /// The binaries that authenticate only through an endpoint and its API key, with no interactive login.
+    static func keyOnly(_ binary: String) -> Bool { ["opencode", "dsh", "qwen"].contains(binary) }
+    /// grok has no token mode and the key-only binaries nothing but a key, so only claude and codex choose.
+    static func modeOffered(_ binary: String) -> Bool { binary != "grok" && !keyOnly(binary) }
+    /// Whether the endpoint and its token are part of the provider: the API token mode, or a key-only binary's key.
+    var usesToken: Bool { Self.keyOnly(binary) || (Self.modeOffered(binary) && token) }
     /// A login is registered against a saved row, so only a saved one logged in through its CLI can log in.
     var canLogIn: Bool { id != 0 && !usesToken }
 

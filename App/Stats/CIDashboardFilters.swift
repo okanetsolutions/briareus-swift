@@ -4,11 +4,12 @@ import SwiftUI
 struct CIDashboardFilters: View {
     @Binding var query: CIQuery
     let projects: [Project]
+    let clear: () -> Void
 
     var body: some View {
         Section {
             Picker("Window", selection: $query.days) {
-                ForEach([7, 30, 90], id: \.self) { Text("\($0) days").tag($0) }
+                ForEach(CIQuery.windows, id: \.self) { Text("\($0) days").tag($0) }
             }
             Picker("Project", selection: $query.repo) {
                 Text("All projects").tag("")
@@ -17,6 +18,7 @@ struct CIDashboardFilters: View {
             Picker("Source", selection: $query.kind) {
                 ForEach(CIKind.allCases, id: \.self) { Text($0.title).tag($0) }
             }
+            if query.isFiltered { Button("Clear filters", action: clear) }
         } footer: {
             Text("Observed GitHub checks only; earlier history may be incomplete. Daily totals use UTC. Durations are execution time, not billed minutes.")
         }

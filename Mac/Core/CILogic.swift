@@ -7,9 +7,14 @@ enum CIKind: String, CaseIterable, Sendable {
 }
 
 struct CIQuery: Hashable, Sendable {
+    /// The windows, in days, a dashboard offers.
+    static let windows = [7, 30, 90]
     var days = 30
     var repo = ""
     var kind: CIKind = .checks
+
+    /// Whether any control differs from the default, so an empty result can offer to clear the filters.
+    var isFiltered: Bool { self != CIQuery() }
 
     /// Freeze one window for totals and every history page; until is exclusive.
     func arguments(now: Date) -> JSON {
@@ -57,6 +62,43 @@ struct CIMetrics: Equatable, Sendable {
     }
 }
 
+/// One bar series of the daily chart, in stacking order: the count it plots from a day's metrics, its legend label and
+/// its tone. These are the server's buckets, so pending and cancelled get their own tones where a run row mutes them.
+enum CISeries: String, CaseIterable, Sendable {
+    case succeeded, failed, pending, cancelled, skipped, other
+
+    var label: String {
+        switch self {
+        case .succeeded: return "Passed"
+        case .failed: return "Failed"
+        case .pending: return "Pending"
+        case .cancelled: return "Cancelled"
+        case .skipped: return "Skipped"
+        case .other: return "Other"
+        }
+    }
+    var tone: RowTone {
+        switch self {
+        case .succeeded: return .ok
+        case .failed: return .danger
+        case .pending: return .accent
+        case .cancelled: return .warn
+        case .skipped: return .muted
+        case .other: return .faint
+        }
+    }
+    func count(_ m: CIMetrics) -> Int {
+        switch self {
+        case .succeeded: return m.succeeded
+        case .failed: return m.failed
+        case .pending: return m.pending
+        case .cancelled: return m.cancelled
+        case .skipped: return m.skipped
+        case .other: return m.other
+        }
+    }
+}
+
 struct CIGroup: Equatable, Sendable, Identifiable {
     var id: String
     var title: String
@@ -84,6 +126,8 @@ struct CIReading: Equatable, Sendable {
     }
 }
 
+/// One execution in the history: its identity across pages (repository, kind and run id), what a row shows, and a tone
+/// that marks only a pass or a failure; a run still going or cancelled stays muted.
 struct CIRun: Equatable, Sendable, Identifiable {
     var id: String
     var name: String
