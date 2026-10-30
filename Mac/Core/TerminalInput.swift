@@ -39,10 +39,22 @@ struct TermTarget: Equatable, Sendable {
         return nil
     }
 
-    /// The arguments ssh runs with (after the program itself): `ssh -p PORT -l USER -- HOST`.
-    var sshArguments: [String] { ["-p", String(port), "-l", user, "--", host] }
-    /// The arguments sftp runs with: `sftp -P PORT -o User=USER -o ServerAliveInterval=30 -- HOST`.
-    var sftpArguments: [String] { ["-P", String(port), "-o", "User=\(user)", "-o", "ServerAliveInterval=30", "--", host] }
+    /// Save new host keys automatically in known_hosts; refuse keys that differ from a saved key. Given on the command line,
+    /// this overrides any `StrictHostKeyChecking` in ~/.ssh/config (ssh keeps the first value it reads). It reaches only the
+    /// server itself: a `ProxyJump` host runs in an ssh of its own that keeps its config's policy, so an unknown jump host
+    /// still asks to be trusted.
+    private static let hostKeyArguments = ["-o", "StrictHostKeyChecking=accept-new"]
+
+    /// Interactive ssh: `ssh -p PORT -l USER -o StrictHostKeyChecking=accept-new -- HOST`. SQL sessions add to it.
+    var sshArguments: [String] { ["-p", String(port), "-l", user] + Self.hostKeyArguments + ["--", host] }
+    /// SFTP keeps idle connections alive and uses the same host key policy as ssh.
+    var sftpArguments: [String] {
+        ["-P", String(port), "-o", "User=\(user)", "-o", "ServerAliveInterval=30"] + Self.hostKeyArguments + ["--", host]
+    }
+    /// SQL runs without a terminal; the remote command follows these arguments.
+    var sshQueryArguments: [String] {
+        ["-T", "-o", "ServerAliveInterval=30", "-o", "LogLevel=ERROR"] + sshArguments
+    }
 }
 
 /// Ctrl+Tab (or Ctrl+Shift+Tab, `backward`): the tab after the one at `index`, wrapping round, among the open sessions
