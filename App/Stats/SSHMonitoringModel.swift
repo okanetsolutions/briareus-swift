@@ -6,7 +6,6 @@ import Combine
 final class SSHMonitoringModel: ObservableObject {
     let serverID: Double?
     @Published private(set) var servers: [SSHResourceServer] = []
-    @Published private(set) var history: SSHResourceHistory?
     @Published private(set) var charts: [StatsChart] = []
     @Published private(set) var loaded = false
     @Published private(set) var loading = false
@@ -35,11 +34,11 @@ final class SSHMonitoringModel: ObservableObject {
             let answer = try await Store.shared.call("ssh_monitoring")
             servers = try SSHResourceServer.parseList(answer)
             if let serverID {
-                guard server != nil else { history = nil; charts = []; throw APIError(.http, status: 404, message: "This server is no longer available.") }
+                guard server != nil else { charts = []; throw APIError(.http, status: 404, message: "This server is no longer available.") }
                 if Store.shared.supports("ssh_resources") {
                     let h = try await Store.shared.call("ssh_resources", ["id": .number(serverID)])
                     guard let parsed = SSHResourceHistory(h) else { throw APIError(.nonJSON) }
-                    history = parsed; charts = parsed.charts
+                    charts = parsed.charts
                 }
             }
             error = nil

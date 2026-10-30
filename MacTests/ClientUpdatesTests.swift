@@ -147,7 +147,7 @@ final class ClientUpdatesTests: XCTestCase {
         let chart = history.charts[0]
         XCTAssertTrue(chart.plots)
         XCTAssertEqual(chart.series[0].isolatedPoints.map(\.value), [0])
-        XCTAssertFalse(history.charts[1].plots)
+        XCTAssertEqual(history.charts.map(\.id), ["cpu"])
         var series = chart.series[0]
         series.points += [.init(at: Date(timeIntervalSince1970: 240), value: 10, segment: 2),
                           .init(at: Date(timeIntervalSince1970: 300), value: 20, segment: 2)]
@@ -227,7 +227,41 @@ final class ClientUpdatesTests: XCTestCase {
         let points = history.charts[0].series[0].points
         XCTAssertEqual(points.map(\.value), [10, 20, 0, 30])
         XCTAssertEqual(points.map(\.segment), [0, 0, 1, 2])
-        XCTAssertTrue(history.charts[1].series[0].points.isEmpty)
+        XCTAssertEqual(history.charts.map(\.id), ["cpu"])
+    }
+    func testRemoteHistoryHidesChartsWithoutUsableReadings() throws {
+        let empty = try XCTUnwrap(SSHResourceHistory(["serverId": 1, "samples": []]))
+        XCTAssertTrue(empty.charts.isEmpty)
+
+        let history = try XCTUnwrap(SSHResourceHistory(["serverId": 1, "samples": [
+            ["at": 60000, "metrics": [
+                "cpu": ["usagePercent": nil], "memory": ["usedPercent": .number(.nan)],
+                "disks": [["mount": "/"], ["mount": "/data", "usedPercent": nil]],
+                "network": [["name": "veth0"], ["name": "veth1", "rxBytesPerSecond": nil, "txBytesPerSecond": nil],
+                            ["name": "veth2", "rxBytesPerSecond": .number(.infinity)]],
+            ]],
+            ["metrics": ["network": [["name": "veth3", "rxBytesPerSecond": 100]]]],
+        ]]))
+        XCTAssertTrue(history.charts.isEmpty)
+    }
+    func testRemoteHistoryKeepsZeroAndPartialNetworkReadings() throws {
+        let history = try XCTUnwrap(SSHResourceHistory(["serverId": 1, "samples": [
+            ["at": 60000, "metrics": [
+                "cpu": ["usagePercent": 0], "memory": ["usedPercent": 0],
+                "disks": [["mount": "/", "usedPercent": 0], ["mount": "/empty"]],
+                "network": [["name": "eth0", "rxBytesPerSecond": 0],
+                            ["name": "eth1", "txBytesPerSecond": 128], ["name": "veth0"]],
+            ]],
+            ["at": 120000, "metrics": nil],
+        ]]))
+        XCTAssertEqual(history.charts.map(\.id), ["cpu", "memory", "disk:/", "network:eth0", "network:eth1"])
+        let received = try XCTUnwrap(history.charts.first { $0.id == "network:eth0" })
+        XCTAssertEqual(received.series[0].points.map(\.value), [0])
+        XCTAssertTrue(received.series[1].points.isEmpty)
+        let sent = try XCTUnwrap(history.charts.first { $0.id == "network:eth1" })
+        XCTAssertTrue(sent.series[0].points.isEmpty)
+        XCTAssertEqual(sent.series[1].points.map(\.value), [128])
+        XCTAssertTrue(history.charts.allSatisfy(\.plots))
     }
     func testMonitorCredentialRequiresHTTPSAndBothParts() throws {
         let input: JSON = ["serverId": 123, "endpoint": "https://server.test/api/v1/telemetry/ssh/123/samples", "token": "one-time-secret", "intervalSeconds": 60, "retentionHours": 24]
