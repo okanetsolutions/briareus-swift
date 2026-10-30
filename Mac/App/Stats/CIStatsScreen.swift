@@ -37,6 +37,7 @@ struct CIStatsScreen: View {
             if stats.totals.total == 0 {
                 EmptyNote(title: "No checks observed in this window.",
                           detail: model.filter.repo == nil ? "Try a longer window." : "Try a longer window or All projects.")
+                if model.filter.isFiltered { Button("Clear filters") { model.clearFilters() }.dashButton(.bordered) }
             } else {
                 CISummaryTiles(totals: stats.totals, width: width)
                 CIDailyChart(bars: ciDailyBars(stats.daily))

@@ -199,6 +199,46 @@ final class CILogicTests: XCTestCase {
         XCTAssertEqual(page.runs, []); XCTAssertNil(page.nextOffset); XCTAssertFalse(page.truncated)
     }
 
+    func testARunsFeedReplacesOnTheFirstPageAndExtendsOnLaterOnes() {
+        var feed = CIRunsFeed()
+        feed.receive(CIRunsPage(j(#"{"runs":[{"id":"1","name":"a"}],"nextOffset":50}"#)), offset: 0)
+        feed.receive(CIRunsPage(j(#"{"runs":[{"id":"2","name":"b"}],"nextOffset":null,"truncated":true}"#)), offset: 50)
+        XCTAssertEqual(feed.runs.map(\.runID), ["1", "2"])
+        XCTAssertNil(feed.nextOffset); XCTAssertTrue(feed.truncated); XCTAssertNil(feed.failedOffset)
+        feed.receive(CIRunsPage(j(#"{"runs":[{"id":"3","name":"c"}],"nextOffset":50}"#)), offset: 0)
+        XCTAssertEqual(feed.runs.map(\.runID), ["3"])
+        XCTAssertEqual(feed.nextOffset, 50); XCTAssertFalse(feed.truncated)
+    }
+
+    func testAFailedLaterPageKeepsTheRunsAndIsTheOneToRetry() {
+        var feed = CIRunsFeed()
+        feed.receive(CIRunsPage(j(#"{"runs":[{"id":"1","name":"a"}],"nextOffset":50}"#)), offset: 0)
+        feed.fail(offset: 50)
+        XCTAssertEqual(feed.runs.map(\.runID), ["1"])
+        XCTAssertEqual(feed.nextOffset, 50)
+        XCTAssertEqual(feed.failedOffset, 50)
+        feed.receive(CIRunsPage(j(#"{"runs":[{"id":"2","name":"b"}]}"#)), offset: 50)
+        XCTAssertEqual(feed.runs.map(\.runID), ["1", "2"])
+        XCTAssertNil(feed.failedOffset)
+    }
+
+    func testAFailedFirstPageDropsTheRunsOfTheWindowReadBefore() {
+        var feed = CIRunsFeed()
+        feed.receive(CIRunsPage(j(#"{"runs":[{"id":"1","name":"a"}],"nextOffset":50,"truncated":true}"#)), offset: 0)
+        feed.fail(offset: 0)
+        XCTAssertEqual(feed.runs, [])
+        XCTAssertNil(feed.nextOffset); XCTAssertFalse(feed.truncated)
+        XCTAssertEqual(feed.failedOffset, 0)
+    }
+
+    func testOnlyTheDefaultFilterIsUnfiltered() {
+        XCTAssertFalse(CIFilter().isFiltered)
+        XCTAssertTrue(CIFilter(repo: "o/r").isFiltered)
+        XCTAssertTrue(CIFilter(days: CIFilter.windows[0]).isFiltered)
+        XCTAssertTrue(CIFilter(statuses: true).isFiltered)
+        XCTAssertTrue(CIFilter(branch: "main").isFiltered)
+    }
+
     func testTheCIRoutesExist() {
         XCTAssertEqual(APIRoute.named("ci_stats")?.method, "GET")
         XCTAssertEqual(APIRoute.named("ci_stats")?.path, "stats/ci")
