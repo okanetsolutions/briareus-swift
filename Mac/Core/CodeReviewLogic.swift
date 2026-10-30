@@ -1,7 +1,8 @@
 // A pull request's code reviews as Briareus stored them (`GET /pulls/{number}/code-reviews`): each review session's run,
-// its cost and summary, and every finding it registered with the verification step's verdict. Read-only: verdicts are
-// given by the review's own verify step, not by the user. Both apps' Code reviews tab, the voice and the meeting read
-// these. No UI here.
+// its cost and summary, whether someone has handled its findings, and every finding it registered with the verification
+// step's verdict. A person may mark a review handled or reopen it (`update_code_review`) and overrule a finding's verdict
+// with a reason (`update_code_review_finding`); the answers are folded back into the list as read. Both apps' Code reviews
+// tab, the voice and the meeting read these. No UI here.
 import Foundation
 
 /// The verify step's ruling on whether the pull request must change for a finding.
@@ -83,6 +84,15 @@ struct CodeReviewFinding: Equatable, Sendable, Identifiable {
     }
 }
 
+/// Whether someone has dealt with a review's findings, by fixing them or deciding not to. A person sets it, apart from how
+/// the run ended and from each finding's verdict; a rerun of the review puts it back to pending.
+enum CodeReviewHandling: String, Equatable, Sendable {
+    case pending, handled
+
+    var title: String { self == .handled ? "Handled" : "Pending" }
+    var tone: RowTone { self == .handled ? .ok : .muted }
+}
+
 /// How a code review run ended.
 enum CodeReviewStatus: String, Equatable, Sendable {
     case running, completed, failed
@@ -115,6 +125,8 @@ struct CodeReview: Equatable, Sendable, Identifiable {
     var costEstimated: Bool
     var unpricedTurns: Int
     var status: CodeReviewStatus
+    /// Nil from a server that does not track it, which has no way to change it either.
+    var handling: CodeReviewHandling?
     /// The summary comment it posted on the pull request, Markdown.
     var summary: String?
     var createdAt: Date?
@@ -138,6 +150,7 @@ struct CodeReview: Equatable, Sendable, Identifiable {
         costEstimated = j["costEstimated"].is(true)
         unpricedTurns = j["unpricedTurns"].truncatedInt ?? 0
         status = j["status"].string.flatMap(CodeReviewStatus.init) ?? .running
+        handling = j["handlingStatus"].string.flatMap(CodeReviewHandling.init)
         summary = j["summary"].nonEmpty
         createdAt = j["createdAt"].string.flatMap(attentionDate)
         completedAt = j["completedAt"].string.flatMap(attentionDate)
@@ -159,6 +172,75 @@ struct CodeReview: Equatable, Sendable, Identifiable {
     var openableSessionID: String? { status == .running ? sessionID : nil }
     /// How many findings carry each verdict, and how many wait for one.
     var counts: CodeReviewCounts { CodeReviewCounts(findings) }
+
+    /// It can be marked handled or reopened once it stopped running: a running review is still writing its findings.
+    var canChangeHandling: Bool { handling != nil && status != .running }
+    /// Its findings' verdicts can be overruled once it stopped running, when its own verify step is done with them.
+    var canEditFindings: Bool { status != .running }
+
+    /// What `update_code_review` sends to mark it handled, or to reopen it as pending.
+    func handlingArguments(repo: String, number: Int, handled: Bool) -> JSON {
+        ["repo": .string(repo), "pr": JSON(number), "reviewId": JSON(id),
+         "handlingStatus": .string((handled ? CodeReviewHandling.handled : .pending).rawValue)]
+    }
+
+    /// The `code_reviews` list with `review` (as `update_code_review` answers it, findings and all) in place of the one with
+    /// its id; the list as it was when it holds none.
+    static func replacing(review: JSON, in list: JSON) -> JSON {
+        guard let id = review["id"].truncatedInt, list.isArray else { return list }
+        return .array(list.items.map { $0["id"].truncatedInt == id ? review : $0 })
+    }
+    /// The `code_reviews` list with `finding` (as `update_code_review_finding` answers it) in place of the one with its id
+    /// in the review `reviewID`; the list as it was when that review or finding is not in it.
+    static func replacing(finding: JSON, inReview reviewID: Int, in list: JSON) -> JSON {
+        guard let id = finding["id"].truncatedInt, list.isArray else { return list }
+        return .array(list.items.map { review in
+            guard review["id"].truncatedInt == reviewID, review["findings"].isArray else { return review }
+            var changed = review
+            changed["findings"] = .array(review["findings"].items.map { $0["id"].truncatedInt == id ? finding : $0 })
+            return changed
+        })
+    }
+}
+
+/// A person overruling one finding's verdict, and saying why (`update_code_review_finding`): a real issue they will not fix
+/// is Optional, a refuted one Dismissed, and either needs the reason, as the server asks. Only what changed is sent.
+struct CodeReviewFindingEdit: Equatable, Sendable, Identifiable {
+    let reviewID: Int
+    let findingID: Int
+    var id: Int { findingID }
+    /// The finding's title, for the editor's heading.
+    let title: String
+    /// Nil clears the verdict, leaving the finding unverified.
+    var verdict: CodeReviewVerdict?
+    /// Why the verdict is what it is; empty clears it.
+    var reason: String
+    private let savedVerdict: CodeReviewVerdict?
+    private let savedReason: String
+
+    init(_ finding: CodeReviewFinding, review reviewID: Int) {
+        self.reviewID = reviewID
+        findingID = finding.id
+        title = finding.title
+        verdict = finding.verdict
+        reason = finding.comments ?? ""
+        savedVerdict = finding.verdict
+        savedReason = (finding.comments ?? "").cTrimmed
+    }
+
+    var isDirty: Bool { verdict != savedVerdict || reason.cTrimmed != savedReason }
+    /// Not fixing a finding has to say why.
+    var needsReason: Bool { verdict == .optional || verdict == .dismiss }
+    var canSave: Bool { isDirty && (!needsReason || !reason.cTrimmed.isEmpty) }
+
+    /// The verdict and reason that changed, with the review and finding they belong to; null clears either.
+    func arguments(repo: String, number: Int) -> JSON {
+        var a: JSON = ["repo": .string(repo), "pr": JSON(number), "reviewId": JSON(reviewID), "findingId": JSON(findingID)]
+        if verdict != savedVerdict { a["shouldFix"] = verdict.map { JSON.string($0.rawValue) } ?? .null }
+        let said = reason.cTrimmed
+        if said != savedReason { a["comments"] = said.isEmpty ? .null : .string(said) }
+        return a
+    }
 }
 
 /// A review's findings by verdict: the tab's header line and the badges a review row shows.
@@ -189,7 +271,10 @@ struct CodeReviewCounts: Equatable, Sendable {
 }
 
 extension Array where Element == CodeReview {
-    /// The findings of the newest completed review, what a pull request still carries: a clean one carries none. While
-    /// none has completed, the newest review's findings so far.
-    var latestFindings: [CodeReviewFinding] { (first { $0.status == .completed } ?? first)?.findings ?? [] }
+    /// The findings of the newest completed review, what a pull request still carries: a clean one carries none, and
+    /// neither does one someone marked handled. While none has completed, the newest review's findings so far.
+    var latestFindings: [CodeReviewFinding] {
+        guard let latest = first(where: { $0.status == .completed }) ?? first, latest.handling != .handled else { return [] }
+        return latest.findings
+    }
 }

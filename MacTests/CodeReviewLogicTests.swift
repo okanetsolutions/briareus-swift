@@ -1,5 +1,6 @@
 // A pull request's code reviews (Mac/Core/CodeReviewLogic.swift): what `GET /pulls/{number}/code-reviews` answers, read
-// into reviews and findings, with their verdicts, places, counts and the findings a pull request still carries.
+// into reviews and findings, with their verdicts, places, counts and the findings a pull request still carries; marking a
+// review handled, overruling a finding's verdict, and folding either answer back into the list.
 import XCTest
 @testable import BriareusMacCore
 
@@ -183,12 +184,131 @@ final class CodeReviewLogicTests: XCTestCase {
         XCTAssertEqual(running.latestFindings.map(\.id), [10])
         XCTAssertEqual(CodeReview.parse(j(#"{"codeReviews":[{"id":1,"findings":[]}]}"#)).latestFindings, [])
     }
+
+    func testAHandledReviewLeavesNothingCarriedAndAnOlderOneDoesNotSpeakForIt() {
+        let handled = CodeReview.parse(j(#"""
+        {"codeReviews":[{"id":2,"status":"completed","handlingStatus":"handled","findings":[{"id":20,"shouldFix":"fix"}]},
+                        {"id":1,"status":"completed","handlingStatus":"pending","findings":[{"id":10}]}]}
+        """#))
+        XCTAssertEqual(handled.latestFindings, [])
+        let reopened = CodeReview.parse(j(#"{"codeReviews":[{"id":2,"status":"completed","handlingStatus":"pending","findings":[{"id":20}]}]}"#))
+        XCTAssertEqual(reopened.latestFindings.map(\.id), [20])
+    }
+
+    // MARK: - Handling
+
+    func testHandlingIsReadAndAbsentFromAServerThatDoesNotTrackIt() {
+        XCTAssertEqual(review(#"{"id":1,"status":"completed","handlingStatus":"handled"}"#)?.handling, .handled)
+        XCTAssertEqual(review(#"{"id":1,"status":"completed","handlingStatus":"pending"}"#)?.handling, .pending)
+        XCTAssertNil(review(#"{"id":1,"status":"completed"}"#)?.handling)
+        XCTAssertNil(review(#"{"id":1,"status":"completed","handlingStatus":"done"}"#)?.handling)
+        XCTAssertNotEqual(CodeReviewHandling.handled.tone, CodeReviewHandling.pending.tone)
+    }
+
+    func testOnlyAStoppedReviewOnAServerThatTracksHandlingCanChangeIt() {
+        XCTAssertTrue(review(#"{"id":1,"status":"completed","handlingStatus":"pending"}"#)!.canChangeHandling)
+        XCTAssertTrue(review(#"{"id":1,"status":"failed","handlingStatus":"handled"}"#)!.canChangeHandling)
+        XCTAssertFalse(review(#"{"id":1,"status":"running","handlingStatus":"pending"}"#)!.canChangeHandling)
+        XCTAssertFalse(review(#"{"id":1,"status":"completed"}"#)!.canChangeHandling)
+        XCTAssertTrue(review(#"{"id":1,"status":"completed"}"#)!.canEditFindings)
+        XCTAssertFalse(review(#"{"id":1,"status":"running"}"#)!.canEditFindings)
+    }
+
+    func testMarkingHandledSendsOnlyWhatTheRouteTakes() throws {
+        let r = review(#"{"id":5,"repo":"O/R","status":"completed","handlingStatus":"pending"}"#)!
+        let a = r.handlingArguments(repo: "o/r", number: 9, handled: true)
+        XCTAssertEqual(a.count, 4)
+        XCTAssertEqual(a["repo"].string, "o/r"); XCTAssertEqual(a["pr"].int, 9); XCTAssertEqual(a["reviewId"].int, 5)
+        XCTAssertEqual(a["handlingStatus"].string, "handled")
+        XCTAssertEqual(r.handlingArguments(repo: "o/r", number: 9, handled: false)["handlingStatus"].string, "pending")
+        // The pull request and review go in the path; the server refuses any body field but these.
+        let (path, rest) = try APIClient.resolve(try XCTUnwrap(APIRoute.named("update_code_review")), a)
+        XCTAssertEqual(path, "pulls/9/code-reviews/5")
+        XCTAssertEqual(Set(rest.keys), ["repo", "handlingStatus"])
+    }
+
+    // MARK: - Folding an answer back in
+
+    private var list: JSON {
+        j(#"""
+        [{"id":2,"status":"completed","handlingStatus":"pending","findings":[{"id":20,"shouldFix":"fix"},{"id":21}]},
+         {"id":1,"status":"completed","handlingStatus":"pending","findings":[{"id":10,"shouldFix":"fix"}]}]
+        """#)
+    }
+
+    func testAnUpdatedReviewTakesItsOwnPlace() {
+        let answer = j(#"{"id":1,"status":"completed","handlingStatus":"handled","findings":[{"id":10,"shouldFix":"fix"}]}"#)
+        let after = CodeReview.parse(["codeReviews": CodeReview.replacing(review: answer, in: list)])
+        XCTAssertEqual(after.map(\.id), [2, 1])
+        XCTAssertEqual(after.map(\.handling), [.pending, .handled])
+        XCTAssertEqual(after[1].findings.map(\.id), [10])
+        // A review the list does not hold, or an answer without an id, leaves it as it was.
+        XCTAssertEqual(CodeReview.replacing(review: j(#"{"id":9,"handlingStatus":"handled"}"#), in: list), list)
+        XCTAssertEqual(CodeReview.replacing(review: j(#"{"handlingStatus":"handled"}"#), in: list), list)
+    }
+
+    func testAnUpdatedFindingTakesItsPlaceInItsOwnReviewOnly() {
+        let answer = j(#"{"id":21,"shouldFix":"dismiss","comments":"Guarded upstream."}"#)
+        let after = CodeReview.parse(["codeReviews": CodeReview.replacing(finding: answer, inReview: 2, in: list)])
+        XCTAssertEqual(after[0].findings.map(\.id), [20, 21])
+        XCTAssertEqual(after[0].findings.map(\.verdict), [.fix, .dismiss])
+        XCTAssertEqual(after[0].findings[1].comments, "Guarded upstream.")
+        XCTAssertEqual(after[1].findings.map(\.verdict), [.fix])
+        // Another review, or one the list does not hold, is left alone.
+        XCTAssertEqual(CodeReview.replacing(finding: answer, inReview: 1, in: list), list)
+        XCTAssertEqual(CodeReview.replacing(finding: answer, inReview: 7, in: list), list)
+    }
+
+    // MARK: - Overruling a verdict
+
+    func testAnEditStartsCleanAndSendsOnlyWhatChanged() throws {
+        let f = finding(#"{"id":21,"shouldFix":"fix","comments":"  Reproduced. "}"#)!
+        var e = CodeReviewFindingEdit(f, review: 2)
+        XCTAssertFalse(e.isDirty); XCTAssertFalse(e.canSave)
+        e.reason = "Reproduced."
+        XCTAssertFalse(e.isDirty)
+        e.verdict = .optional
+        XCTAssertTrue(e.isDirty)
+        var a = e.arguments(repo: "o/r", number: 9)
+        XCTAssertEqual(a.count, 5)
+        XCTAssertEqual(a["pr"].int, 9); XCTAssertEqual(a["reviewId"].int, 2); XCTAssertEqual(a["findingId"].int, 21)
+        XCTAssertEqual(a["shouldFix"].string, "optional")
+        XCTAssertNil(a.object?["comments"])
+        e.reason = " Not worth it here. \n"
+        a = e.arguments(repo: "o/r", number: 9)
+        XCTAssertEqual(a.count, 6); XCTAssertEqual(a["comments"].string, "Not worth it here.")
+        let (path, rest) = try APIClient.resolve(try XCTUnwrap(APIRoute.named("update_code_review_finding")), a)
+        XCTAssertEqual(path, "pulls/9/code-reviews/2/findings/21")
+        XCTAssertEqual(Set(rest.keys), ["repo", "shouldFix", "comments"])
+    }
+
+    func testNotFixingAFindingNeedsAReason() {
+        var e = CodeReviewFindingEdit(finding(#"{"id":1,"shouldFix":"fix"}"#)!, review: 1)
+        for verdict in [CodeReviewVerdict.optional, .dismiss] {
+            e.verdict = verdict; e.reason = " "
+            XCTAssertTrue(e.needsReason); XCTAssertFalse(e.canSave)
+            e.reason = "Refuted by the guard on line 4."
+            XCTAssertTrue(e.canSave)
+        }
+        e.verdict = nil; e.reason = ""
+        XCTAssertFalse(e.needsReason); XCTAssertTrue(e.canSave)
+    }
+
+    func testClearingAVerdictOrAReasonSendsNull() {
+        var e = CodeReviewFindingEdit(finding(#"{"id":3,"shouldFix":"dismiss","comments":"Refuted."}"#)!, review: 1)
+        e.verdict = nil; e.reason = ""
+        let a = e.arguments(repo: "o/r", number: 9)
+        XCTAssertEqual(a.object?["shouldFix"], JSON.null)
+        XCTAssertEqual(a.object?["comments"], JSON.null)
+    }
 }
 
 final class CodeReviewRouteTests: XCTestCase {
     func testCodeReviewsAreReadOnTheirOwnRouteAndTheFindingsRoutesAreGone() {
         XCTAssertEqual(APIRoute.named("code_reviews")?.method, "GET")
         XCTAssertEqual(APIRoute.named("code_reviews")?.path, "pulls/{pr}/code-reviews")
+        XCTAssertEqual(APIRoute.named("update_code_review")?.method, "PATCH")
+        XCTAssertEqual(APIRoute.named("update_code_review_finding")?.method, "PATCH")
         for gone in ["findings", "finding_decision", "review", "review_loop", "complete_findings", "save_findings", "reply_finding", "delete_finding"] {
             XCTAssertNil(APIRoute.named(gone), gone)
         }

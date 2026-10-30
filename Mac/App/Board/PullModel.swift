@@ -22,12 +22,9 @@ final class PullModel: ObservableObject {
     /// The conversation being deleted from the Sessions tab, and why the last delete failed.
     @Published var deletingRun: String?
     @Published var runError: String?
-    /// The stored code reviews, newest first, and the `code_reviews` list as read, which is saved with the pull request.
-    @Published var codeReviews: [CodeReview] = []
-    private var codeReviewsRaw: JSON = []
-    /// The code reviews have been read (or restored) once, and why the last read failed.
-    @Published private(set) var codeReviewsRead = false
-    @Published var codeReviewsError: String?
+    /// The stored code reviews and their writes (CodeReviewsModel.swift), saved with the pull request.
+    let codeReviews: CodeReviewsModel
+    private var codeReviewsSink: AnyCancellable?
     let files: PullFilesModel
     @Published var conv: [ConvList] = Array(repeating: ConvList(), count: ConvFeed.allCases.count)
     @Published var error: String?
@@ -91,9 +88,12 @@ final class PullModel: ObservableObject {
     init(repo: String, number: Int, stack: StackPosition?, summary: PullSummary?) {
         self.repo = repo; self.number = number; self.stack = stack; self.summary = summary
         files = PullFilesModel(repo: repo, number: number)
+        codeReviews = CodeReviewsModel(repo: repo, number: number)
         // The profiles the sidebar already read stand in until this screen reads them.
         profiles = runProfilesParse(ProjectsModel.shared.raw, repo: repo)
         serve.want = UserDefaults.standard.string(forKey: runWantKey)
+        codeReviews.changed = { [weak self] in self?.save() }
+        codeReviewsSink = codeReviews.objectWillChange.sink { [weak self] _ in MainActor.assumeIsolated { self?.objectWillChange.send() } }
     }
 
     var id: String { "pull:\(repo)#\(number)" }
@@ -108,13 +108,13 @@ final class PullModel: ObservableObject {
 
     private var key: String { PullSnapshot.key(repo: repo, number: number) }
     private func save() {
-        let snapshot = PullSnapshot(pr: pr, codeReviews: codeReviewsRaw, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
+        let snapshot = PullSnapshot(pr: pr, codeReviews: codeReviews.raw, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
         if let saved = snapshot.json { Store.shared.cache.store(saved, key) }
     }
     private func restore() {
         if let saved = PullSnapshot(Store.shared.cache.value(key)) {
             pr = saved.pr
-            adoptCodeReviews(saved.codeReviews)
+            codeReviews.take(saved.codeReviews)
             if descriptionBody == nil { descriptionBody = saved.body }
             if descriptionAuthor == nil { descriptionAuthor = saved.bodyAuthor }
             if row == nil { row = saved.row }
@@ -159,15 +159,15 @@ final class PullModel: ObservableObject {
                 let c = await boardCall("code_reviews", args)
                 guard gen == pullGen else { return nil }
                 switch c {
-                case .success(let v): adoptCodeReviews(v["codeReviews"]); codeReviewsError = nil
-                case .failure(let e): if e.kind != .cancelled { codeReviewsError = e.description; codeReviewsRead = true }
+                case .success(let v): codeReviews.take(v["codeReviews"])
+                case .failure(let e): if e.kind != .cancelled { codeReviews.failed(e.description) }
                 }
             }
         case .failure(let e):
             if e.kind == .cancelled { readingPull = false; return e }
             error = e.description
             // The reviews are read after the pull request: without it there is nothing more to wait for.
-            codeReviewsRead = true
+            codeReviews.gaveUp()
             failure = e
         }
         readingPull = false
@@ -436,14 +436,6 @@ final class PullModel: ObservableObject {
 
     // MARK: Code reviews
 
-    /// Keeps the `code_reviews` list as read, for the snapshot, and the reviews parsed from it.
-    private func adoptCodeReviews(_ list: JSON) {
-        guard list.isArray else { return }
-        codeReviewsRaw = list
-        codeReviewsRead = true
-        let parsed = CodeReview.parse(["codeReviews": list])
-        if parsed != codeReviews { codeReviews = parsed }
-    }
     /// A review's session, which keeps its transcript after it closes.
     func openReviewSession(_ id: String) { Navigator.shared.push(.conversation(id: id, session: nil)) }
 
