@@ -21,10 +21,10 @@ struct CodeReviewFindingEditor: View {
                 .lineLimit(2...8).focused($focused).dashField(focused: focused)
             if let error = model.editError { Notice(message: error) }
             HStack(spacing: 8) {
-                Button(model.saving == nil ? "Save" : "Saving\u{2026}") { model.save(edit) }
-                    .dashButton(.prominent).disabled(!edit.canSave || model.saving != nil)
+                Button(model.busy ? "Saving\u{2026}" : "Save") { model.save(edit) }
+                    .dashButton(.prominent).disabled(!edit.canSave || model.busy)
                     .keyboardShortcut(.return, modifiers: .command)
-                Button("Cancel") { model.cancelEdit() }.dashButton(.bordered).disabled(model.saving != nil)
+                Button("Cancel") { model.cancelEdit() }.dashButton(.bordered).disabled(model.busy)
                     .keyboardShortcut(.cancelAction)
             }
         }

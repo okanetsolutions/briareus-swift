@@ -69,7 +69,7 @@ private struct HandlingButton: View {
         Button { model.setHandled(review) } label: {
             Label(model.isSaving(review) ? "Saving\u{2026}" : action.title, systemImage: action.symbol)
         }
-        .dashButton(.bordered).disabled(model.saving != nil)
+        .dashButton(.bordered).disabled(model.busy)
     }
 }
 
@@ -82,7 +82,7 @@ private struct CodeReviewFindingList: View {
         let editable = model.canEdit(review)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(review.findings) { finding in
-                CodeReviewFindingRow(finding: finding, edit: editable ? { model.edit(finding, of: review) } : nil)
+                CodeReviewFindingRow(finding: finding, busy: model.busy, edit: editable ? { model.edit(finding, of: review) } : nil)
                 if let edit = model.editor(for: finding, of: review) {
                     CodeReviewFindingEditor(model: model, edit: edit).padding(.leading, 22)
                 }
@@ -95,6 +95,8 @@ private struct CodeReviewFindingList: View {
 /// verdict when `edit` is given.
 private struct CodeReviewFindingRow: View {
     var finding: CodeReviewFinding
+    /// Another save is under way, so Change verdict waits.
+    var busy: Bool
     var edit: (() -> Void)?
     @State private var open = false
 
@@ -139,6 +141,6 @@ private struct CodeReviewFindingRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        if let edit { Button("Change verdict", action: edit).dashButton(.bordered) }
+        if let edit { Button("Change verdict", action: edit).dashButton(.bordered).disabled(busy) }
     }
 }

@@ -47,7 +47,7 @@ private struct CodeReviewSection: View {
             }
             let editable = model.canEdit(review)
             ForEach(review.findings) { finding in
-                CodeReviewFindingRow(finding: finding, edit: editable ? { model.edit(finding, of: review) } : nil)
+                CodeReviewFindingRow(finding: finding, busy: model.busy, edit: editable ? { model.edit(finding, of: review) } : nil)
             }
         }
         .listRowBackground(Theme.row)
@@ -67,7 +67,7 @@ private struct HandlingButton: View {
                 if model.isSaving(review) { Spacer(); ProgressView() }
             }
         }
-        .disabled(model.saving != nil)
+        .disabled(model.busy)
     }
 }
 
@@ -95,6 +95,8 @@ private struct CodeReviewHeading: View {
 /// when `edit` is given.
 private struct CodeReviewFindingRow: View {
     let finding: CodeReviewFinding
+    /// Another save is under way, so Change verdict waits.
+    let busy: Bool
     let edit: (() -> Void)?
     var body: some View {
         DisclosureGroup {
@@ -105,7 +107,7 @@ private struct CodeReviewFindingRow: View {
             if let reason = finding.comments, !reason.isEmpty {
                 Text(reason).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
             }
-            if let edit { Button("Change verdict", systemImage: "pencil", action: edit) }
+            if let edit { Button("Change verdict", systemImage: "pencil", action: edit).disabled(busy) }
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

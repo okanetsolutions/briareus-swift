@@ -39,8 +39,9 @@ final class CodeReviewsModel: ObservableObject {
     /// Mark handled or Reopen, when this token and server can change the review's handling.
     func handlingAction(for review: CodeReview) -> CodeReviewHandlingAction? { canHandle ? review.handlingAction : nil }
     func isSaving(_ review: CodeReview) -> Bool { saving == "review:\(review.id)" }
-    /// Change verdict is offered on a stopped review's findings, and not while another save is under way.
-    func canEdit(_ review: CodeReview) -> Bool { canEditFindings && review.canEditFindings && saving == nil }
+    /// Change verdict is offered on a stopped review's findings; `busy` holds it while another save is under way.
+    func canEdit(_ review: CodeReview) -> Bool { canEditFindings && review.canEditFindings }
+    var busy: Bool { saving != nil }
     /// The open editor, when it is on this finding of this review.
     func editor(for finding: CodeReviewFinding, of review: CodeReview) -> CodeReviewFindingEdit? {
         guard let editing, editing.reviewID == review.id, editing.findingID == finding.id else { return nil }
@@ -75,7 +76,7 @@ final class CodeReviewsModel: ObservableObject {
 
     /// Opens the editor on a finding of a review that has stopped running.
     func edit(_ finding: CodeReviewFinding, of review: CodeReview) {
-        guard canEdit(review) else { return }
+        guard canEdit(review), !busy else { return }
         editError = nil
         editing = CodeReviewFindingEdit(finding, review: review.id)
     }

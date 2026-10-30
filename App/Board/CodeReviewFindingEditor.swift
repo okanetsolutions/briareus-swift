@@ -45,9 +45,9 @@ private struct CodeReviewFindingEditor: View {
             .scrollContentBackground(.hidden).background(Theme.canvas)
             .navigationTitle("Change verdict").navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(model.saving != nil) }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(model.busy) }
                 ToolbarItem(placement: .confirmationAction) {
-                    if model.saving != nil {
+                    if model.busy {
                         ProgressView()
                     } else {
                         Button("Save") { model.save(edit) }.bold().disabled(!edit.canSave)
@@ -55,6 +55,6 @@ private struct CodeReviewFindingEditor: View {
                 }
             }
         }
-        .interactiveDismissDisabled(model.saving != nil)
+        .interactiveDismissDisabled(model.busy)
     }
 }
