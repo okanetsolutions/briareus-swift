@@ -217,7 +217,7 @@ final class PullScreenModel: ObservableObject {
         if pr["body"].string == nil && !bodyRead && !readingBody && store.supports("pull_description") { Task { await loadBody() } }
         if store.supports("code_reviews") {
             do {
-                let mark = codeReviews.writes
+                let mark = codeReviews.writes.mark
                 let f = try await store.call("code_reviews", args)
                 guard gen == pullGen else { return }
                 codeReviews.take(f["codeReviews"], readAt: mark)

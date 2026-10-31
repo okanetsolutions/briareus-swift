@@ -107,7 +107,7 @@ private struct CodeReviewFindingRow: View {
             if let reason = finding.comments, !reason.isEmpty {
                 Text(reason).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
             }
-            if let edit { Button("Change verdict", systemImage: "pencil", action: edit).disabled(busy) }
+            if let edit { Button("Change verdict", systemImage: CodeReviewFindingEdit.symbol, action: edit).disabled(busy) }
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

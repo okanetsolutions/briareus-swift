@@ -38,7 +38,7 @@ private struct CodeReviewFindingEditor: View {
                 } header: {
                     Text("Reason")
                 } footer: {
-                    if edit.needsReason { Text("A finding left unfixed says why.") }
+                    if let hint = edit.reasonHint { Text(hint) }
                 }
                 .listRowBackground(Theme.row)
             }
@@ -50,7 +50,7 @@ private struct CodeReviewFindingEditor: View {
                     if model.busy {
                         ProgressView()
                     } else {
-                        Button("Save") { model.save(edit) }.bold().disabled(!edit.canSave)
+                        Button("Save") { model.save(edit) }.bold().disabled(!model.canSave(edit))
                     }
                 }
             }

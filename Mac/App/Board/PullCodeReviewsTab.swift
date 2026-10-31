@@ -141,6 +141,6 @@ private struct CodeReviewFindingRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        if let edit { Button("Change verdict", action: edit).dashButton(.bordered).disabled(busy) }
+        if let edit { Button("Change verdict", systemImage: CodeReviewFindingEdit.symbol, action: edit).dashButton(.bordered).disabled(busy) }
     }
 }

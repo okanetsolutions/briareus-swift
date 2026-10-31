@@ -67,9 +67,11 @@ enum Voice {
     run_errand starts what the board's buttons start on a pull request: review runs the code review, which publishes \
     its findings and then verifies each one; implement-feedback fixes what the pull request's open review feedback asks \
     for and replies on each thread; fix-checks fixes failing checks; solve-conflicts resolves conflicts. A pull \
-    request's code reviews and the findings they registered, each with the verify step's verdict (fix, optional or \
-    dismissed), are read with list_code_reviews. The verdicts are the review's own: read them briefly, and when the user \
-    wants something changed, send it to a conversation rather than deciding it here.
+    request's code reviews and the findings they registered, each with its verdict (fix, optional or dismissed), are \
+    read with list_code_reviews. A verdict is the verify step's, or a person's who overruled it, with why. A review's \
+    handling says whether someone has dealt with its findings: pending until a person marks it handled, by fixing them \
+    or deciding not to, and pending again when the review reruns. Read them briefly, and when the user wants something \
+    changed, send it to a conversation rather than deciding it here.
 
     ## Ready to merge
     A pull request is ready to be merged only when list_pull_requests marks it ready_to_merge: it carries the \
@@ -375,7 +377,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
             description = "What one of the project's pull requests changes: how many files, lines added and removed, its description, and each changed file's name with its diff, to summarize what it touches."
             add("number", "integer", "The pull request's number.")
         case .listCodeReviews:
-            description = "The code reviews run on one of the project's pull requests, newest first: each one's status, what it ran on and its summary, and every finding it registered with its severity, place, what it says and the verify step's verdict (fix, optional or dismissed)."
+            description = "The code reviews run on one of the project's pull requests, newest first: each one's status, what it ran on and its summary, and every finding it registered with its severity, place, what it says and its verdict (fix, optional or dismissed), and its handling: pending, or handled once someone dealt with its findings."
             add("number", "integer", "The pull request's number.")
         case .runErrand:
             description = "Starts an errand on one of the project's pull requests, as the board's buttons do: review (run the code review, publish its findings and verify them), implement-feedback (fix what the open review feedback asks for and reply on each thread), fix-checks (fix failing CI checks) or solve-conflicts (merge the base in and resolve the conflicts)."
@@ -415,7 +417,7 @@ enum VoiceTool: String, CaseIterable, Sendable {
         case .sendMessage where held: said = "Sends a message to this conversation's agent, or answers its question. A busy agent gets it in its running turn or the next."
         case .stopConversation where held: said = "Stops this conversation's running turn. The conversation stays open."
         case .readPullRequest where held: said = "What this conversation's pull request changes: how many files, lines added and removed, its description, and each changed file's name with its diff."
-        case .listCodeReviews where held: said = "The code reviews run on this conversation's pull request, newest first, with every finding each one registered and the verify step's verdict on it."
+        case .listCodeReviews where held: said = "The code reviews run on this conversation's pull request, newest first, with every finding each one registered and its verdict, and whether someone has handled each review."
         default: said = description
         }
         return ["type": "function", "name": .string(rawValue), "description": .string(said),

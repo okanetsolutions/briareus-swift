@@ -249,9 +249,19 @@ struct CodeReviewFindingEdit: Equatable, Sendable, Identifiable {
     var isDirty: Bool { verdict != savedVerdict || reason.cTrimmed != savedReason }
     /// Not fixing a finding has to say why.
     var needsReason: Bool { verdict == .optional || verdict == .dismiss }
-    var canSave: Bool { isDirty && (!needsReason || !reason.cTrimmed.isEmpty) }
+    /// A reason is given, and one of its own once the verdict changed: the saved one argued for the old verdict (the
+    /// verify step's evidence for fixing it, say), so it cannot stand for the new one.
+    var hasReason: Bool {
+        let said = reason.cTrimmed
+        return !said.isEmpty && (verdict == savedVerdict || said != savedReason)
+    }
+    var canSave: Bool { isDirty && (!needsReason || hasReason) }
     /// What the reason box asks for: why it will not be fixed, once that is the verdict.
     var reasonPrompt: String { needsReason ? "Why it will not be fixed" : "Why the verdict is what it is" }
+    /// The line under the reason box while the verdict needs a reason; nil when it does not.
+    var reasonHint: String? { needsReason ? "A finding left unfixed says why." : nil }
+    /// The SF Symbol of Change verdict, the button that opens the editor.
+    static let symbol = "pencil"
 
     /// The verdict and reason that changed, with the review and finding they belong to; null clears either.
     func arguments(repo: String, number: Int) -> JSON {
@@ -261,6 +271,19 @@ struct CodeReviewFindingEdit: Equatable, Sendable, Identifiable {
         if said != savedReason { a["comments"] = said.isEmpty ? .null : .string(said) }
         return a
     }
+}
+
+/// Counts a screen's writes as each starts and as it ends, so a read can tell whether a write began or finished since it
+/// started: such a read may predate the write and would put back what it changed.
+struct WriteMarks: Equatable, Sendable {
+    /// The mark a read starts at.
+    private(set) var mark = 0
+
+    mutating func begin() { mark += 1 }
+    mutating func end() { mark += 1 }
+    /// Whether a read that began at `start` may be taken: no write began or ended since. A read without a start (restored
+    /// from the last visit, or a write's own answer) always holds.
+    func holds(_ start: Int?) -> Bool { start == nil || start == mark }
 }
 
 /// A review's findings by verdict: the tab's header line and the badges a review row shows.
@@ -291,6 +314,11 @@ struct CodeReviewCounts: Equatable, Sendable {
 }
 
 extension Array where Element == CodeReview {
+    /// Whether `edit` can be saved: it can (`canSave`), and its review is here and has stopped running, since a rerun
+    /// rewrites the findings.
+    func allowsSaving(_ edit: CodeReviewFindingEdit) -> Bool {
+        edit.canSave && (first { $0.id == edit.reviewID }?.canEditFindings ?? false)
+    }
     /// The findings of the newest completed review, what a pull request still carries: a clean one carries none. While
     /// none has completed, the newest review's findings so far.
     var latestFindings: [CodeReviewFinding] { (first { $0.status == .completed } ?? first)?.findings ?? [] }

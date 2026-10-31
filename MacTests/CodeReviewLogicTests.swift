@@ -267,12 +267,15 @@ final class CodeReviewLogicTests: XCTestCase {
         XCTAssertFalse(e.isDirty)
         e.verdict = .optional
         XCTAssertTrue(e.isDirty)
+        // The verify step's reason for fixing it cannot stand as the reason for not fixing it.
+        XCTAssertFalse(e.canSave)
         var a = e.arguments(repo: "o/r", number: 9)
         XCTAssertEqual(a.count, 5)
         XCTAssertEqual(a["pr"].int, 9); XCTAssertEqual(a["reviewId"].int, 2); XCTAssertEqual(a["findingId"].int, 21)
         XCTAssertEqual(a["shouldFix"].string, "optional")
         XCTAssertNil(a.object?["comments"])
         e.reason = " Not worth it here. \n"
+        XCTAssertTrue(e.canSave)
         a = e.arguments(repo: "o/r", number: 9)
         XCTAssertEqual(a.count, 6); XCTAssertEqual(a["comments"].string, "Not worth it here.")
         let (path, rest) = try APIClient.resolve(try XCTUnwrap(APIRoute.named("update_code_review_finding")), a)
@@ -297,6 +300,51 @@ final class CodeReviewLogicTests: XCTestCase {
         e.verdict = nil; e.reason = ""
         XCTAssertFalse(e.needsReason); XCTAssertTrue(e.canSave)
         XCTAssertNotEqual(e.reasonPrompt, asksWhyNotFixed)
+    }
+
+    func testANewVerdictNotToFixNeedsAReasonOfItsOwn() {
+        let saved = finding(#"{"id":1,"shouldFix":"optional","comments":"Not worth it."}"#)!
+        var e = CodeReviewFindingEdit(saved, review: 1)
+        XCTAssertNil(CodeReviewFindingEdit(finding(#"{"id":1,"shouldFix":"fix"}"#)!, review: 1).reasonHint)
+        XCTAssertNotNil(e.reasonHint)
+        // The same verdict keeps its reason: rewording it is enough.
+        e.reason = "Not worth it here."
+        XCTAssertTrue(e.hasReason); XCTAssertTrue(e.canSave)
+        // A changed verdict needs a reason other than the saved one, even one only spaced differently.
+        e.verdict = .dismiss; e.reason = " Not worth it. "
+        XCTAssertFalse(e.hasReason); XCTAssertFalse(e.canSave)
+        e.reason = "Refuted: the guard on line 4 covers it."
+        XCTAssertTrue(e.canSave)
+        // Back to Fix, the saved reason may stay.
+        e.verdict = .fix; e.reason = "Not worth it."
+        XCTAssertTrue(e.canSave)
+    }
+
+    func testAReadHoldsOnlyWhenNoWriteBeganOrEndedSinceItStarted() {
+        var marks = WriteMarks()
+        XCTAssertTrue(marks.holds(nil))
+        let before = marks.mark
+        XCTAssertTrue(marks.holds(before))
+        marks.begin()
+        let during = marks.mark
+        XCTAssertFalse(marks.holds(before))
+        XCTAssertTrue(marks.holds(during))
+        marks.end()
+        XCTAssertFalse(marks.holds(before)); XCTAssertFalse(marks.holds(during))
+        XCTAssertTrue(marks.holds(marks.mark)); XCTAssertTrue(marks.holds(nil))
+    }
+
+    func testAVerdictIsSavedOnlyWhileItsReviewHasStopped() {
+        func reviews(_ status: String) -> [CodeReview] {
+            CodeReview.parse(j(#"{"codeReviews":[{"id":4,"status":"\#(status)","findings":[{"id":7,"title":"T"}]}]}"#))
+        }
+        var edit = CodeReviewFindingEdit(reviews("completed")[0].findings[0], review: 4)
+        XCTAssertFalse(reviews("completed").allowsSaving(edit))
+        edit.verdict = .fix
+        XCTAssertTrue(reviews("completed").allowsSaving(edit))
+        XCTAssertTrue(reviews("failed").allowsSaving(edit))
+        XCTAssertFalse(reviews("running").allowsSaving(edit))
+        XCTAssertFalse([CodeReview]().allowsSaving(edit))
     }
 
     func testClearingAVerdictOrAReasonSendsNull() {

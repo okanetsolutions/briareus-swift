@@ -22,9 +22,9 @@ final class CodeReviewsModel: ObservableObject {
     @Published var editing: CodeReviewFindingEdit? { didSet { if editing == nil { editError = nil } } }
     /// Why the last verdict save failed, shown in the sheet.
     @Published private(set) var editError: String?
-    /// Counts each write's start and end. A `code_reviews` read that began before a write, or while one was under way,
-    /// may predate it and would put back what it changed; the mark it began at tells (`take(_:readAt:)`).
-    private(set) var writes = 0
+    /// Each write's start and end. A `code_reviews` read that began before a write, or while one was under way, may
+    /// predate it and would put back what it changed; the mark it began at tells (`take(_:readAt:)`).
+    private(set) var writes = WriteMarks()
     /// Called once a write changed the list, so the pull request's snapshot keeps it.
     var changed: @MainActor () -> Void = {}
 
@@ -42,18 +42,20 @@ final class CodeReviewsModel: ObservableObject {
     /// Change verdict is offered on a stopped review's findings; `busy` holds it while another save is under way.
     func canEdit(_ review: CodeReview) -> Bool { canEditFindings && review.canEditFindings }
     var busy: Bool { saving != nil }
+    /// Save is offered while this token may write verdicts, the edit can be saved and its review has not started again.
+    func canSave(_ edit: CodeReviewFindingEdit) -> Bool { canEditFindings && reviews.allowsSaving(edit) }
 
     // MARK: Reading
 
     /// The list as read or restored; anything but an array reads as none. A read that began at a `writes` mark since
-    /// passed is dropped.
+    /// passed is dropped. Taking the list clears what the last read or handling save said went wrong.
     func take(_ list: JSON, readAt mark: Int? = nil) {
-        if let mark, mark != writes { return }
+        guard writes.holds(mark) else { return }
         raw = list.isArray ? list : []
         let parsed = CodeReview.parse(["codeReviews": raw])
         if parsed != reviews { reviews = parsed }
         read = true
-        error = nil
+        error = nil; saveError = nil
     }
     func failed(_ message: String) { error = message; read = true }
     /// The pull request itself could not be read: there is nothing more to wait for.
@@ -77,7 +79,7 @@ final class CodeReviewsModel: ObservableObject {
     }
     /// Saves an overruled verdict; the sheet closes once the server took it, and stays open with the reason when not.
     func save(_ edit: CodeReviewFindingEdit) {
-        guard saving == nil, canEditFindings, edit.canSave else { return }
+        guard saving == nil, canSave(edit) else { return }
         editing = edit
         let args = edit.arguments(repo: repo, number: number)
         write("finding:\(edit.findingID)", "update_code_review_finding", args, failure: \.editError, fold: {
@@ -92,12 +94,12 @@ final class CodeReviewsModel: ObservableObject {
     private func write(_ key: String, _ call: String, _ args: JSON, failure: ReferenceWritableKeyPath<CodeReviewsModel, String?>,
                        fold: @escaping (JSON, JSON) -> JSON, done: @escaping @MainActor (Bool) -> Void = { _ in }) {
         saving = key; saveError = nil; editError = nil
-        writes += 1
+        writes.begin()
         Task { done(await send(call, args, failure: failure, fold: fold)) }
     }
     private func send(_ call: String, _ args: JSON, failure key: ReferenceWritableKeyPath<CodeReviewsModel, String?>,
                       fold: (JSON, JSON) -> JSON) async -> Bool {
-        defer { saving = nil; writes += 1 }
+        defer { saving = nil; writes.end() }
         do {
             let answer = try await Store.shared.call(call, args)
             take(fold(answer, raw))

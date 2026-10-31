@@ -19,10 +19,11 @@ struct CodeReviewFindingEditor: View {
             Segments(titles: verdicts.map(CodeReviewVerdict.choiceTitle), selected: verdicts.firstIndex(of: edit.verdict)) { edit.verdict = verdicts[$0] }
             TextField(edit.reasonPrompt, text: $edit.reason, axis: .vertical)
                 .lineLimit(2...8).focused($focused).dashField(focused: focused)
+            if let hint = edit.reasonHint { Text(hint).font(Theme.footnote).foregroundStyle(Theme.muted) }
             if let error = model.editError { Notice(message: error) }
             HStack(spacing: 8) {
                 Button(model.busy ? "Saving\u{2026}" : "Save") { model.save(edit) }
-                    .dashButton(.prominent).disabled(!edit.canSave || model.busy)
+                    .dashButton(.prominent).disabled(!model.canSave(edit) || model.busy)
                     .keyboardShortcut(.return, modifiers: .command)
                 Button("Cancel") { model.cancelEdit() }.dashButton(.bordered).disabled(model.busy)
                     .keyboardShortcut(.cancelAction)
