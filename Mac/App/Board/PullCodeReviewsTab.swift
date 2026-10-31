@@ -1,35 +1,40 @@
 // The pull request's Code reviews tab (`GET /pulls/{number}/code-reviews`): every code review Briareus ran on it, newest
-// first, each a card with how it ended, when, what it ran on and cost, its verdict counts, its session and summary, then
-// its findings with the verify step's verdicts. Read-only: the review's own verify step rules on each finding.
+// first, each a card with how it ended, whether it was handled, when, what it ran on and cost, its verdict counts, its
+// session and summary, then its findings with their verdicts. A token that may write marks a stopped review handled or
+// reopens it, and overrules a finding's verdict in CodeReviewFindingEditor, under the finding.
 import SwiftUI
 
 struct PullCodeReviewsTab: View {
-    @ObservedObject var model: PullModel
+    @ObservedObject var model: CodeReviewsModel
+    var openSession: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let e = model.codeReviewsError { Notice(message: e) }
-            if !model.codeReviewsRead {
+            if let e = model.notice { Notice(message: e) }
+            if !model.read {
                 LoadingNote(text: "Loading code reviews\u{2026}")
-            } else if model.codeReviews.isEmpty && model.codeReviewsError == nil {
+            } else if model.reviews.isEmpty && model.error == nil {
                 EmptyNote(title: "No code reviews yet", detail: "A code review started from this pull request's errands is stored here with its findings.")
             }
-            ForEach(model.codeReviews) { review in
-                CodeReviewCard(review: review, openSession: { model.openReviewSession($0) })
+            ForEach(model.reviews) { review in
+                CodeReviewCard(review: review, model: model, openSession: openSession)
             }
         }
     }
 }
 
-/// One review: its status, date, run line and counts, the session it ran in, the summary it posted, and its findings.
+/// One review: its status and handling, date, run line and counts, the session it ran in, Mark handled or Reopen, the
+/// summary it posted, and its findings.
 private struct CodeReviewCard: View {
     var review: CodeReview
+    @ObservedObject var model: CodeReviewsModel
     var openSession: (String) -> Void
 
     var body: some View {
         BoardBox(padding: 12, radius: BriareusRadius.lg) {
             HStack(spacing: 8) {
                 Badge(text: review.status.title, color: Theme.color(review.status.tone))
+                if let handling = review.handling { Badge(text: handling.title, color: Theme.color(handling.tone)) }
                 if let at = review.createdAt {
                     Text(formatEventTime(at)).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1)
                 }
@@ -37,6 +42,7 @@ private struct CodeReviewCard: View {
                 if let sid = review.openableSessionID {
                     Button("Open session") { openSession(sid) }.dashButton(.bordered)
                 }
+                if let action = model.handlingAction(for: review) { HandlingButton(review: review, action: action, model: model) }
             }
             if !review.meta.isEmpty {
                 Text(review.meta).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.tail).padding(.top, 6)
@@ -47,17 +53,51 @@ private struct CodeReviewCard: View {
             }
             if !review.findings.isEmpty {
                 BoardRule().padding(.vertical, 10)
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(review.findings) { CodeReviewFindingRow(finding: $0) }
+                CodeReviewFindingList(review: review, model: model)
+            }
+        }
+    }
+}
+
+/// Mark handled, or Reopen a handled review; Saving… while it is saved.
+private struct HandlingButton: View {
+    var review: CodeReview
+    var action: CodeReviewHandlingAction
+    @ObservedObject var model: CodeReviewsModel
+
+    var body: some View {
+        Button { model.setHandled(review) } label: {
+            Label(model.isSaving(review) ? "Saving\u{2026}" : action.title, systemImage: action.symbol)
+        }
+        .dashButton(.bordered).disabled(model.busy)
+    }
+}
+
+/// A review's findings, the verdict editor open under the one being changed.
+private struct CodeReviewFindingList: View {
+    var review: CodeReview
+    @ObservedObject var model: CodeReviewsModel
+
+    var body: some View {
+        let editable = model.canEdit(review)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(review.findings) { finding in
+                CodeReviewFindingRow(finding: finding, busy: model.busy, edit: editable ? { model.edit(finding, of: review) } : nil)
+                if let edit = model.editor(for: finding, of: review) {
+                    CodeReviewFindingEditor(model: model, edit: edit).padding(.leading, 22)
                 }
             }
         }
     }
 }
 
-/// A finding folded to its badges and title; open, where it is, what it says and why the verdict is what it is.
+/// A finding folded to its badges and title; open, where it is, what it says, why the verdict is what it is, and Change
+/// verdict when `edit` is given.
 private struct CodeReviewFindingRow: View {
     var finding: CodeReviewFinding
+    /// Another save is under way, so Change verdict waits.
+    var busy: Bool
+    var edit: (() -> Void)?
     @State private var open = false
 
     var body: some View {
@@ -101,5 +141,6 @@ private struct CodeReviewFindingRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        if let edit { Button("Change verdict", systemImage: CodeReviewFindingEdit.symbol, action: edit).dashButton(.bordered).disabled(busy) }
     }
 }

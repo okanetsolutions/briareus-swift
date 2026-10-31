@@ -199,6 +199,10 @@ struct APIRoute: Sendable {
         .init(name: "pull_review_comments", method: "GET", path: "pulls/{pr}/review-comments"),
         // The code reviews Briareus sessions ran on it, newest first, each with its findings and their verdicts (CodeReviewLogic.swift).
         .init(name: "code_reviews", method: "GET", path: "pulls/{pr}/code-reviews"),
+        // A person marks a stored review handled or reopens it (`handlingStatus`), or overrules a finding's `shouldFix` with
+        // its `comments` (CodeReviewLogic.swift).
+        .init(name: "update_code_review", method: "PATCH", path: "pulls/{pr}/code-reviews/{reviewId}"),
+        .init(name: "update_code_review_finding", method: "PATCH", path: "pulls/{pr}/code-reviews/{reviewId}/findings/{findingId}"),
         .init(name: "merge_pull", method: "POST", path: "pulls/{pr}/merge"),
         .init(name: "update_pull", method: "PATCH", path: "pulls/{pr}"),   // its `title`, `body`, `labels` and `assignees`; a list replaces the old one
         .init(name: "update_pull_branch", method: "POST", path: "pulls/{pr}/update-branch"),   // merges its base into it, at the `headSha` and `baseRef` read

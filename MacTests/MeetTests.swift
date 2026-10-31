@@ -280,7 +280,7 @@ final class MeetTests: XCTestCase {
     func testCodeReviewsSayTheirFindingsAndVerdicts() {
         XCTAssertEqual(MeetTool(rawValue: "list_code_reviews"), .listCodeReviews)
         XCTAssertNil(MeetTool(rawValue: "list_findings"))
-        let reviews = #"{"codeReviews":[{"id":3,"status":"completed","summary":"Looks fine.","findings":["#
+        let reviews = #"{"codeReviews":[{"id":3,"status":"completed","handlingStatus":"handled","summary":"Looks fine.","findings":["#
             + #"{"id":1,"title":"Null check","severity":"high","filePath":"app/x.c","startLine":4,"shouldFix":"fix"},"#
             + #"{"id":2,"title":"Naming","body":"Rename it","shouldFix":"optional"},{"id":3,"title":"Style"}]},"#
             + #"{"id":2,"status":"failed","findings":[]},{"id":1,"status":"completed"},{"id":0,"status":"running"}]}"#
@@ -289,6 +289,9 @@ final class MeetTests: XCTestCase {
         // At most the three newest.
         XCTAssertEqual(list.items.map { $0["status"].string }, ["completed", "failed", "completed"])
         XCTAssertEqual(list[0]["summary"].string, "Looks fine.")
+        // Handling is said only from a server that tracks it.
+        XCTAssertEqual(list[0]["handling"].string, "handled")
+        XCTAssertTrue(list[1]["handling"].isNull)
         XCTAssertEqual(list[0]["counts"].string, CodeReviewCounts(CodeReview.parse(json(reviews))[0].findings).line)
         let findings = list[0]["findings"]
         XCTAssertEqual(findings.count, 3)
