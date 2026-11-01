@@ -65,4 +65,14 @@ final class VoiceServiceTests: XCTestCase {
             XCTAssertEqual(calls.count, 1)
         }
     }
+
+    func testClientsAndVoiceShareOneTransport() throws {
+        // A URLSession keeps its delegate until invalidated: a transport per client or per call was never freed.
+        let token = "brm_" + String(repeating: "a", count: 43)
+        let a = try APIClient(address: ServerAddress("https://example.com")!, token: token)
+        let b = try APIClient(address: ServerAddress("https://example.org")!, token: token)
+        XCTAssertTrue(a.transport as AnyObject === URLSessionTransport.shared)
+        XCTAssertTrue(b.transport as AnyObject === URLSessionTransport.shared)
+        XCTAssertTrue(VoiceService().transport as AnyObject === URLSessionTransport.shared)
+    }
 }

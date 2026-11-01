@@ -434,6 +434,10 @@ extension HTTPTransport {
 
 /// URLSession with no cookies, no cache, no stored credentials and no redirects.
 final class URLSessionTransport: NSObject, HTTPTransport, URLSessionTaskDelegate, @unchecked Sendable {
+    /// The one every client shares. A URLSession holds its delegate until it is invalidated, so a transport made per
+    /// client (each reconnect, each voice call) was never freed, along with its session and connection pool.
+    static let shared = URLSessionTransport()
+
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieStorage = nil
@@ -532,7 +536,7 @@ final class APIClient: @unchecked Sendable {
     var authorization: String { "Bearer \(token)" }
 
     /// Fails with `.invalidToken` unless the token has the token shape.
-    init(address: ServerAddress, token: String, transport: HTTPTransport = URLSessionTransport()) throws {
+    init(address: ServerAddress, token: String, transport: HTTPTransport = URLSessionTransport.shared) throws {
         guard apiTokenValid(token) else { throw APIError(.invalidToken) }
         self.address = address; self.token = token; self.transport = transport
     }

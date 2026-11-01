@@ -8,7 +8,7 @@ struct VoiceService: Sendable {
         var errorDescription: String? { message }
     }
 
-    var transport: any HTTPTransport = URLSessionTransport()
+    var transport: any HTTPTransport = URLSessionTransport.shared
 
     func request(_ method: String, path: String, body: JSON? = nil, key: String) async throws -> JSON {
         let response = try await transport.send(method: method,

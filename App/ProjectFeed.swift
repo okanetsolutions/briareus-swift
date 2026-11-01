@@ -79,21 +79,26 @@ final class ProjectFeed: ObservableObject {
     }
     /// A record from the live stream, in its row's place or first when new; the overview and its badge follow it, as a
     /// turn starting or ending or a question asked all change them.
+    /// Once the full list is held it is the one changed and saved: parsing the saved copy back for every event made the
+    /// stream's catch-up (every session at once) cost the main thread the whole list per session.
     func upsert(_ s: Session) {
-        let saved = Store.shared.cache.upsertSession(s, repo: repo)
-        guard let list = saved ?? sessions.upserting(s) else { return }
+        guard let list = sessions.upserting(s) else { return }
         sessions = list
-        if saved != nil { sessionsLoaded = true }
+        save()
         ProjectsModel.shared.scheduleRecount()
     }
     /// A conversation the live stream says was deleted, if it is in this list.
     func remove(_ id: String) {
-        let saved = Store.shared.cache.removeSession(id, repo: repo)
-        guard let list = saved ?? sessions.removing(id) else { return }
+        guard let list = sessions.removing(id) else { return }
         sessions = list
-        if saved != nil { sessionsLoaded = true }
+        save()
         Store.shared.cache.remove("transcript:\(id)")
         ProjectsModel.shared.scheduleRecount()
+    }
+    /// Live records alone cannot make a full list, so only one already read is saved.
+    private func save() {
+        guard sessionsLoaded else { return }
+        Store.shared.cache.store(Session.json(sessions), "sessions:\(repo)")
     }
 
     /// When each repository's pull request list may be read again, shared by every project's feed.
@@ -227,12 +232,13 @@ final class ProjectsModel: ObservableObject {
         }
     }
 
-    /// The overview from what is saved of each project's conversations.
+    /// The overview from each project's conversations: as its feed holds them, else as they were saved.
     func recount() {
         recountTask?.cancel(); recountTask = nil
         var all: [Session] = []
         for p in projects {
-            guard let list = Store.shared.cache.value("sessions:\(p.repo)").flatMap(Session.parseList) else { continue }
+            guard let list = Store.shared.loadedSessions(p.repo)
+                    ?? Store.shared.cache.value("sessions:\(p.repo)").flatMap(Session.parseList) else { continue }
             all += list
         }
         let overview = SessionOverview(all)

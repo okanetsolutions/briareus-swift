@@ -219,7 +219,7 @@ final class VoiceSession: ObservableObject {
         watchdog = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
-                guard let self, self.phase == .live else { continue }
+                guard let self else { return }; guard self.phase == .live else { continue }
                 self.cost.update(seconds: self.elapsed())
                 if self.speaking || !self.calls.isEmpty { self.touch(); continue }
                 let minutes = VoiceSettings.shared.idleMinutes
