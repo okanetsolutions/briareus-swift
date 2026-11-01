@@ -69,12 +69,11 @@ private struct BoardPullRowMenu: View {
 
 struct BoardPullNotices: View {
     @ObservedObject var model: BoardPullActionsModel
-    var repo: String? = nil
 
     var body: some View {
-        ErrandNotice(runner: model.errands, place: "in the project", repo: repo)
+        ErrandNotice(runner: model.errands, place: "in the project")
         if let note = model.mergeNote {
-            Section { ErrorNotice(message: repo.map { "\($0): \(note)" } ?? note) }.listRowBackground(Theme.row)
+            Section { ErrorNotice(message: note) }.listRowBackground(Theme.row)
         }
     }
 }

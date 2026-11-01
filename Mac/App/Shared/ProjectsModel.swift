@@ -24,13 +24,7 @@ final class ProjectsModel: ObservableObject {
     @Published private(set) var error: String?
     /// The project screen pushed inside the sidebar (sessions_screen_new), nil on the projects list.
     @Published var openProject: SidebarSessions?
-    /// Whether the sidebar is showing conversations across all projects.
-    @Published var showingAllSessions = false
 
-    /// All cached project sessions, kept current by polling and the live stream.
-    @Published private(set) var allSessions = AllSessions(sessions: [], projects: [])
-    /// Every project's sessions have been read, from valid saved lists or the server.
-    @Published private(set) var sessionsLoaded = false
     /// Why the last cross-project sessions read failed, including an unavailable route.
     @Published private(set) var sessionsError: String?
 
@@ -53,7 +47,6 @@ final class ProjectsModel: ObservableObject {
             let repo = note.userInfo?["repo"] as? String
             MainActor.assumeIsolated {
                 let model = ProjectsModel.shared
-                if model.showingAllSessions { Task { await model.load() } }
                 if let open = model.openProject, repo == nil || repo == open.project.repo { Task { await open.load() } }
                 model.recount()
             }
@@ -75,12 +68,12 @@ final class ProjectsModel: ObservableObject {
     private func reset() {
         generation += 1
         recountTask?.cancel(); recountTask = nil
-        allSessions = AllSessions(sessions: [], projects: []); sessionsLoaded = false; sessionsError = nil
+        sessionsError = nil
         projects = []; raw = .null; counts = [:]; busy = [:]; overview = SessionOverview([])
-        loaded = false; error = nil; openProject = nil; showingAllSessions = false
+        loaded = false; error = nil; openProject = nil
     }
 
-    /// Catch-up delivers every session separately; rebuild the cross-project lists once per burst.
+    /// Catch-up delivers every session separately; rebuild the counts, dots and overview once per burst.
     func scheduleRecount() {
         guard recountTask == nil else { return }
         recountTask = Task { [weak self] in
@@ -103,11 +96,6 @@ final class ProjectsModel: ObservableObject {
         }
         if counts != self.counts { self.counts = counts }
         if busy != self.busy { self.busy = busy }
-        let list = AllSessions(sessions: all, projects: projects)
-        if list != allSessions { allSessions = list }
-        let loaded = list.cacheIsLoaded(projectsLoaded: Project.parseList(raw) != nil,
-                                        cachedRepos: Set(counts.keys))
-        if loaded != sessionsLoaded { sessionsLoaded = loaded }
         let overview = SessionOverview(all)
         if overview != self.overview { self.overview = overview }
     }
@@ -137,7 +125,7 @@ final class ProjectsModel: ObservableObject {
         _ = await AttentionModel.shared.load()
         guard mine == generation else { return nil }
         guard Store.shared.supports("sessions") else {
-            sessionsError = AllSessions.unavailableMessage
+            sessionsError = SessionOverview.unavailableMessage
             return nil
         }
         do {
@@ -147,7 +135,6 @@ final class ProjectsModel: ObservableObject {
             for p in projects {
                 Store.shared.cache.store(Session.json(items.filter { $0.repo == p.repo }), "sessions:\(p.repo)")
             }
-            if !sessionsLoaded { sessionsLoaded = true }
             if sessionsError != nil { sessionsError = nil }
             recount()
             return nil

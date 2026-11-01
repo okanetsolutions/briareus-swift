@@ -20,11 +20,6 @@ struct ProjectsList: View {
                 Section { ErrorNotice(message: error) }.listRowBackground(Theme.row)
             }
             Section {
-                if !model.projects.isEmpty {
-                    DestinationLink(destination: .allSessions) {
-                        ProjectRowLabel(title: "All", sessions: model.allSessions.shown, loaded: model.sessionsLoaded)
-                    }
-                }
                 ForEach(model.projects, id: \.repo) { project in
                     DestinationLink(destination: .project(repo: project.repo)) {
                         ProjectFeedRowLabel(project: project, feed: store.feed(project.repo))
@@ -72,10 +67,10 @@ private struct ProjectFeedRowLabel: View {
     }
 }
 
-/// A project or All: its title, optional repository, conversation count and working count, grouped for VoiceOver.
+/// A project: its title, its repository when that differs, conversation count and working count, grouped for VoiceOver.
 private struct ProjectRowLabel: View {
     let title: String
-    var repo: String? = nil
+    let repo: String
     let sessions: [Session]
     let loaded: Bool
 
@@ -85,7 +80,7 @@ private struct ProjectRowLabel: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.body.weight(.medium)).lineLimit(1)
-                if let repo, title != repo {
+                if title != repo {
                     Text(repo).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }

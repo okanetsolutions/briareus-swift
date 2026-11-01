@@ -10,9 +10,7 @@ struct ProjectsSidebar: View {
 
     var body: some View {
         Group {
-            if model.showingAllSessions {
-                AllSessionsScreen()
-            } else if let open = model.openProject {
+            if let open = model.openProject {
                 SidebarSessionsScreen(model: open).id(open.project.repo)
             } else {
                 SidebarProjectsScreen()
@@ -37,7 +35,6 @@ enum SidebarCommon {
         case .whatsapp: nav.show(.webApp(.whatsapp))
         case .mail: nav.show(MailInboxModel.offered ? .mail : .mailSettings(id: nil))
         case .status: nav.show(.status)
-        case .globalPulls: nav.show(.globalPulls)
         }
     }
 
@@ -165,11 +162,6 @@ private struct SidebarProjectsScreen: View {
             if let error = model.error {
                 Notice(message: error).padding(.horizontal, 8)
                 Color.clear.frame(height: 8)
-            }
-            if !model.projects.isEmpty {
-                ProjectRow(name: "All", count: model.sessionsLoaded ? model.allSessions.count : nil, busy: model.allSessions.busy) {
-                    model.showingAllSessions = true
-                }
             }
             ForEach(model.projects, id: \.repo) { p in
                 ProjectRow(name: p.title, count: model.counts[p.repo] ?? 0, busy: model.busy[p.repo] ?? false, height: 39) {

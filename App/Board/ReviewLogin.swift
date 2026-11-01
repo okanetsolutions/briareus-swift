@@ -1,4 +1,4 @@
-// The Review List's login, shared by a project's board and the board across every project: the button saying whose
+// The Review List's login, on a project's board: the button saying whose
 // review the list waits on, and the alert that asks for the GitHub login.
 import SwiftUI
 

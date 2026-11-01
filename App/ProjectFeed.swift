@@ -185,10 +185,6 @@ final class ProjectsModel: ObservableObject {
     /// Why the last read of the projects failed.
     @Published private(set) var error: String?
 
-    /// All cached project sessions, kept current by polling and the live stream.
-    @Published private(set) var allSessions = AllSessions(sessions: [], projects: [])
-    /// Every project's sessions have been read, from valid saved lists or the server.
-    @Published private(set) var sessionsLoaded = false
     /// Why the last cross-project sessions read failed, including an unavailable route.
     @Published private(set) var sessionsError: String?
 
@@ -215,7 +211,7 @@ final class ProjectsModel: ObservableObject {
     private func reset() {
         generation += 1
         recountTask?.cancel(); recountTask = nil
-        allSessions = AllSessions(sessions: [], projects: []); sessionsLoaded = false; sessionsError = nil
+        sessionsError = nil
         projects = []; raw = .null; overview = SessionOverview([]); loaded = false; error = nil
     }
 
@@ -235,16 +231,10 @@ final class ProjectsModel: ObservableObject {
     func recount() {
         recountTask?.cancel(); recountTask = nil
         var all: [Session] = []
-        var cachedRepos: Set<String> = []
         for p in projects {
             guard let list = Store.shared.cache.value("sessions:\(p.repo)").flatMap(Session.parseList) else { continue }
-            cachedRepos.insert(p.repo)
             all += list
         }
-        let list = AllSessions(sessions: all, projects: projects)
-        if list != allSessions { allSessions = list }
-        let loaded = list.cacheIsLoaded(projectsLoaded: Project.parseList(raw) != nil, cachedRepos: cachedRepos)
-        if loaded != sessionsLoaded { sessionsLoaded = loaded }
         let overview = SessionOverview(all)
         if overview != self.overview { self.overview = overview }
     }
@@ -265,7 +255,7 @@ final class ProjectsModel: ObservableObject {
         error = nil
         Store.shared.cache.store(answer, "projects")
         guard Store.shared.supports("sessions") else {
-            sessionsError = AllSessions.unavailableMessage
+            sessionsError = SessionOverview.unavailableMessage
             return
         }
         do {
@@ -273,7 +263,6 @@ final class ProjectsModel: ObservableObject {
             guard mine == generation else { return }
             guard let items = Session.parseList(listOf(all, "sessions")) else { throw APIError(.nonJSON) }
             for p in projects { Store.shared.feed(p.repo).adopt(items.filter { $0.repo == p.repo }) }
-            if !sessionsLoaded { sessionsLoaded = true }
             if sessionsError != nil { sessionsError = nil }
             recount()
         } catch {

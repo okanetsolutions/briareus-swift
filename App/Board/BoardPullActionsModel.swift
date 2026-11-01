@@ -1,4 +1,4 @@
-// The project and cross-project lists use the same per-repository errand and merge flow.
+// A project board's pull request rows share one errand and merge flow.
 import Combine
 import Foundation
 

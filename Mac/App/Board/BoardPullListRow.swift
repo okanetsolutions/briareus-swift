@@ -1,4 +1,4 @@
-// The project and cross-project boards share a pull request row and its errand, merge and run buttons.
+// A project board's pull request row and its errand, merge and run buttons.
 import SwiftUI
 
 struct BoardPullListRow: View {

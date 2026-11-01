@@ -198,7 +198,7 @@ final class BoardModel: ObservableObject {
 
     // MARK: Merge
 
-    /// The same permission and capability rules on the project and cross-project rows.
+    /// The permission and capability rules every pull request row on the board follows.
     func rowActions(for pull: PullSummary) -> BoardPullActions {
         BoardPullActions(pull: pull, catalog: catalog, canManage: Store.shared.canManage, supports: { Store.shared.supports($0) })
     }
