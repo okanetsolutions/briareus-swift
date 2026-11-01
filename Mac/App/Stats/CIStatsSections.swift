@@ -114,13 +114,15 @@ struct CIRunsList: View {
                 Notice(message: e)
                 Button("Retry") { model.retryRuns() }.dashButton(.bordered).disabled(model.loading || model.loadingMore)
             }
-            if model.runs.isEmpty && !model.loading && model.runsError == nil {
+            if model.runs.isEmpty && model.loadingMore {
+                LoadingNote(text: "Loading runs\u{2026}")
+            } else if model.runs.isEmpty && !model.loading && model.runsError == nil {
                 EmptyNote(title: "No runs in this window.")
             }
             ForEach(model.runs) { run in
                 CIRunRow(run: run) { model.open(run) }
             }
-            if model.nextOffset != nil {
+            if model.canLoadMore {
                 Button(model.loadingMore ? "Loading\u{2026}" : "Load more") { model.loadMoreRuns() }
                     .dashButton(.bordered).disabled(model.loadingMore || model.loading).padding(.top, 6)
             }

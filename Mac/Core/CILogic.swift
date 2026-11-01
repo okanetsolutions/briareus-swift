@@ -18,8 +18,11 @@ struct CIFilter: Equatable, Sendable {
     /// The windows the screens offer.
     static let windows = [7, 30, 90]
 
-    /// Whether the window, project, source or branch differs from the default, so an empty answer offers to clear them.
-    var isFiltered: Bool { self != CIFilter() }
+    /// Every project, Checks and every branch, keeping a window longer than the default: a shorter window holds no run the
+    /// longer one did not, so clearing never narrows it.
+    var cleared: CIFilter { CIFilter(days: max(days, CIFilter().days)) }
+    /// Whether clearing would change anything, so an empty answer offers to clear the filters.
+    var isFiltered: Bool { self != cleared }
 
     /// The shared query: `since` and `until` pinned to `now`, so paging keeps one window.
     func query(now: Date = Date()) -> JSON {
@@ -225,19 +228,31 @@ struct CIRunsFeed: Equatable, Sendable {
     private(set) var nextOffset: Int?
     /// The server stopped listing runs before the window's end.
     private(set) var truncated = false
-    /// The page whose read failed, which Retry reads again; nil when the last read worked.
+    /// The page whose read failed, which Retry reads again; nil when the last read worked or another is under way.
     private(set) var failedOffset: Int?
+    /// Why that read failed, shown above Retry.
+    private(set) var error: String?
 
+    /// Load more is offered while there is a next page and no failed one, which Retry reads instead.
+    var canLoadMore: Bool { nextOffset != nil && failedOffset == nil }
+
+    /// A read is under way: the last failure goes, so both apps show progress rather than an old error until it answers.
+    mutating func reading() {
+        failedOffset = nil
+        error = nil
+    }
     mutating func receive(_ page: CIRunsPage, offset: Int) {
         runs = offset == 0 ? page.runs : runs + page.runs
         nextOffset = page.nextOffset
         truncated = page.truncated
         failedOffset = nil
+        error = nil
     }
     /// A failed first page empties the list, whose runs belong to the window read before; a later one keeps what was read.
-    mutating func fail(offset: Int) {
+    mutating func fail(offset: Int, error: String) {
         if offset == 0 { runs = []; nextOffset = nil; truncated = false }
         failedOffset = offset
+        self.error = error
     }
 }
 

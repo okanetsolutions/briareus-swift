@@ -12,16 +12,18 @@ final class CIStatsModel: ObservableObject {
     @Published private(set) var loading = false
     @Published private(set) var loadingMore = false
     @Published private(set) var error: String?
-    /// Why the last Load more failed; the runs already read stay.
-    @Published private(set) var runsError: String?
 
     /// The query the figures were read with, which each page of runs repeats.
     private var window: JSON = [:]
+    /// The filter `stats` was read for, so a failed read for another one does not leave its figures above the new runs.
+    private var statsFilter: CIFilter?
     private var generation = 0
 
     var runs: [CIRun] { feed.runs }
-    var nextOffset: Int? { feed.nextOffset }
+    var canLoadMore: Bool { feed.canLoadMore }
     var truncated: Bool { feed.truncated }
+    /// Why the last read of runs failed, above Retry.
+    var runsError: String? { feed.error }
 
     static var offered: Bool { Store.shared.supports("ci_stats") }
     var runsOffered: Bool { Store.shared.supports("ci_runs") }
@@ -55,10 +57,10 @@ final class CIStatsModel: ObservableObject {
         filter.repo = repo
         reload()
     }
-    /// Back to the default window, every project and checks.
+    /// Back to every project and checks, keeping a longer window.
     func clearFilters() {
         guard filter.isFiltered else { return }
-        filter = CIFilter()
+        filter = filter.cleared
         reload()
     }
 
@@ -69,9 +71,9 @@ final class CIStatsModel: ObservableObject {
         guard Self.offered else { return }
         generation += 1
         let mine = generation
-        let window = filter.query()
+        let filter = self.filter, window = filter.query()
         self.window = window
-        loading = true; loadingMore = false; runsError = nil
+        loading = true; loadingMore = false; feed.reading()
         Task {
             async let figures = boardCall("ci_stats", window)
             async let page: Result<JSON, APIError>? = runsOffered ? boardCall("ci_runs", filter.runsQuery(window: window)) : nil
@@ -79,12 +81,15 @@ final class CIStatsModel: ObservableObject {
             guard mine == generation else { return }
             loading = false
             switch f {
-            case .success(let v): stats = CIStats(v); error = nil
-            case .failure(let e): if e.kind != .cancelled { error = e.description }
+            case .success(let v): stats = CIStats(v); statsFilter = filter; error = nil
+            case .failure(let e):
+                guard e.kind != .cancelled else { break }
+                error = e.description
+                if statsFilter != filter { stats = nil }
             }
             switch p {
             case .success(let v)?: feed.receive(CIRunsPage(v), offset: 0)
-            case .failure(let e)?: if e.kind != .cancelled { runsError = e.description; feed.fail(offset: 0) }
+            case .failure(let e)?: if e.kind != .cancelled { feed.fail(offset: 0, error: e.description) }
             case nil: feed = CIRunsFeed()
             }
         }
@@ -92,7 +97,7 @@ final class CIStatsModel: ObservableObject {
 
     /// The next page of runs in the same window.
     func loadMoreRuns() {
-        guard let offset = nextOffset else { return }
+        guard canLoadMore, let offset = feed.nextOffset else { return }
         readMore(from: offset)
     }
     /// The page of runs that failed, read again without reading the figures.
@@ -103,14 +108,14 @@ final class CIStatsModel: ObservableObject {
     private func readMore(from offset: Int) {
         guard !loadingMore, !loading, runsOffered else { return }
         let mine = generation
-        loadingMore = true; runsError = nil
+        loadingMore = true; feed.reading()
         Task {
             let r = await boardCall("ci_runs", filter.runsQuery(window: window, offset: offset))
             guard mine == generation else { return }
             loadingMore = false
             switch r {
             case .success(let v): feed.receive(CIRunsPage(v), offset: offset)
-            case .failure(let e): if e.kind != .cancelled { runsError = e.description; feed.fail(offset: offset) }
+            case .failure(let e): if e.kind != .cancelled { feed.fail(offset: offset, error: e.description) }
             }
         }
     }

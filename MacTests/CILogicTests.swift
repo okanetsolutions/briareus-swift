@@ -213,19 +213,30 @@ final class CILogicTests: XCTestCase {
     func testAFailedLaterPageKeepsTheRunsAndIsTheOneToRetry() {
         var feed = CIRunsFeed()
         feed.receive(CIRunsPage(j(#"{"runs":[{"id":"1","name":"a"}],"nextOffset":50}"#)), offset: 0)
-        feed.fail(offset: 50)
+        XCTAssertTrue(feed.canLoadMore)
+        feed.fail(offset: 50, error: "boom")
         XCTAssertEqual(feed.runs.map(\.runID), ["1"])
         XCTAssertEqual(feed.nextOffset, 50)
-        XCTAssertEqual(feed.failedOffset, 50)
+        XCTAssertEqual(feed.failedOffset, 50); XCTAssertEqual(feed.error, "boom")
+        XCTAssertFalse(feed.canLoadMore)
         feed.receive(CIRunsPage(j(#"{"runs":[{"id":"2","name":"b"}]}"#)), offset: 50)
         XCTAssertEqual(feed.runs.map(\.runID), ["1", "2"])
-        XCTAssertNil(feed.failedOffset)
+        XCTAssertNil(feed.failedOffset); XCTAssertNil(feed.error)
+    }
+
+    func testARetryUnderWayClearsTheFailureButKeepsTheRuns() {
+        var feed = CIRunsFeed()
+        feed.receive(CIRunsPage(j(#"{"runs":[{"id":"1","name":"a"}],"nextOffset":50}"#)), offset: 0)
+        feed.fail(offset: 50, error: "boom")
+        feed.reading()
+        XCTAssertNil(feed.failedOffset); XCTAssertNil(feed.error)
+        XCTAssertEqual(feed.runs.map(\.runID), ["1"]); XCTAssertEqual(feed.nextOffset, 50)
     }
 
     func testAFailedFirstPageDropsTheRunsOfTheWindowReadBefore() {
         var feed = CIRunsFeed()
         feed.receive(CIRunsPage(j(#"{"runs":[{"id":"1","name":"a"}],"nextOffset":50,"truncated":true}"#)), offset: 0)
-        feed.fail(offset: 0)
+        feed.fail(offset: 0, error: "boom")
         XCTAssertEqual(feed.runs, [])
         XCTAssertNil(feed.nextOffset); XCTAssertFalse(feed.truncated)
         XCTAssertEqual(feed.failedOffset, 0)
@@ -237,6 +248,13 @@ final class CILogicTests: XCTestCase {
         XCTAssertTrue(CIFilter(days: CIFilter.windows[0]).isFiltered)
         XCTAssertTrue(CIFilter(statuses: true).isFiltered)
         XCTAssertTrue(CIFilter(branch: "main").isFiltered)
+    }
+
+    func testClearingNeverNarrowsTheWindow() {
+        let longest = CIFilter.windows.last!
+        XCTAssertFalse(CIFilter(days: longest).isFiltered)
+        XCTAssertEqual(CIFilter(repo: "o/r", days: longest, statuses: true, branch: "main").cleared, CIFilter(days: longest))
+        XCTAssertEqual(CIFilter(repo: "o/r", days: CIFilter.windows[0]).cleared, CIFilter())
     }
 
     func testTheCIRoutesExist() {
