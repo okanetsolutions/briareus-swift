@@ -1,5 +1,6 @@
 // A new session, as the Mac's New session screen (screen_new_session.c) and its row of chips: what to build, said or
-// dictated, with files; the project (when started from the projects list), the branch, provider, model and effort.
+// dictated, with files; the project (when started from the projects list), the workspace (worktree, local checkout or
+// orchestrator), the branch, provider, model and effort.
 // Starting runs a paid agent, so the sheet says so; a start whose outcome is unknown is not repeated.
 import Combine
 import SwiftUI
@@ -17,8 +18,9 @@ final class NewConversationModel: ObservableObject {
     private var remembers = true
     @Published private(set) var branches: [String] = []
     @Published private(set) var defaultBranch: String?
-    /// Nil: a new branch off the default.
+    /// Nil: a new branch off the default (a worktree), or the checkout's current branch (local).
     @Published var branch: String?
+    @Published private(set) var workspace = WorkspaceMode.worktree
     @Published var prompt = ""
     @Published private(set) var busy = false
     @Published private(set) var uncertain = false
@@ -56,6 +58,8 @@ final class NewConversationModel: ObservableObject {
     func loadChoices() {
         choicesTask?.cancel()
         catalog = nil; quietly { runtime = nil }; branches = []; defaultBranch = nil; branch = nil
+        // A project without a local checkout cannot keep Local.
+        if !workspace.isAvailable(hasLocal: project?.hasLocal ?? false) { workspace = .worktree }
         guard let p = project else { return }
         let store = Store.shared
         if store.supports("runtimes"), let saved = store.cache.value("runtimes:\(p.repo)") { adopt(RuntimeCatalog(saved)) }
@@ -96,6 +100,12 @@ final class NewConversationModel: ObservableObject {
         defaultBranch = value["defaultBranch"].string
     }
 
+    /// Each mode starts with its own branch default; an orchestrator cannot take a branch at all.
+    func pickWorkspace(_ mode: WorkspaceMode) {
+        guard mode != workspace, mode.isAvailable(hasLocal: project?.hasLocal ?? false) else { return }
+        workspace = mode; branch = nil
+    }
+
     func disappeared() {
         voice.drop()
         choicesTask?.cancel(); choicesTask = nil
@@ -106,7 +116,7 @@ final class NewConversationModel: ObservableObject {
         var args: JSON = ["repo": .string(p.repo)]
         if !prompt.cTrimmed.isEmpty { args["prompt"] = .string(prompt) }
         if let ids = files.ids { args["attachments"] = ids }
-        if let branch { args["branch"] = .string(branch) }
+        args.merge(workspace.arguments(branch: branch))
         if let runtime { args.merge(runtime.arguments) }
         busy = true; error = nil
         Task {
@@ -223,22 +233,44 @@ struct NewConversationSheet: View {
                 Spacer(minLength: 0)
                 if store.canTranscribe { VoiceNoteControls(voice: model.voice, enabled: !model.busy) }
             }
-            if store.supports("branches") {
+            Divider().overlay(Theme.line)
+            workspaceRow
+            if model.workspace.takesBranch && store.supports("branches") {
+                let none = model.workspace.noBranchLabel(defaultBranch: model.defaultBranch)
                 Divider().overlay(Theme.line)
                 NavigationLink {
-                    ConversationBranchPicker(branches: model.branches, defaultBranch: model.defaultBranch, selection: $model.branch)
+                    ConversationBranchPicker(branches: model.branches, defaultBranch: model.defaultBranch, noBranchLabel: none,
+                                             selection: $model.branch)
                 } label: {
-                    pickerRow(icon: "arrow.triangle.branch", text: model.branch ?? "New branch off \(model.defaultBranch ?? "main")",
+                    pickerRow(icon: "arrow.triangle.branch", text: model.branch ?? none,
                               placeholder: model.branch == nil, chevron: "chevron.right", mono: model.branch != nil)
                 }
                 .buttonStyle(.plain).disabled(model.busy)
-                .accessibilityLabel("Branch: \(model.branch ?? "a new branch off the default")")
+                .accessibilityLabel("Branch: \(model.branch ?? none)")
             }
             if let catalog = model.catalog, !catalog.providers.isEmpty { runtimeRows(catalog) }
         }
         .padding(14)
         .background(Theme.raise, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.line, lineWidth: 0.5))
+    }
+
+    /// Where the session works: a fresh worktree, the project's own checkout, or an orchestrator of worker sessions.
+    private var workspaceRow: some View {
+        let hasLocal = model.project?.hasLocal ?? false
+        return Menu {
+            ForEach(WorkspaceMode.allCases, id: \.self) { mode in
+                Button { model.pickWorkspace(mode) } label: {
+                    if mode == model.workspace { Label(mode.menuTitle(hasLocal: hasLocal), systemImage: "checkmark") }
+                    else { Text(mode.menuTitle(hasLocal: hasLocal)) }
+                }
+                .disabled(!mode.isAvailable(hasLocal: hasLocal))
+            }
+        } label: {
+            pickerRow(icon: "square.stack.3d.up", text: model.workspace.chip, placeholder: false)
+        }
+        .disabled(model.busy)
+        .accessibilityLabel("Workspace: \(model.workspace.chip)")
     }
 
     @ViewBuilder private func runtimeRows(_ catalog: RuntimeCatalog) -> some View {
@@ -301,50 +333,5 @@ struct NewConversationSheet: View {
             Image(systemName: chevron).font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
         }
         .contentShape(Rectangle())
-    }
-}
-
-/// The branch to start on: a new one off the default, or one the project has, found by name.
-struct ConversationBranchPicker: View {
-    let branches: [String]
-    let defaultBranch: String?
-    @Binding var selection: String?
-    @Environment(\.dismiss) private var dismiss
-    @State private var search = ""
-
-    private var filtered: [String] {
-        let list = branches.filter { $0 != defaultBranch }
-        return search.isEmpty ? list : list.filter { $0.localizedCaseInsensitiveContains(search) }
-    }
-
-    var body: some View {
-        List {
-            Section {
-                row(nil, label: "New branch off \(defaultBranch ?? "main")")
-                if let defaultBranch { row(defaultBranch, label: defaultBranch) }
-            }
-            Section {
-                ForEach(filtered, id: \.self) { row($0, label: $0) }
-                if branches.isEmpty { Text("No other branches.").foregroundStyle(.secondary) }
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden).background(Theme.canvas)
-        .navigationTitle("Branch").navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $search, placement: .pinned, prompt: "Find a branch")
-        .textInputAutocapitalization(.never).autocorrectionDisabled()
-    }
-
-    private func row(_ value: String?, label: String) -> some View {
-        Button { selection = value; dismiss() } label: {
-            HStack {
-                Text(label).font(value == nil ? .subheadline : .subheadline.monospaced()).foregroundStyle(.primary).lineLimit(1)
-                Spacer()
-                if selection == value { Image(systemName: "checkmark").foregroundStyle(Theme.accent) }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .listRowBackground(Theme.row)
     }
 }
