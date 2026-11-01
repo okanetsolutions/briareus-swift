@@ -73,7 +73,7 @@ final class ProjectsModel: ObservableObject {
         loaded = false; error = nil; openProject = nil
     }
 
-    /// Catch-up delivers every session separately; rebuild the cross-project lists once per burst.
+    /// Catch-up delivers every session separately; rebuild the counts, dots and overview once per burst.
     func scheduleRecount() {
         guard recountTask == nil else { return }
         recountTask = Task { [weak self] in

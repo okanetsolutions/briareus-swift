@@ -67,10 +67,10 @@ private struct ProjectFeedRowLabel: View {
     }
 }
 
-/// A project or All: its title, optional repository, conversation count and working count, grouped for VoiceOver.
+/// A project: its title, its repository when that differs, conversation count and working count, grouped for VoiceOver.
 private struct ProjectRowLabel: View {
     let title: String
-    var repo: String? = nil
+    let repo: String
     let sessions: [Session]
     let loaded: Bool
 
@@ -80,7 +80,7 @@ private struct ProjectRowLabel: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.body.weight(.medium)).lineLimit(1)
-                if let repo, title != repo {
+                if title != repo {
                     Text(repo).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }

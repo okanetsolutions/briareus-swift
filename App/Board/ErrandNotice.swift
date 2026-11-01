@@ -1,15 +1,14 @@
-// An errand outcome, with its repository when shown on a cross-project board.
+// An errand outcome, shown above the list or page that started it.
 import SwiftUI
 
 /// What an errand start left to say: why it failed, and whether it may have started anyway.
 struct ErrandNotice: View {
     @ObservedObject var runner: ErrandRunner
     var place: String
-    var repo: String? = nil
     var body: some View {
         if let e = runner.writeError {
             Section {
-                ErrorNotice(message: repo.map { "\($0): \(e)" } ?? e)
+                ErrorNotice(message: e)
                 if runner.uncertain {
                     Text("The request may have completed. Look for its conversation \(place) before starting another agent.")
                         .font(.footnote).foregroundStyle(.secondary)
