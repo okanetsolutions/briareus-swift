@@ -186,7 +186,7 @@ final class CodeReviewLogicTests: XCTestCase {
     }
 
     func testAHandledReviewStillCarriesItsFindings() {
-        // Handling is a person's note on the review; what it found is still what CarPlay and the voice read.
+        // Handling is a person's note on the review; what it found is still what CarPlay reads.
         let handled = CodeReview.parse(j(#"{"codeReviews":[{"id":2,"status":"completed","handlingStatus":"handled","findings":[{"id":20}]}]}"#))
         XCTAssertEqual(handled.latestFindings.map(\.id), [20])
     }

@@ -34,8 +34,6 @@ enum Screen: Hashable, Identifiable {
     case slackWorkspaceSettings(row: JSON?, defaults: JSON?)
     case mcpServerSettings(row: JSON?, defaults: JSON?)
     case envoyerAccountSettings(row: JSON?, defaults: JSON?)
-    /// This Mac's meeting assistant settings.
-    case meetingSettings
     /// A mailbox the server keeps synced, or (nil) adding one.
     case mailSettings(id: Int?)
     /// The synced mail.
@@ -79,7 +77,6 @@ enum Screen: Hashable, Identifiable {
         case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
         case .mcpServerSettings(let row, _): return "mcp-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .envoyerAccountSettings(let row, _): return "envoyer-account:\(row?["id"].int.map(String.init) ?? "new")"
-        case .meetingSettings: return "settings-meeting"
         case .mailSettings(let id): return id.map { "mail-settings:\($0)" } ?? "mail-settings"
         case .mail: return "mail"
         case .serverSettings: return "settings-server"

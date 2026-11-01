@@ -27,10 +27,6 @@ enum Destination: Hashable, Identifiable {
     case sshServerSettings(row: JSON?, defaults: JSON?)
     case forgeAccountSettings(row: JSON?, defaults: JSON?)
     case slackWorkspaceSettings(row: JSON?, defaults: JSON?)
-    /// A project's voice conversation, or a hands-free one held to one of its conversations.
-    case voice(repo: String, conversation: VoiceConversation? = nil)
-    /// The voice mode's ElevenLabs key and choices.
-    case voiceSettings
     /// A session's ⚡ Webhook: its settings, URLs and keys.
     case webhook(session: JSON)
     /// A session's Resources: what it costs the machine; `session` is its record.
@@ -63,8 +59,6 @@ enum Destination: Hashable, Identifiable {
         case .sshServerSettings(let row, _): return "ssh-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .forgeAccountSettings(let row, _): return "forge-account:\(row?["id"].int.map(String.init) ?? "new")"
         case .slackWorkspaceSettings(let row, _): return "slack-workspace:\(row?["id"].int.map(String.init) ?? "new")"
-        case .voice(let repo, let held): return "voice:\(repo)" + (held.map { ":\($0.id)" } ?? "")
-        case .voiceSettings: return "voice-settings"
         case .webhook(let session): return "webhook:\(session["id"].string ?? "")"
         case .sessionStats(let session): return "session-stats:\(session["id"].string ?? "")"
         case .serverStats: return "server-stats"
@@ -96,8 +90,6 @@ enum Destination: Hashable, Identifiable {
         case .sshServerSettings(let row, let defaults): SSHServerSettingsScreen(row: row, defaults: defaults)
         case .forgeAccountSettings(let row, let defaults): ForgeAccountSettingsScreen(row: row, defaults: defaults)
         case .slackWorkspaceSettings(let row, let defaults): SlackWorkspaceSettingsScreen(row: row, defaults: defaults)
-        case .voice(let repo, let held): VoiceScreen(repo: repo, conversation: held)
-        case .voiceSettings: VoiceSettingsScreen()
         case .webhook(let session): WebhookScreen(session: session)
         case .sessionStats(let session): SessionStatsScreen(session: session)
         case .serverStats: ServerStatsScreen()
