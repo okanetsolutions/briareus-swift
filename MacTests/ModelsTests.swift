@@ -43,6 +43,15 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(WorkspaceMode.orchestrator.noBranchLabel(defaultBranch: nil), "New branch off main")
         XCTAssertEqual(WorkspaceMode.local.menuTitle(hasLocal: false), "\u{2302} Local: no local checkout set in Settings")
     }
+    func testWorkspaceModesAvailabilityAndBranches() {
+        XCTAssertFalse(WorkspaceMode.local.isAvailable(hasLocal: false))
+        XCTAssertTrue(WorkspaceMode.local.isAvailable(hasLocal: true))
+        XCTAssertTrue(WorkspaceMode.orchestrator.isAvailable(hasLocal: false))
+        XCTAssertTrue(WorkspaceMode.worktree.isAvailable(hasLocal: false))
+        XCTAssertFalse(WorkspaceMode.orchestrator.takesBranch)
+        XCTAssertTrue(WorkspaceMode.worktree.takesBranch)
+        XCTAssertTrue(WorkspaceMode.local.takesBranch)
+    }
     func testProjectWithoutLabel() {
         let p = Project(j(#"{"repo":"o/b"}"#))!
         XCTAssertNil(p.label); XCTAssertEqual(p.title, "o/b")
