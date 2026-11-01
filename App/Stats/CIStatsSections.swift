@@ -75,19 +75,24 @@ struct CIRunsSection: View {
 
     var body: some View {
         Section {
-            if let error = model.runsError { ErrorNotice(message: error) }
+            if let error = model.runsError {
+                ErrorNotice(message: error)
+                Button("Retry") { Task { await model.retryRuns() } }.disabled(model.loading || model.loadingMore)
+            }
             ForEach(model.runs) { CIRunRow(run: $0) }
-            if model.runs.isEmpty && model.runsError == nil && !model.loading {
+            if model.runs.isEmpty && model.loadingMore {
+                ProgressView().frame(maxWidth: .infinity)
+            } else if model.runs.isEmpty && model.runsError == nil && !model.loading {
                 Text("No runs in this window.").foregroundStyle(.secondary)
             }
-            if model.nextOffset != nil {
+            if model.canLoadMore {
                 Button { Task { await model.loadMoreRuns() } } label: {
                     HStack {
                         Text("Load more")
                         if model.loadingMore { Spacer(); ProgressView() }
                     }
                 }
-                .disabled(model.loadingMore)
+                .disabled(model.loadingMore || model.loading)
             }
         } header: {
             Text("Recent runs")
