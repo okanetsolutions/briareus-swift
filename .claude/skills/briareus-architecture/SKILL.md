@@ -47,7 +47,7 @@ Search here before writing a component.
 
 **Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `reviewGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
 
-**Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `ErrandLabel`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`, `actionIcon`.
+**Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`. Its errands (`Mac/App/Board/BoardErrands.swift`): `actionIcon`, `ErrandLabel`, `rowActions`, `afterThisEvent`.
 
 **Mac settings kit** (`Mac/App/Settings/SettingsKit.swift`): `SettingsPage`, `SettingsTabs`, `SettingsFieldBox`, `SettingsFieldLabel`, `SettingsTextArea`, `SettingsCheck`, `SettingsSelect`, `SettingsLabeledSelect`, `SettingsPair`, `SettingsStatusRow`, `SettingsHint`, `SettingsNote`, `SettingsHelpIcon`, `PopupMenu`.
 
@@ -55,7 +55,7 @@ Search here before writing a component.
 
 **iPhone shared** (`App/Shared/`): `StatTiles`/`StatTileView` (Core's `StatTile`, with an optional value tone per tile id), `StatGauge`, `SavedPrompts`.
 
-**iPhone board pieces** (`App/Board/BoardPieces.swift`): `BoardPullRow`, `BoardIssueRow`, `BoardSessionRow`, `BoardLinkedRow`, `BoardLabelChips`, `BoardBadge`, `ChecksBadge`, `BoardEpicProgress`, `BoardUpdated`, `ErrandNotice`, `BoardFlowLayout`, `boardErrands`, `errandSymbol`.
+**iPhone board pieces** (`App/Board/BoardPieces.swift`): `BoardPullRow`, `BoardIssueRow`, `BoardSessionRow`, `BoardLinkedRow`, `BoardLabelChips`, `BoardBadge`, `ChecksBadge`, `BoardEpicProgress`, `BoardUpdated`, `ErrandNotice`, `BoardFlowLayout`. Its errands (`App/Board/BoardErrands.swift`): `ErrandCatalog`, `boardErrands`, `errandSymbol`, `ErrandRunner`.
 
 **iPhone settings kit** (`App/Settings/SettingsFormKit.swift`): `SettingsFormChrome`, `SettingsTextRow`, `SettingsValueRow`, `SettingsLabel`, `SettingsInfoButton`, `SettingsVerdict`, `SettingsErrorSection`, `SettingsUnavailableView`.
 

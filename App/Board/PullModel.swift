@@ -60,14 +60,10 @@ final class PullScreenModel: ObservableObject {
     @Published private(set) var descriptionAuthor: String?
     @Published private(set) var bodyRead = false
     private var readingBody = false
-    /// The stored code reviews, newest first, and the `code_reviews` list they were read from (saved with the snapshot).
-    @Published private(set) var codeReviews: [CodeReview] = []
-    private var codeReviewsRaw: JSON = []
-    /// Whether the reviews have been read, or restored from the last visit: until then the tab is loading.
-    @Published private(set) var codeReviewsRead = false
+    /// The stored code reviews and their writes (CodeReviewsModel.swift), saved with the snapshot.
+    let codeReviews: CodeReviewsModel
     @Published private(set) var runs: [Session] = []
     @Published var error: String?
-    @Published var codeReviewsError: String?
     @Published var mergeError: String?
     @Published private(set) var merging = false
     @Published var mergeQuestion: MergeQuestion?
@@ -116,8 +112,13 @@ final class PullScreenModel: ObservableObject {
     init(repo: String, number: Int, stack: StackPosition?, summary: PullSummary?) {
         self.repo = repo; self.number = number; self.stack = stack; self.summary = summary
         feed = Store.shared.feed(repo)
+        codeReviews = CodeReviewsModel(repo: repo, number: number)
         profiles = runProfilesParse(ProjectsModel.shared.raw, repo: repo)
         restore()
+        codeReviews.changed = { [weak self] in self?.save() }
+        // Only the tab's count is drawn outside the tab, so only a change to it redraws the screen.
+        sinks.append(codeReviews.$reviews.combineLatest(codeReviews.$read).map { $1 ? $0.count : -1 }.removeDuplicates().dropFirst()
+            .sink { [weak self] _ in MainActor.assumeIsolated { self?.objectWillChange.send() } })
         take(feed.board)
         runs = feed.sessions.filter { $0.pullNumber == number }
         // The feed is shared with the board: what either reads shows on both.
@@ -168,13 +169,13 @@ final class PullScreenModel: ObservableObject {
 
     private var key: String { PullSnapshot.key(repo: repo, number: number) }
     private func save() {
-        let snapshot = PullSnapshot(pr: pr, codeReviews: codeReviewsRaw, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
+        let snapshot = PullSnapshot(pr: pr, codeReviews: codeReviews.raw, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
         if let saved = snapshot.json { Store.shared.cache.store(saved, key) }
     }
     private func restore() {
         guard let saved = PullSnapshot(Store.shared.cache.value(key)) else { return }
         pr = saved.pr
-        if saved.codeReviews.isArray { takeCodeReviews(saved.codeReviews) }
+        if saved.codeReviews.isArray { codeReviews.take(saved.codeReviews) }
         descriptionBody = saved.body
         descriptionAuthor = saved.bodyAuthor
         savedRow = saved.row
@@ -205,7 +206,7 @@ final class PullScreenModel: ObservableObject {
         catch {
             if gen == pullGen, let said = failure(error) { self.error = said }
             // The reviews are read after the pull request: without it there is nothing more to wait for.
-            if gen == pullGen { codeReviewsRead = true }
+            if gen == pullGen { codeReviews.gaveUp() }
             throw error
         }
         guard gen == pullGen else { return }
@@ -216,20 +217,15 @@ final class PullScreenModel: ObservableObject {
         if pr["body"].string == nil && !bodyRead && !readingBody && store.supports("pull_description") { Task { await loadBody() } }
         if store.supports("code_reviews") {
             do {
+                let mark = codeReviews.writes.mark
                 let f = try await store.call("code_reviews", args)
                 guard gen == pullGen else { return }
-                takeCodeReviews(f["codeReviews"]); codeReviewsError = nil
+                codeReviews.take(f["codeReviews"], readAt: mark)
             } catch {
-                if gen == pullGen, let said = failure(error) { codeReviewsError = said; codeReviewsRead = true }
+                if gen == pullGen, let said = failure(error) { codeReviews.failed(said) }
             }
         }
         save()
-    }
-    private func takeCodeReviews(_ list: JSON) {
-        codeReviewsRaw = list.isArray ? list : []
-        let parsed = CodeReview.parse(["codeReviews": codeReviewsRaw])
-        if parsed != codeReviews { codeReviews = parsed }
-        codeReviewsRead = true
     }
     private func loadBody() async {
         readingBody = true

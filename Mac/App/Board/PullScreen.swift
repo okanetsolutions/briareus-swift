@@ -372,7 +372,7 @@ private struct PullTabs: View {
                         TabNavItem(glyph: Glyph.symbol(0xE8A5), title: "Files changed", count: files, active: false) { openWebURL(url + "/files") }
                     }
                     if store.supports("code_reviews") {
-                        tab(0xE7C1, "Code reviews", model.codeReviewsRead ? "\(model.codeReviews.count)" : nil, .codeReviews)
+                        tab(0xE7C1, "Code reviews", model.codeReviews.read ? "\(model.codeReviews.reviews.count)" : nil, .codeReviews)
                     }
                     if store.supports("serve_pull") || model.runURL != nil { runTab }
                 }
@@ -487,7 +487,7 @@ private struct PullMain: View {
             } else {
                 switch model.tab {
                 case .conversation: ConversationTab(model: model)
-                case .codeReviews: PullCodeReviewsTab(model: model)
+                case .codeReviews: PullCodeReviewsTab(model: model.codeReviews, openSession: model.openReviewSession)
                 case .sessions: RunsList(model: model)
                 default: Description(model: model)
                 }

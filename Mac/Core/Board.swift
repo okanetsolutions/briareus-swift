@@ -457,13 +457,14 @@ struct BoardAction: Equatable, Sendable {
         BoardAction(id: "review", label: "Code review", hint: "Review the pull request with the provider\u{2019}s own review command, publish the findings, then verify each one"),
         BoardAction(id: "solve-conflicts", label: "Solve conflicts", hint: "Merge the base branch in, resolve the conflicts and push the result"),
         BoardAction(id: "fix-checks", label: "Fix failing checks", hint: "Read this pull request\u{2019}s failing CI checks, fix what the branch broke and push the fixes"),
+        BoardAction(id: "implement-feedback", label: "Implement feedback", hint: "Read the review feedback on this pull request, fix what holds up, push the fixes and reply on each thread"),
         BoardAction(id: "test-sheet", label: "Test sheet", hint: "Derive the manual QA checklist from this pull request\u{2019}s diff and post it as one editable comment"),
         BoardAction(id: "test-run", label: "Record QA", hint: "Execute this pull request\u{2019}s test sheet in a fresh workspace and record a video of every scenario"),
         BoardAction(id: "pr-body-summary", label: "PR body", hint: "Rewrite this pull request\u{2019}s description from its own diff, following the team template"),
         BoardAction(id: "delete-self-comments", label: "Delete my comments", hint: "Remove every comment and review the configured GitHub account left on this pull request"),
     ]
     /// Errands this app no longer offers, even when the server still lists them.
-    private static let dropped: Set<String> = ["qa", "implement-feedback", "custom-feedback"]
+    private static let dropped: Set<String> = ["qa", "custom-feedback"]
 
     /// The errands worth offering on one pull request. `catalog` is what the server's `actions` lists; null or empty before it
     /// is known, when every errand this app knows is offered. `failedChecks` is the pull request's count of failed checks.
@@ -486,6 +487,7 @@ struct BoardAction: Equatable, Sendable {
             if !served.isEmpty && s == nil && k.id != "run" { offered = false }
             else if k.id == "solve-conflicts" { offered = pull?.hasConflicts ?? true }
             else if k.id == "fix-checks" { offered = failedChecks > 0 || (pull?.checksFailed ?? false) }
+            else if k.id == "implement-feedback" { offered = pull?.awaitsFeedback ?? true }
             else { offered = true }
             guard offered else { continue }
             // The server words the question and adds errands this app predates.

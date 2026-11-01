@@ -116,14 +116,14 @@ struct PullScreen: View {
                 case .reviews: reviews
                 case .issues: issues
                 case .projects: PullProjectsSection(entries: model.issueProjects.entries)
-                case .codeReviews: PullCodeReviewsTab(reviews: model.codeReviews, read: model.codeReviewsRead, error: model.codeReviewsError)
+                case .codeReviews: PullCodeReviewsTab(model: model.codeReviews)
                 case .conversations: conversations
                 case .run: EmptyView()
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden).background(Theme.canvas)
+        .listStyle(.insetGrouped).scrollContentBackground(.hidden).background(Theme.canvas)
+        .codeReviewEditor(model.codeReviews)
         .refreshable {
             // Pulling down is how an uncertain start is checked: its conversation is listed here if it began.
             errands.checked()
@@ -388,7 +388,7 @@ struct PullScreen: View {
         case .reviews: return model.commentCount ?? model.pr["reviews"].count
         case .issues: return model.closes.count
         case .projects: return model.issueProjects.entries.map { $0.reduce(0) { $0 + $1.projects.count } }
-        case .codeReviews: return model.codeReviewsRead ? model.codeReviews.count : nil
+        case .codeReviews: return model.codeReviews.read ? model.codeReviews.reviews.count : nil
         case .conversations: return model.runs.count
         default: return nil
         }

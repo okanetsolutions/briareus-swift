@@ -153,6 +153,6 @@ struct SSHResourceHistory: Equatable, Sendable {
             }
             charts.append(StatsChart(id: "network:\(name)", title: "Network · \(name)", series: lines))
         }
-        return charts
+        return charts.filter(\.plots)
     }
 }
