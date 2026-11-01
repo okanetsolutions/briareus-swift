@@ -320,20 +320,22 @@ final class VoiceTests: XCTestCase {
 
     func testErrandsStartTheBoardsOwnCalls() {
         XCTAssertTrue(VoiceTool.runErrand.changes)
-        XCTAssertEqual(Voice.errands, ["review", "fix-checks", "solve-conflicts"])
+        XCTAssertEqual(Voice.errands, ["review", "implement-feedback", "fix-checks", "solve-conflicts"])
         // Code review goes through `action` like every other errand.
         XCTAssertEqual(VoiceTool.runErrand.plan(["number": 9, "errand": "review"], repo: "o/r"), .call(["repo": "o/r", "prNumber": 9, "action": "review"]))
         XCTAssertEqual(VoiceTool.runErrand.plan(["number": 9, "errand": "fix-checks", "confirmed": true], repo: "o/r"),
                        .call(["repo": "o/r", "prNumber": 9, "action": "fix-checks"]))
-        for gone in ["implement-feedback", "delete-self-comments"] {
+        XCTAssertEqual(VoiceTool.runErrand.plan(["number": 9, "errand": "implement-feedback"], repo: "o/r"),
+                       .call(["repo": "o/r", "prNumber": 9, "action": "implement-feedback"]))
+        for gone in ["custom-feedback", "delete-self-comments"] {
             guard case .refuse = VoiceTool.runErrand.plan(["number": 9, "errand": .string(gone), "confirmed": true], repo: "o/r") else {
                 return XCTFail(gone)
             }
         }
         XCTAssertEqual(Voice.errand("review")?.operation, "action")
         XCTAssertEqual(Voice.errand("fix-checks")?.operation, "action")
-        XCTAssertNil(Voice.errand("implement-feedback"))
-        XCTAssertEqual(VoiceTool.runErrand.definition["parameters"]["properties"]["errand"]["enum"], ["review", "fix-checks", "solve-conflicts"])
+        XCTAssertNil(Voice.errand("custom-feedback"))
+        XCTAssertEqual(VoiceTool.runErrand.definition["parameters"]["properties"]["errand"]["enum"], ["review", "implement-feedback", "fix-checks", "solve-conflicts"])
         XCTAssertEqual(VoiceTool.runErrand.summary(j(#"{"session":{"id":"s","title":"Review #9","status":"queued"}}"#), args: [:]),
                        ["done": true, "session_id": "s", "title": "Review #9"])
     }
@@ -388,6 +390,9 @@ final class VoiceTests: XCTestCase {
         let review = Voice.codeReview(r)
         XCTAssertEqual(review["status"], "failed")
         XCTAssertEqual(review["findings"].count, 1)
+        // Handling is read only from a server that tracks it.
+        XCTAssertTrue(review["handling"].isNull)
+        XCTAssertEqual(Voice.codeReview(CodeReview(j(#"{"id":9,"status":"completed","handlingStatus":"handled"}"#))!)["handling"], "handled")
     }
 
     func testACallHeldToOneConversationReadsItsPullRequestsCodeReviews() {

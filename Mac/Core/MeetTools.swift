@@ -29,9 +29,9 @@ enum MeetTool: String, CaseIterable, Sendable {
             return "What one of the project's pull requests changes: how many files, lines added and removed, its description, and "
                 + "each changed file's name with its diff, to summarize what it touches."
         case .listCodeReviews:
-            return "The code reviews run on one of the project's pull requests, newest first: each one's status and summary, and "
-                + "every finding it registered with its severity, place, what it says and the verify step's verdict (fix, "
-                + "optional or dismissed)."
+            return "The code reviews run on one of the project's pull requests, newest first: each one's status, summary and "
+                + "handling (pending, or handled once someone dealt with its findings), and every finding it registered with its "
+                + "severity, place, what it says and its verdict (fix, optional or dismissed), the verify step's or a person's."
         case .listIssues:
             return "The project's open issues with their labels, epic progress, the pull requests that close them and the "
                 + "conversations started on them."
@@ -81,7 +81,7 @@ enum MeetTool: String, CaseIterable, Sendable {
             + "requests only; one missing from it was merged or closed. read_conversation tells what an agent did, said or "
             + "asks. For what a pull request changes, use read_pull_request with its number and summarize its description and "
             + "diffs in plain words: what it touches and why, never the code itself. list_code_reviews reads a pull "
-            + "request's code reviews and their findings. list_issues and read_issue read the project's issues.\n\n"
+            + "request's code reviews, whether someone has handled each, and their findings. list_issues and read_issue read the project's issues.\n\n"
             + "## Ready to merge\n"
             + "A pull request is ready to merge only when list_pull_requests marks it ready_to_merge: the code-approved label, "
             + "checks passed, no conflicts, not a draft, and not stacked on another pull request. Otherwise say what it lacks.\n\n"
@@ -296,6 +296,7 @@ enum MeetTool: String, CaseIterable, Sendable {
         if reviews.isEmpty { return ["code_reviews": [], "note": "No code review has run on this pull request."] }
         return ["code_reviews": .array(reviews.prefix(3).map { r in
             var o: JSON = ["status": .string(r.status.rawValue), "counts": .string(r.counts.line)]
+            if let handling = r.handling { o["handling"] = .string(handling.rawValue) }
             if let summary = r.summary { o["summary"] = .string(cut(summary, 800)) }
             o["findings"] = .array(r.findings.map { f in
                 var fo: JSON = ["title": .string(cut(f.title, 200)), "severity": .string(f.severity),
