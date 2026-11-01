@@ -14,11 +14,6 @@ func findingSeverityLabel(_ severity: String?) -> String {
     default: return "MED"
     }
 }
-/// The verdicts a finding takes, by their API spelling, and the titles their buttons show.
-let findingDecisionIds = ["fix", "optional", "dismissed"]
-let findingDecisionTitles = ["Fix", "Optional", "Dismiss"]
-/// The index of a verdict's API spelling; nil for one this app does not know (the C client's -1).
-func findingDecisionIndex(_ decision: String?) -> Int? { decision.flatMap { findingDecisionIds.firstIndex(of: $0) } }
 
 // MARK: - Rows
 

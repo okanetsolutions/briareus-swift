@@ -20,7 +20,7 @@ final class SettingsLogicTests: XCTestCase {
 
     func testProjectBodyKeepsUnknownFieldsAndDropsServerOnes() throws {
         var s = ProjectFormState(row: ["id": 4, "repo": "o/r", "sortOrder": 2, "createdAt": 1, "extra": "kept", "setupCommands": ["a"],
-                                       "workerBudgetUsd": nil, "reviewProviderId": 2, "reviewModel": "m", "reviewEffort": "high"])
+                                       "workerBudgetUsd": nil, "actionProviderId": 2, "actionModel": "m", "actionEffort": "high"])
         XCTAssertEqual(s.id, 4)
         XCTAssertFalse(s.tabChanged(.project))
         s.texts[.setup] = "a\n\n b "
@@ -31,23 +31,58 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertTrue(body["id"].isNull && body["sortOrder"].isNull && body["createdAt"].isNull)
         XCTAssertEqual(body["setupCommands"], ["a", "b"])
         XCTAssertEqual(body["workerBudgetUsd"], 25)
-        XCTAssertEqual(body["reviewProviderId"], 2)
+        XCTAssertEqual(body["actionProviderId"], 2)
+        XCTAssertEqual(body["actionModel"], "m")
+        XCTAssertEqual(body["actionEffort"], "high")
         // A field the server's projects do not carry is not sent.
         XCTAssertNil(body.object?["localDir"])
     }
 
-    func testProjectActiveSwitchAndAutonomousLoopAreSent() throws {
-        var s = ProjectFormState(row: ["id": 4, "repo": "o/r", "enabled": true, "autonomousReviewLoop": false])
+    func testProjectActiveSwitchAndPRAuthorAreSent() throws {
+        var s = ProjectFormState(row: ["id": 4, "repo": "o/r", "enabled": true, "prAuthor": "ana", "qaTestRun": false])
         XCTAssertTrue(s.bool(.enabled))
+        XCTAssertEqual(s.text(.prAuthor), "ana")
         s.bools[.enabled] = false
         XCTAssertTrue(s.tabChanged(.project))
-        s.bools[.autoLoop] = true
+        XCTAssertFalse(s.tabChanged(.review))
+        s.texts[.prAuthor] = "bo"
+        s.bools[.testRun] = true
         XCTAssertTrue(s.tabChanged(.review))
         let body = try s.body().get()
         XCTAssertEqual(body["enabled"], false)
-        XCTAssertEqual(body["autonomousReviewLoop"], true)
-        // A server whose projects predate the loop gets no key for it.
-        XCTAssertNil(try ProjectFormState(row: ["repo": "o/r", "enabled": true]).body().get().object?["autonomousReviewLoop"])
+        XCTAssertEqual(body["prAuthor"], "bo")
+        XCTAssertEqual(body["qaTestRun"], true)
+        // The keys the server no longer reads are never sent.
+        for gone in ["reviewAuthor", "autonomousReviewLoop", "reviewPublishInstructions", "reviewTestSheet", "reviewTestRun", "feedbackInstructions"] {
+            XCTAssertNil(body.object?[gone], gone)
+        }
+        // A server whose projects predate the field gets no key for it.
+        XCTAssertNil(try ProjectFormState(row: ["repo": "o/r", "enabled": true]).body().get().object?["prAuthor"])
+    }
+
+    func testLocalSessionLimitIsAWholeNumberUpToTen() throws {
+        var s = ProjectFormState(row: ["id": 4, "repo": "o/r", "localSessionLimit": 2])
+        XCTAssertTrue(s.offered(.localLimit))
+        XCTAssertEqual(ProjectField.localLimit.tab, .project)
+        XCTAssertEqual(ProjectField.localLimit.key, "localSessionLimit")
+        XCTAssertEqual(s.text(.localLimit), "2")
+        XCTAssertEqual(try s.body().get()["localSessionLimit"], 2)
+        for (typed, sent) in [("0", 0), (" 10 ", 10), ("1", 1)] {
+            s.texts[.localLimit] = typed
+            XCTAssertEqual(try s.body().get()["localSessionLimit"], JSON(sent), typed)
+        }
+        XCTAssertTrue(s.tabChanged(.project))
+        // Left empty, the server keeps what it has: no key at all, not null.
+        s.texts[.localLimit] = " "
+        XCTAssertNil(try s.body().get().object?["localSessionLimit"])
+        for bad in ["11", "-1", "2.5", "two"] {
+            s.texts[.localLimit] = bad
+            if case .failure(let p) = s.body() { XCTAssertEqual(p.tab, ProjectTab.project.rawValue, bad) } else { XCTFail(bad) }
+        }
+        // A server whose projects carry no limit neither shows nor gets the field.
+        let old = ProjectFormState(row: ["repo": "o/r"])
+        XCTAssertFalse(old.offered(.localLimit))
+        XCTAssertNil(try old.body().get().object?["localSessionLimit"])
     }
 
     func testProjectBabysitSwitchIsSentWhenTheServerHasIt() throws {
@@ -66,10 +101,8 @@ final class SettingsLogicTests: XCTestCase {
     func testProjectSwitchNotesFollowTheirState() {
         XCTAssertNotNil(ProjectField.enabled.note(on: false))
         XCTAssertNil(ProjectField.enabled.note(on: true))
-        for f in [ProjectField.autoLoop, .babysit] {
-            XCTAssertNotNil(f.note(on: true))
-            XCTAssertNil(f.note(on: false))
-        }
+        XCTAssertNotNil(ProjectField.babysit.note(on: true))
+        XCTAssertNil(ProjectField.babysit.note(on: false))
         XCTAssertNotNil(ProjectField.isSelf.note(on: false))
         XCTAssertNil(ProjectField.dbPool.note(on: true))
     }
@@ -104,7 +137,7 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertFalse(ProjectFormState(row: ["repo": "o/r"]).offered(.board))
     }
 
-    func testStepRuntimesLeftOnTheReviewAreNoEntry() throws {
+    func testStepRuntimesLeftOnThePRActionsAreNoEntry() throws {
         var s = ProjectFormState(row: ["repo": "o/r", "stepRuntimes": ["testSheet": ["providerId": 3, "model": "x", "effort": ""]]])
         XCTAssertEqual(s.pick(.testSheet).providerId, 3)
         s.picks[.testSheet] = RuntimePick()
@@ -116,8 +149,22 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertFalse(s.tabChanged(.orchestrator))
     }
 
+    func testThePRActionsRuntimeEditsTheActionKeys() throws {
+        XCTAssertEqual(ProjectRuntime.review.providerKey, "actionProviderId")
+        XCTAssertEqual(ProjectRuntime.review.modelKey, "actionModel")
+        XCTAssertEqual(ProjectRuntime.review.effortKey, "actionEffort")
+        var s = ProjectFormState(row: ["repo": "o/r", "actionProviderId": 1, "actionModel": "a", "actionEffort": "low"])
+        XCTAssertEqual(s.pick(.review).providerId, 1)
+        s.picks[.review] = RuntimePick(providerId: 7, model: "b", effort: "high")
+        let body = try s.body().get()
+        XCTAssertEqual(body["actionProviderId"], 7)
+        XCTAssertEqual(body["actionModel"], "b")
+        XCTAssertEqual(body["actionEffort"], "high")
+        XCTAssertNil(body.object?["reviewProviderId"])
+    }
+
     func testPickTextKeepsAProviderTheCatalogLost() {
-        let s = ProjectFormState(row: ["repo": "o/r", "reviewProviderId": 9, "reviewModel": "m"])
+        let s = ProjectFormState(row: ["repo": "o/r", "actionProviderId": 9, "actionModel": "m"])
         XCTAssertEqual(s.pickText(.review, part: 0, catalog: RuntimeCatalog()), "Provider #9 (unavailable)")
         XCTAssertEqual(s.pickText(.review, part: 0, catalog: nil), "Provider #9")
         XCTAssertEqual(s.pickText(.review, part: 1, catalog: nil), "m")
@@ -141,6 +188,21 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertNotNil(try? s.body(validate: false).get())
         XCTAssertTrue(ProviderFormState(row: ["binary": "opencode"]).usesToken)
         XCTAssertFalse(ProviderFormState.modeOffered("grok"))
+    }
+
+    func testKeyOnlyBinariesHaveNoModeOrLogin() {
+        XCTAssertEqual(ProviderFormState.keyOnly, ["opencode", "dsh", "qwen"])
+        for binary in ["opencode", "dsh", "qwen"] {
+            XCTAssertTrue(ProviderFormState.binaries.contains { $0.id == binary }, binary)
+            XCTAssertFalse(ProviderFormState.modeOffered(binary), binary)
+            let s = ProviderFormState(row: ["id": 2, "label": "K", "binary": .string(binary), "apiKey": "", "baseUrl": ""])
+            XCTAssertTrue(s.usesToken, binary)
+            XCTAssertFalse(s.canLogIn, binary)
+        }
+        for binary in ["claude", "codex"] {
+            XCTAssertTrue(ProviderFormState.modeOffered(binary), binary)
+            XCTAssertTrue(ProviderFormState(row: ["id": 2, "label": "L", "binary": .string(binary)]).canLogIn, binary)
+        }
     }
 
     func testProviderStatusHeadline() {

@@ -241,8 +241,8 @@ struct Card<Content: View>: View {
 
 // MARK: - Pickers
 
-/// A row of small toggle buttons; the first one selected is in danger red, the others in the accent, as the findings'
-/// Fix / Optional / Dismiss.
+/// A row of small toggle buttons; the selected one is in the accent, or in danger red when it is the first and
+/// `dangerFirst` is on.
 struct Segments: View {
     var titles: [String]
     var selected: Int?

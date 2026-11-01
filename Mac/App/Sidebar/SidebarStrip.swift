@@ -1,16 +1,16 @@
 // The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then Pull requests, WhatsApp, ✉, ◉ Status with
-// the count of conversations needing you, 📊, ⚑ with its count, as compact icon buttons (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
+// the count of conversations and approvals waiting on you, 📊, as compact icon buttons (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
 import SwiftUI
 
-enum StripAction { case newSession, whatsapp, mail, status, usage, findings, globalPulls }
+enum StripAction { case newSession, whatsapp, mail, status, usage, globalPulls }
 
 struct SidebarStrip: View {
     @ObservedObject private var store = Store.shared
-    /// The detail pane's root id, for the Pull requests, WhatsApp, ✉, ◉, 📊 and ⚑ switches' accent.
+    /// The detail pane's root id, for the Pull requests, WhatsApp, ✉, ◉ and 📊 switches' accent.
     var selected: String?
-    /// The ⚑ badge: review rounds and approvals waiting.
-    var waiting: Int
-    /// The ◉ badge: conversations waiting for an answer or a decision.
+    /// Approvals an agent waits on (the attention inbox), counted on the ◉ badge.
+    var approvals: Int
+    /// Conversations waiting for an answer or a decision, counted on the ◉ badge.
     var needsYou: Int
     /// Whether this device's catalog offers the new-session action.
     var canStartSession = true
@@ -20,7 +20,7 @@ struct SidebarStrip: View {
 
     var body: some View {
         HStack(spacing: Self.gap) {
-            // Six compact icons and their gaps leave 98pt for New session in the 248pt strip, including its insets.
+            // Five compact icons and their gaps leave 98pt for New session in the 248pt strip, including its insets.
             if canStartSession {
                 StripButton(active: false, action: { action(.newSession) }) {
                     Text("＋ New session").font(Theme.footnote).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
@@ -48,12 +48,10 @@ struct SidebarStrip: View {
                 }
                 .frame(width: Self.iconWidth).help("Mail")
             }
-            StripButton(active: selected == "status", badge: needsYou, action: { action(.status) }) { emoji("◉", active: selected == "status") }
+            StripButton(active: selected == "status", badge: needsYou + approvals, action: { action(.status) }) { emoji("◉", active: selected == "status") }
                 .frame(width: Self.iconWidth).help("Status: what waits for you and what is working")
             StripButton(active: selected == "usage", action: { action(.usage) }) { emoji("📊", active: selected == "usage") }
                 .frame(width: Self.iconWidth).help("Usage")
-            StripButton(active: selected == "findings", badge: waiting, action: { action(.findings) }) { emoji("⚑", active: selected == "findings") }
-                .frame(width: Self.iconWidth).help("Findings")
         }
         .frame(height: Self.height)
     }

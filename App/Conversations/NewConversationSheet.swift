@@ -1,6 +1,6 @@
 // A new session, as the Mac's New session screen (screen_new_session.c) and its row of chips: what to build, said or
-// dictated, with files; the project (when started from the projects list), the branch, provider, model and effort, and
-// the review loop. Starting runs a paid agent, so the sheet says so; a start whose outcome is unknown is not repeated.
+// dictated, with files; the project (when started from the projects list), the branch, provider, model and effort.
+// Starting runs a paid agent, so the sheet says so; a start whose outcome is unknown is not repeated.
 import Combine
 import SwiftUI
 
@@ -19,10 +19,6 @@ final class NewConversationModel: ObservableObject {
     @Published private(set) var defaultBranch: String?
     /// Nil: a new branch off the default.
     @Published var branch: String?
-    /// Starts as it was last set, and is remembered for the next new session whenever it changes.
-    @Published var reviewLoop = LastReviewLoop.load() {
-        didSet { if reviewLoop != oldValue { LastReviewLoop.save(reviewLoop) } }
-    }
     @Published var prompt = ""
     @Published private(set) var busy = false
     @Published private(set) var uncertain = false
@@ -113,7 +109,6 @@ final class NewConversationModel: ObservableObject {
         if let branch { args["branch"] = .string(branch) }
         if let runtime { args.merge(runtime.arguments) }
         busy = true; error = nil
-        let loop = reviewLoop
         Task {
             do {
                 let answer = try await Store.shared.call("start_session", args)
@@ -121,10 +116,6 @@ final class NewConversationModel: ObservableObject {
                 guard let session = Session(answer["session"]) else { error = "The server returned an unexpected response."; uncertain = true; return }
                 prompt = ""
                 files.sent(args["attachments"].isNull ? nil : args["attachments"])
-                // The loop the switch turned off, which the server arms by default.
-                if !loop && Store.shared.supports("review_loop") && session.canReviewLoop {
-                    Task { _ = try? await Store.shared.call("review_loop", ["sessionId": .string(session.id), "on": false]) }
-                }
                 let feed = Store.shared.feed(p.repo)
                 Task { try? await feed.loadSessions(fresh: true) }
                 started(session)
@@ -244,16 +235,6 @@ struct NewConversationSheet: View {
                 .accessibilityLabel("Branch: \(model.branch ?? "a new branch off the default")")
             }
             if let catalog = model.catalog, !catalog.providers.isEmpty { runtimeRows(catalog) }
-            if store.supports("review_loop") {
-                Divider().overlay(Theme.line)
-                Toggle(isOn: $model.reviewLoop) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Label("Review loop", systemImage: "repeat").font(.subheadline)
-                        Text("Each push gets a paid review round, and its findings a fix session.").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .disabled(model.busy)
-            }
         }
         .padding(14)
         .background(Theme.raise, in: RoundedRectangle(cornerRadius: 18, style: .continuous))

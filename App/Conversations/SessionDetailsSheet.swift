@@ -1,6 +1,5 @@
 // The Mac's session panel (`#pr-panel`, screen_panel.c) as a sheet: the session's runtime and branch, its pull request
-// with its commits, reviews and findings (each finding with its verdict), and its context usage with the compaction
-// controls. The conversation opens it from the strip over its transcript.
+// with its commits and reviews, and its context usage with the compaction controls. The conversation opens it from the strip over its transcript.
 import SwiftUI
 
 struct SessionDetailsSheet: View {
@@ -10,9 +9,7 @@ struct SessionDetailsSheet: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     @State private var pr: JSON = .null
-    @State private var findings: JSON = []
     @State private var error: String?
-    @State private var deciding: String?
     /// Bumped by each read, so a slower earlier answer does not land over a newer one.
     @State private var loadSeq = 0
     /// Compact or Clear, waiting for its confirmation.
@@ -34,7 +31,6 @@ struct SessionDetailsSheet: View {
             Form {
                 sessionSection
                 if let pull { pullSection(pull) }
-                if let pull, store.supports("findings"), !pr.isNull { findingsSection(pull) }
                 usageSection
             }
             .scrollContentBackground(.hidden).background(Theme.canvas)
@@ -45,7 +41,7 @@ struct SessionDetailsSheet: View {
         .presentationDetents([.medium, .large])
         .presentationBackground(Theme.canvas)
         .task(id: pull.map { "\($0.repo)#\($0.number)" } ?? "") {
-            pr = .null; findings = []; error = nil
+            pr = .null; error = nil
             guard pull != nil else { return }
             await poll(every: 30) { await load() }
         }
@@ -76,10 +72,6 @@ struct SessionDetailsSheet: View {
                 LabeledContent("Branch") { Text(branch).font(.subheadline.monospaced()).lineLimit(1).truncationMode(.middle).textSelection(.enabled) }
             }
             LabeledContent("Workspace", value: conversationChipText(s, .workspace))
-            if store.supports("review_loop") && (s.canReviewLoop || s.reviewLoopOn) {
-                let loop = s.raw["reviewLoop"]
-                LabeledContent("Review loop", value: !s.reviewLoopOn ? "Off" : loop["rounds"].truncatedInt.map { "On \u{00B7} round \($0)" } ?? "On")
-            }
         }
         .listRowBackground(Theme.row)
     }
@@ -89,20 +81,16 @@ struct SessionDetailsSheet: View {
     private func cacheKey(_ p: PullKey) -> String { "pull:\(p.repo)#\(p.number)" }
 
     private func load() async -> APIError? {
-        guard let p = pull, deciding == nil else { return nil }
+        guard let p = pull else { return nil }
         loadSeq += 1
         let seq = loadSeq
         if pr.isNull, let saved = store.cache.value(cacheKey(p)) {
-            pr = saved["pr"]; findings = saved["findings"].isArray ? saved["findings"] : []
+            pr = saved["pr"]
         }
         do {
             let answer = try await store.call("pull", ["repo": .string(p.repo), "pr": JSON(p.number)])
             guard pull == p, seq == loadSeq else { return nil }
             pr = answer["pr"]; error = nil
-            if store.supports("findings"),
-               let f = try? await store.call("findings", ["repo": .string(p.repo), "pr": JSON(p.number)]), pull == p, seq == loadSeq {
-                findings = f["findings"].isArray ? f["findings"] : []
-            }
             save()
             return nil
         } catch {
@@ -113,30 +101,14 @@ struct SessionDetailsSheet: View {
         }
     }
     /// Saved as the pull request screen saves it, keeping what that screen read beside it (its board row, stack and
-    /// description).
+    /// description and code reviews).
     private func save() {
         guard let p = pull, !pr.isNull else { return }
         let key = cacheKey(p)
         var saved = store.cache.value(key).flatMap { $0.isObject ? $0 : nil } ?? [:]
-        saved["pr"] = pr; saved["findings"] = findings
+        saved["pr"] = pr
         store.cache.store(saved, key)
     }
-    private func decide(_ key: String, _ decision: String?) {
-        guard deciding == nil, let p = pull else { return }
-        deciding = key
-        Task {
-            do {
-                let answer = try await store.call("finding_decision", ["repo": .string(p.repo), "pr": JSON(p.number), "key": .string(key),
-                                                                       "decision": .string(orNull: decision)])
-                if pull == p {
-                    findings = answer["findings"].isArray ? answer["findings"] : findings
-                    save()
-                }
-            } catch { if pull == p, let said = failure(error) { self.error = said } }
-            deciding = nil
-        }
-    }
-
     @ViewBuilder private func pullSection(_ p: PullKey) -> some View {
         Section("Pull request") {
             if let error { ErrorNotice(message: error) }
@@ -230,59 +202,6 @@ struct SessionDetailsSheet: View {
         else if passed > 0 { Text("\u{2713}\(passed)").font(.caption.weight(.semibold)).foregroundStyle(Theme.ok) }
     }
 
-    private func findingsSection(_ p: PullKey) -> some View {
-        let list = findings.items
-        let fixed = list.filter { $0["fixed"].is(true) }.count
-        return Section(panelFindingsLabel(count: list.count, fixed: fixed)) {
-            if list.isEmpty { Text("No findings reported").foregroundStyle(.secondary) }
-            ForEach(Array(list.enumerated()), id: \.offset) { _, f in findingRow(f) }
-        }
-        .listRowBackground(Theme.row)
-    }
-
-    private func findingRow(_ f: JSON) -> some View {
-        let severity = f["severity"].string
-        let label = findingSeverityLabel(severity)
-        let color: Color = label == "CRIT" || label == "HIGH" ? Theme.danger : label == "LOW" ? .secondary : Theme.warn
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(label).font(.caption2.weight(.bold)).foregroundStyle(color)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(color, lineWidth: 1))
-                if let url = safeLink(f["url"].string) {
-                    Link(destination: url) { Text(f["title"].string ?? "Finding").font(.subheadline).multilineTextAlignment(.leading) }
-                } else {
-                    Text(f["title"].string ?? "Finding").font(.subheadline).textSelection(.enabled)
-                }
-                Spacer(minLength: 0)
-                if f["fixed"].is(true) { Label("Fixed", systemImage: "checkmark").font(.caption2).foregroundStyle(Theme.ok).fixedSize() }
-            }
-            if let location = findingLocation(f) {
-                Text(location).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-            }
-            if store.supports("finding_decision"), store.canManage, let key = f["key"].string {
-                let current = f["decision"].string
-                HStack(spacing: 6) {
-                    ForEach(Array(findingDecisionIds.enumerated()), id: \.offset) { i, id in
-                        let on = current == id
-                        // The same pick twice clears it, as the Mac app does.
-                        Button { decide(key, on ? nil : id) } label: {
-                            Text(findingDecisionTitles[i]).font(.caption.weight(.medium))
-                                .foregroundStyle(on ? Color.white : .primary)
-                                .padding(.horizontal, 12).padding(.vertical, 6)
-                                .background(on ? Theme.accent : Theme.field, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(on ? .isSelected : [])
-                    }
-                    if deciding == key { ProgressView().controlSize(.small) }
-                }
-                .disabled(deciding != nil)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
     // MARK: Context usage
 
     @ViewBuilder private var usageSection: some View {
@@ -320,7 +239,7 @@ struct SessionDetailsSheet: View {
                 if let v = u["durationMs"].number { LabeledContent("Agent time", value: formatDurationMs(v)) }
                 // `+`: some turns carry no price at all, so the total is a floor.
                 if let v = u["costUsd"].number { LabeledContent("Cost", value: formatCost(v) + ((u["unpricedTurns"].number ?? 0) > 0 ? "+" : "")) }
-                // An orchestrator's figures cover its workers, a task's the reviews its loop ran.
+                // An orchestrator's figures cover the sessions it started.
                 if let v = u["sessions"].number, v > 0 {
                     let n = Int(v.rounded(.towardZero))
                     LabeledContent("Includes", value: "\(n) session\(n == 1 ? "" : "s") it started")

@@ -6,19 +6,23 @@ import SwiftUI
 /// Tiles two across.
 struct StatTiles: View {
     var tiles: [StatTile]
+    /// A tone for a tile's figure, by tile id (CI/CD's success rate); the rest are in the primary colour.
+    var valueTones: [String: RowTone] = [:]
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-            ForEach(tiles) { StatTileView(tile: $0) }
+            ForEach(tiles) { StatTileView(tile: $0, valueTone: valueTones[$0.id]) }
         }
     }
 }
 
 struct StatTileView: View {
     var tile: StatTile
+    var valueTone: RowTone? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(tile.label).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            Text(tile.value).font(.title2.weight(.semibold).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.6)
+            Text(tile.value).font(.title2.weight(.semibold).monospacedDigit())
+                .foregroundStyle(valueTone.map { Theme.color($0) } ?? .primary).lineLimit(1).minimumScaleFactor(0.6)
             if let fraction = tile.fraction { StatGauge(fraction: fraction, color: Theme.color(tile.tone)) }
             Text(tile.detail).font(.caption2).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)

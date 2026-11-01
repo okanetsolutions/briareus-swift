@@ -1,7 +1,7 @@
 // A project's settings, as the Mac's project form on a phone: its sections (Project with its Active switch, Projects
-// board and setup, Database, Code review with its autonomous loop, Orchestrator, Checkout .env, Run) on a strip of tabs
-// over one form, a dot on any holding unsaved changes; saved through /settings/projects. The provider, model and effort
-// pickers serve the code review, each errand step and the orchestrator's workers.
+// board and setup, Database, PR actions, Orchestrator, Checkout .env, Run) on a strip of tabs over one form, a dot on
+// any holding unsaved changes; saved through /settings/projects. The provider, model and effort pickers serve the PR
+// actions, each errand step and the orchestrator's workers.
 import SwiftUI
 
 @MainActor
@@ -298,7 +298,7 @@ struct ProjectSettingsScreen: View {
         case .project:
             Section { field(.repo); field(.label) }.listRowBackground(Theme.row)
             checkSection(.enabled); checkSection(.printing)
-            Section { field(.localDir); field(.board) }.listRowBackground(Theme.row)
+            Section { field(.localDir); field(.localLimit); field(.board) }.listRowBackground(Theme.row)
             Section { field(.setup); field(.php) } header: { Text("Setup") } footer: {
                 Text("This project's own prompt wording is kept on the server; saving here keeps it as it is.")
             }
@@ -307,25 +307,21 @@ struct ProjectSettingsScreen: View {
             Section { field(.dbName); field(.dbExt) }.listRowBackground(Theme.row)
             Section { check(.dbPool); field(.dbRestore) } header: { Text("Database pool") }.listRowBackground(Theme.row)
         case .review:
-            Section { field(.reviewAuthor) }.listRowBackground(Theme.row)
+            Section { field(.prAuthor) }.listRowBackground(Theme.row)
             if state.offered(.review) {
                 Section { runtime(.review) } header: { Text("Runtime") }.listRowBackground(Theme.row)
             }
-            Section { field(.publish) }.listRowBackground(Theme.row)
-            checkSection(.autoLoop)
             checkSection(.babysit)
-            // Each step runs as a turn of its own, on the code review's runtime unless it names one; a step switched off has none.
-            Section {
-                check(.testSheet)
-                if state.bool(.testSheet) { runtime(.testSheet) }
-            } header: { Text("Test sheet") }
-            .listRowBackground(Theme.row)
+            // Each step runs as a turn of its own, on the PR actions' runtime unless it names one; a step switched off has none.
+            if state.offered(.testSheet) {
+                Section { runtime(.testSheet) } header: { Text("Test sheet") }.listRowBackground(Theme.row)
+            }
             Section {
                 check(.testRun)
                 if state.bool(.testRun) { runtime(.testRun) }
             } header: { Text("Test run") }
             .listRowBackground(Theme.row)
-            Section { field(.qaNotes); field(.sheetSteps); field(.feedbackSteps) } header: { Text("Prompts") }.listRowBackground(Theme.row)
+            Section { field(.qaNotes); field(.sheetSteps) } header: { Text("Prompts") }.listRowBackground(Theme.row)
         case .orchestrator:
             Section {
                 runtime(.worker)

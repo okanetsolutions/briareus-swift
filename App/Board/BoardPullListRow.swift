@@ -42,7 +42,7 @@ private struct BoardPullRowMenu: View {
             Section("Errands") {
                 ForEach(errands, id: \.id) { action in
                     Button(role: action.isDestructive ? .destructive : nil) {
-                        model.errands.ask(action, number: pull.number, branch: pull.branch)
+                        model.errands.ask(action, number: pull.number)
                     } label: {
                         Label(action.isSuggested(for: pull) ? "\(action.label) (suggested)" : action.label,
                               systemImage: action.isSuggested(for: pull) ? "sparkles" : errandSymbol(action.id))

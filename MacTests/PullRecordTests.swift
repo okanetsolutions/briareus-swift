@@ -94,10 +94,11 @@ final class PullRecordTests: XCTestCase {
     }
 
     func testSnapshotRoundTrips() {
-        XCTAssertNil(PullSnapshot(pr: .null, findings: [], row: nil, stack: nil, body: nil, bodyAuthor: nil).json)
-        let s = PullSnapshot(pr: openPull, findings: j(#"[{"key":"a"}]"#), row: row(#"{"number":4,"title":"t"}"#), stack: nil, body: "B", bodyAuthor: "ann")
+        XCTAssertNil(PullSnapshot(pr: .null, codeReviews: [], row: nil, stack: nil, body: nil, bodyAuthor: nil).json)
+        let s = PullSnapshot(pr: openPull, codeReviews: j(#"[{"id":1,"status":"completed"}]"#), row: row(#"{"number":4,"title":"t"}"#), stack: nil, body: "B", bodyAuthor: "ann")
         let back = PullSnapshot(s.json)
         XCTAssertEqual(back?.pr, openPull)
+        XCTAssertEqual(back?.codeReviews, j(#"[{"id":1,"status":"completed"}]"#))
         XCTAssertEqual(back?.row?.number, 4)
         XCTAssertEqual(back?.body, "B")
         XCTAssertEqual(back?.bodyAuthor, "ann")

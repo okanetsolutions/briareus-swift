@@ -22,7 +22,7 @@ These rules govern every screen of the Mac app and the iPhone and iPad app. Appl
 | List (projects, conversations, pull requests, issues) | One list, its filters and search above it, the row component the other app uses for the same item. |
 | Record (pull request, issue, conversation) | Header with identity and state, then tabs or sections; each tab is its own view. Mac sidebars scroll on their own beside the content. |
 | Settings form | Fields from Core's `SettingsField` definitions, the form's chrome (`SettingsFormChrome` on iPhone, `SettingsKit` on Mac), explicit Save, Discard asking first when dirty. |
-| Dashboard (Status, Usage, Findings) | Summary counts first, then the lists or charts they summarise. |
+| Dashboard (Status, Usage, CI/CD) | Summary counts first, then the lists or charts they summarise. |
 | Workspace (shared browser, terminal, files) | Reuse the closest existing workspace; full-height layouts and special scrolling stay scoped to that screen. |
 
 Both apps show the same screen for the same feature (README: "screen for screen"). When one changes, change the other or say in the PR why not.

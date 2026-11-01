@@ -70,8 +70,6 @@ extension CarAssistant {
     private func row(_ session: Session, detail: String? = nil, symbol: String? = nil) -> CPListItem {
         item(session.displayTitle, detail ?? sessionSubtitle(session), symbol: symbol ?? (session.isActive ? "circle.fill" : "circle")) { [weak self] in self?.open(session) }
     }
-    /// The verdicts a finding takes, by their API spelling and the titles their buttons show.
-    private var decisions: [(id: String, title: String)] { Array(zip(findingDecisionIds, findingDecisionTitles)) }
 
     // MARK: Browse
 
@@ -80,7 +78,6 @@ extension CarAssistant {
         var rows: [CPListItem] = []
         if store.supports("start_session") { rows.append(item("New conversation", symbol: "square.and.pencil", more: true) { [weak self] in self?.newConversation() }) }
         rows.append(item("Conversations", symbol: "bubble.left.and.bubble.right", more: true) { [weak self] in self.map { $0.third($0.conversations()) } })
-        if store.supports("complete_findings") { rows.append(item("Findings", "Review rounds waiting for a decision", symbol: "flag", more: true) { [weak self] in self.map { $0.third($0.conversations(holding: true)) } }) }
         if store.supports("pulls") {
             rows.append(item("Pull requests", symbol: "arrow.triangle.pull", more: true) { [weak self] in self.map { $0.third($0.pulls()) } })
             rows.append(item("Issues", symbol: "smallcircle.filled.circle", more: true) { [weak self] in self.map { $0.third($0.issues()) } })
@@ -110,19 +107,13 @@ extension CarAssistant {
             rows(model.projects)
         }
     }
-    /// A project's conversations, or only those holding findings for a decision.
-    private func conversations(holding: Bool = false) -> CPListTemplate {
-        list(holding ? "Findings" : "Conversations", empty: holding ? "No findings waiting" : "No conversations") { [weak self] show in
+    /// A project's conversations: those at work, the recent ones and the closed.
+    private func conversations() -> CPListTemplate {
+        list("Conversations", empty: "No conversations") { [weak self] show in
             guard let self, let project = self.project else { return }
             let feed = self.store.feed(project.repo)
             let rows = { [weak self] (sessions: [Session]) in
                 guard let self else { return }
-                if holding {
-                    show([self.section(nil, CarText.holdingFindings(sessions).map { session in
-                        self.row(session, detail: CarText.count(session.heldTriage?["findings"].count ?? 0, "finding"), symbol: "flag.fill")
-                    })])
-                    return
-                }
                 let open = sessions.filter { $0.status != "closed" }
                 show([self.section("Active", open.filter(\.isActive).map { self.row($0) }), self.section("Recent", open.filter { !$0.isActive }.map { self.row($0) }),
                       self.section("Closed", sessions.filter { $0.isClosed }.map { self.row($0) })])
@@ -327,17 +318,6 @@ extension CarAssistant {
                 }
             }
         }
-        if store.supports("review_loop") && session.canReviewLoop {
-            agent.append(item("Review loop", session.reviewLoopOn ? "On" : "Off", symbol: "repeat") { [weak self] in
-                let on = !session.reviewLoopOn
-                self?.change("review_loop", ["on": .bool(on)], done: on ? "The review loop is on." : "The review loop is off.")
-            })
-        }
-        if let held = session.heldTriage, store.supports("complete_findings") {
-            agent.append(item("Findings", "\(CarText.count(held["findings"].count, "finding")) waiting for a decision", symbol: "flag.fill", more: true) { [weak self] in
-                self.map { $0.third($0.triageList(held)) }
-            })
-        }
 
         var more: [CPListItem] = []
         if let number = session.pullNumber, store.supports("pull") {
@@ -363,37 +343,6 @@ extension CarAssistant {
         return Self.fit([section(CarText.status(session, asking: question != nil), talk), section("Agent", agent), section("More", more)])
     }
 
-    /// The round held for verdicts. An unmarked finding goes as optional, as on the Mac app and on the phone.
-    private func triageList(_ triage: JSON) -> CPListTemplate {
-        let template = CPListTemplate(title: "Findings", sections: [])
-        let mine = triageTakesVerdicts(triage)
-        func decision(_ finding: JSON) -> String { triageDecision(triage, finding, picked: verdicts) }
-        func rows() -> [CPListSection] {
-            let findings = triage["findings"].items
-            let fixes = findings.filter { decision($0) == "fix" }.count
-            var complete = [item(mine ? "Complete the triage" : "Take it off the queue",
-                                 !mine ? "Its author fixes them" : fixes == 0 ? "Without fixes" : "Starts a paid fix session for \(CarText.count(fixes, "finding"))",
-                                 symbol: "checkmark.circle") { [weak self] in
-                self?.ask([triageConfirmTitle(takesVerdicts: mine, fixes: fixes), mine ? "Complete the triage?" : "Take it off the queue?"], yes: "Complete") { self?.triage() }
-            }]
-            if mine {
-                complete.append(item("Dictate a note for the fix session", note.isEmpty ? nil : note, symbol: "mic") { [weak self] in self?.dictate(.note) })
-            }
-            let list = findings.map { finding -> CPListItem in
-                item(finding["title"].string ?? "Finding", CarText.finding(finding, verdict: CarText.verdictTitle(decision(finding))),
-                     symbol: decision(finding) == "fix" ? "wrench.and.screwdriver" : "flag") { [weak self] in
-                    guard mine, let self, let key = finding["key"].string else { return }
-                    self.choose(finding["title"].string ?? "Finding", finding["parkedWhy"].string, self.decisions.map { option in
-                        (option.title, false, { [weak self] in self?.verdicts[key] = option.id; template.updateSections(rows()) })
-                    })
-                }
-            }
-            return Self.fit([section(nil, complete), section(mine ? "Verdicts go on the pull request" : nil, list)])
-        }
-        template.updateSections(rows())
-        return template
-    }
-
     private func actions(onPull number: Int) -> [CPListSection] {
         var about: [CPListItem] = []
         if !pull.isNull {
@@ -403,10 +352,10 @@ extension CarAssistant {
                 if !said.isEmpty { self?.warn(said.prefix(6).joined(separator: ", ")) }
             })
         }
-        if store.supports("findings") && findings.count > 0 {
-            let open = findingsUnfixed(findings)
-            about.append(item("Findings", CarText.count(findings.count, "finding") + (open < findings.count ? " · \(open) open" : ""), symbol: "flag", more: true) { [weak self] in
-                self.map { $0.third($0.findingsList()) }
+        let findings = codeReviews.latestFindings
+        if store.supports("code_reviews") && !findings.isEmpty {
+            about.append(item("Code review", CarText.count(findings.count, "finding"), symbol: "checklist", more: true) { [weak self] in
+                self.map { $0.third($0.findingsList(findings)) }
             })
         }
         if !runs.isEmpty {
@@ -429,19 +378,10 @@ extension CarAssistant {
         }
         return Self.fit([section(row?.title ?? pull["title"].string, about), section("Paid agents, may write to GitHub", errands), section(nil, [putDown("pull request")])])
     }
-    private func findingsList() -> CPListTemplate {
-        let decides = store.supports("finding_decision") && store.canManage
-        return CPListTemplate(title: "Findings", sections: Self.fit([section(nil, findings.items.map { finding in
-            let fixed = finding["fixed"].bool == true
-            let verdict = finding["decision"].string.map { CarText.verdictTitle($0) ?? $0.capitalized } ?? "Undecided"
-            return item(finding["title"].string ?? "Finding", CarText.finding(finding, verdict: verdict), symbol: fixed ? "checkmark.circle" : "flag") { [weak self] in
-                guard decides, !fixed, let self, let key = finding["key"].string else { return }
-                var options: [(title: String, destructive: Bool, then: () -> Void)] = self.decisions.map { option in
-                    (option.title, false, { [weak self] in self?.decide(key, option.id) })
-                }
-                if finding["decision"].string != nil { options.append(("Clear the decision", false, { [weak self] in self?.decide(key, nil) })) }
-                self.choose(finding["title"].string ?? "Finding", nil, options)
-            }
+    /// The latest code review's findings, read-only: each with its verdict, severity and file.
+    private func findingsList(_ findings: [CodeReviewFinding]) -> CPListTemplate {
+        CPListTemplate(title: "Code review", sections: Self.fit([section(nil, findings.map { finding in
+            fact(finding.title, CarText.finding(finding), symbol: finding.verdict == .fix ? "wrench.and.screwdriver" : "flag")
         })]))
     }
     /// Reads what GitHub allows before asking, so that what stands in the way of the squash is said first.

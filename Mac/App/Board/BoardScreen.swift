@@ -168,7 +168,7 @@ final class BoardModel: ObservableObject {
     func start(_ pull: PullSummary, _ action: BoardAction, input: String?) {
         guard !busy, !uncertain, !pull.branch.isEmpty else { return }
         busy = true; startingNumber = pull.number; startingID = action.id
-        let args = action.arguments(repo: repo, number: pull.number, branch: pull.branch, input: input)
+        let args = action.arguments(repo: repo, number: pull.number, input: input)
         Task {
             let r = await boardCall(action.operation, args, timeout: action.timeoutMs.map { TimeInterval($0) / 1000 })
             busy = false

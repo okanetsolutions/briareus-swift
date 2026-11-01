@@ -1,5 +1,5 @@
 // What one screen tells the others, as the Windows client's cross-screen calls (sessions_forget, settings_*_changed,
-// servers_ssh_changed, projects_recount_findings).
+// servers_ssh_changed).
 import Foundation
 
 extension Notification.Name {
@@ -9,8 +9,6 @@ extension Notification.Name {
     static let sessionLive = Notification.Name("BriareusSessionLive")
     /// A session changed (renamed, stopped, started): the sidebar reads its project again. `userInfo["repo"]` when known.
     static let sessionsChanged = Notification.Name("BriareusSessionsChanged")
-    /// The Findings screen read the conversations again: the sidebar's ⚑ counts once more.
-    static let findingsRecount = Notification.Name("BriareusFindingsRecount")
     /// The settings sidebar reads the projects again; `userInfo["select"]` is an id to highlight.
     static let settingsProjectsChanged = Notification.Name("BriareusSettingsProjectsChanged")
     /// The settings sidebar reads the providers again; `userInfo["openFirst"]` opens the first one left (after a delete).

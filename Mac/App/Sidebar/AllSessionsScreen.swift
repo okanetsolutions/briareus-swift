@@ -10,7 +10,7 @@ struct AllSessionsScreen: View {
     @ObservedObject private var sessionFeed = SessionFeed.shared
 
     var body: some View {
-        let strip = SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting + attention.approvals,
+        let strip = SidebarStrip(selected: navigator.selectedID, approvals: attention.approvals,
                                  needsYou: model.overview.needsYouCount, canStartSession: store.supports("start_session")) {
             SidebarCommon.perform($0, newSessionRepo: nil)
         }

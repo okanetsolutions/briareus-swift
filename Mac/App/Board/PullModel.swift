@@ -1,9 +1,9 @@
-// One pull request in full (screen_pulls.c pull_detail_screen_*): what it is, its conversation, files and findings,
+// One pull request in full (screen_pulls.c pull_detail_screen_*): what it is, its conversation, files and code reviews,
 // the conversations already run on it, its errands, the merge, and the Run tab that serves it in a browser.
 import Combine
 import SwiftUI
 
-enum PullTab: Int { case body, conversation, sessions, files, findings, run }
+enum PullTab: Int { case body, conversation, sessions, files, codeReviews, run }
 
 @MainActor
 final class PullModel: ObservableObject {
@@ -22,11 +22,12 @@ final class PullModel: ObservableObject {
     /// The conversation being deleted from the Sessions tab, and why the last delete failed.
     @Published var deletingRun: String?
     @Published var runError: String?
-    @Published var findings: JSON = []
+    /// The stored code reviews and their writes (CodeReviewsModel.swift), saved with the pull request.
+    let codeReviews: CodeReviewsModel
+    private var codeReviewsSink: AnyCancellable?
     let files: PullFilesModel
     @Published var conv: [ConvList] = Array(repeating: ConvList(), count: ConvFeed.allCases.count)
     @Published var error: String?
-    @Published var findingsError: String?
     @Published var writeError: String?
     @Published var mergeError: String?
     @Published var busy = false
@@ -44,8 +45,6 @@ final class PullModel: ObservableObject {
     @Published var descriptionAuthor: String?
     private(set) var bodyRead = false
     private var readingBody = false
-    @Published var deciding: String?
-    @Published var openFindings: Set<Int> = []
     @Published var actions: [BoardAction] = []
     @Published private(set) var readingPull = false
     private var pullGen = 0
@@ -89,9 +88,14 @@ final class PullModel: ObservableObject {
     init(repo: String, number: Int, stack: StackPosition?, summary: PullSummary?) {
         self.repo = repo; self.number = number; self.stack = stack; self.summary = summary
         files = PullFilesModel(repo: repo, number: number)
+        codeReviews = CodeReviewsModel(repo: repo, number: number)
         // The profiles the sidebar already read stand in until this screen reads them.
         profiles = runProfilesParse(ProjectsModel.shared.raw, repo: repo)
         serve.want = UserDefaults.standard.string(forKey: runWantKey)
+        codeReviews.changed = { [weak self] in self?.save() }
+        // Only the tab's count is drawn outside the tab, so only a change to it redraws the screen.
+        codeReviewsSink = codeReviews.$reviews.combineLatest(codeReviews.$read).map { $1 ? $0.count : -1 }.removeDuplicates().dropFirst()
+            .sink { [weak self] _ in MainActor.assumeIsolated { self?.objectWillChange.send() } }
     }
 
     var id: String { "pull:\(repo)#\(number)" }
@@ -106,13 +110,13 @@ final class PullModel: ObservableObject {
 
     private var key: String { PullSnapshot.key(repo: repo, number: number) }
     private func save() {
-        let snapshot = PullSnapshot(pr: pr, findings: findings, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
+        let snapshot = PullSnapshot(pr: pr, codeReviews: codeReviews.raw, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
         if let saved = snapshot.json { Store.shared.cache.store(saved, key) }
     }
     private func restore() {
         if let saved = PullSnapshot(Store.shared.cache.value(key)) {
             pr = saved.pr
-            findings = saved.findings
+            codeReviews.take(saved.codeReviews)
             if descriptionBody == nil { descriptionBody = saved.body }
             if descriptionAuthor == nil { descriptionAuthor = saved.bodyAuthor }
             if row == nil { row = saved.row }
@@ -153,17 +157,20 @@ final class PullModel: ObservableObject {
             error = nil
             // The description is its own read, once per visit and on refresh.
             if pr["body"].string == nil && !bodyRead && !readingBody && Store.shared.supports("pull_description") { Task { await loadBody() } }
-            if Store.shared.supports("findings") {
-                let f = await boardCall("findings", args)
+            if Store.shared.supports("code_reviews") {
+                let mark = codeReviews.writes.mark
+                let c = await boardCall("code_reviews", args)
                 guard gen == pullGen else { return nil }
-                switch f {
-                case .success(let v): findings = v["findings"]; findingsError = nil
-                case .failure(let e): if e.kind != .cancelled { findingsError = e.description }
+                switch c {
+                case .success(let v): codeReviews.take(v["codeReviews"], readAt: mark)
+                case .failure(let e): if e.kind != .cancelled { codeReviews.failed(e.description) }
                 }
             }
         case .failure(let e):
             if e.kind == .cancelled { readingPull = false; return e }
             error = e.description
+            // The reviews are read after the pull request: without it there is nothing more to wait for.
+            codeReviews.gaveUp()
             failure = e
         }
         readingPull = false
@@ -294,9 +301,9 @@ final class PullModel: ObservableObject {
     // MARK: Errands
 
     func startAction(_ action: BoardAction, input: String?) {
-        guard !busy, !uncertain, let branch = pr["headRef"].string else { return }
+        guard !busy, !uncertain, pr["headRef"].string != nil else { return }
         busy = true
-        let args = action.arguments(repo: repo, number: number, branch: branch, input: input)
+        let args = action.arguments(repo: repo, number: number, input: input)
         Task {
             let r = await boardCall(action.operation, args, timeout: action.timeoutMs.map { TimeInterval($0) / 1000 })
             busy = false
@@ -320,27 +327,6 @@ final class PullModel: ObservableObject {
             dialogOpen = false
             if let input = answer { startAction(action, input: input) }
         }
-    }
-
-    /// Solve findings is the board's implement-feedback errand started from the findings themselves: offered on an open
-    /// pull request with findings still to fix, to a token that may start errands on a server that lists this one.
-    var solveFindingsOffered: Bool {
-        guard Store.shared.canManage, Store.shared.supports("action"), catalogLists(catalog, "implement-feedback") else { return false }
-        guard pr["state"].string == "open", pr["headRef"].string != nil else { return false }
-        return findingsUnfixed(findings) > 0
-    }
-    func solveFindings() {
-        guard solveFindingsOffered, !busy, !uncertain, deciding == nil else { return }
-        // The errand as the server words it when it is on offer, else as this app knows it.
-        guard let action = actions.first(where: { $0.id == "implement-feedback" }) ?? BoardAction.known.first(where: { $0.id == "implement-feedback" }) else { return }
-        let fixes = findingsToFix(findings), open = findingsUnfixed(findings)
-        let title = fixes > 0 ? "Start a paid fix session for \(fixes) finding\(fixes == 1 ? "" : "s")?"
-                              : "Start a paid fix session for \(open) open finding\(open == 1 ? "" : "s")?"
-        let message = "The agent addresses the findings on PR #\(number), pushes the fixes to its branch and has them reviewed again. Uses the provider and model configured for this project."
-        dialogOpen = true
-        let ok = Dialogs.confirm(title, message, continueLabel: "Solve findings")
-        dialogOpen = false
-        if ok { startAction(action, input: nil) }
     }
 
     // MARK: Merge
@@ -451,22 +437,10 @@ final class PullModel: ObservableObject {
         }
     }
 
-    // MARK: Findings
+    // MARK: Code reviews
 
-    func toggleFinding(_ i: Int) { if openFindings.contains(i) { openFindings.remove(i) } else { openFindings.insert(i) } }
-    func decide(_ key: String, _ decision: String?) {
-        guard deciding == nil else { return }
-        deciding = key
-        let args: JSON = ["repo": .string(repo), "pr": JSON(number), "key": .string(key), "decision": .string(orNull: decision)]
-        Task {
-            let r = await boardCall("finding_decision", args)
-            deciding = nil
-            switch r {
-            case .success(let v): findings = v["findings"]; findingsError = nil
-            case .failure(let e): findingsError = e.description
-            }
-        }
-    }
+    /// A review's session, which keeps its transcript after it closes.
+    func openReviewSession(_ id: String) { Navigator.shared.push(.conversation(id: id, session: nil)) }
 
     // MARK: Sessions
 

@@ -1,11 +1,14 @@
-// The operator's attention list (core lib/attention.js): approvals carry their request, findings are left to the rounds.
+// The operator's attention list (core lib/attention.js): approvals carry their request; kinds the app has no word for pass through.
 import XCTest
 @testable import BriareusMacCore
 
 final class AttentionTests: XCTestCase {
-    func testItemsReadApprovalsAndLeaveFindingsToTheRounds() {
-        let list = AttentionItem.parse(j(#"{"items":[{"id":"ssh:r1","kind":"ssh","title":"web-1","repo":"o/heedly","sessionId":"s1","sessionTitle":"Fix checks","summary":"php artisan migrate","at":"2026-10-08T14:00:00.123Z","request":{"id":"r1","username":"deploy","host":"10.0.0.5","port":22,"expiresAt":1791400000000,"unattended":true}},{"id":"s2:findings","kind":"findings","title":"Review"},{"id":"slack:q1","kind":"slack","title":"Slack to #deploys","summary":"Deployed","request":{"id":"q1","workspaceLabel":"HQ","sendsAs":"nadin"}},{"id":"s3:question","kind":"question","title":"Implement","summary":"Which database?","sessionId":"s3","at":"2026-10-08T13:00:00Z"},{"kind":"broken"}]}"#))
-        XCTAssertEqual(list.map(\.id), ["ssh:r1", "slack:q1", "s3:question"])
+    func testItemsReadApprovalsAndKeepKindsTheAppDoesNotKnow() {
+        var list = AttentionItem.parse(j(#"{"items":[{"id":"ssh:r1","kind":"ssh","title":"web-1","repo":"o/heedly","sessionId":"s1","sessionTitle":"Fix checks","summary":"php artisan migrate","at":"2026-10-08T14:00:00.123Z","request":{"id":"r1","username":"deploy","host":"10.0.0.5","port":22,"expiresAt":1791400000000,"unattended":true}},{"id":"s2:findings","kind":"findings","title":"Review"},{"id":"slack:q1","kind":"slack","title":"Slack to #deploys","summary":"Deployed","request":{"id":"q1","workspaceLabel":"HQ","sendsAs":"nadin"}},{"id":"s3:question","kind":"question","title":"Implement","summary":"Which database?","sessionId":"s3","at":"2026-10-08T13:00:00Z"},{"kind":"broken"}]}"#))
+        // The server no longer sends findings; one that still says so is kept like any kind the app does not know.
+        XCTAssertEqual(list.map(\.id), ["ssh:r1", "s2:findings", "slack:q1", "s3:question"])
+        XCTAssertEqual(list[1].label, "findings"); XCTAssertFalse(list[1].isApproval)
+        list.remove(at: 1)
         let ssh = list[0]
         XCTAssertTrue(ssh.isApproval); XCTAssertEqual(ssh.requestID, "r1"); XCTAssertEqual(ssh.label, "SSH approval")
         XCTAssertEqual(ssh.detail, "o/heedly · Fix checks · deploy@10.0.0.5:22 · asked in a turn nobody started")

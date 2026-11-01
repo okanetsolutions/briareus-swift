@@ -216,12 +216,6 @@ final class ConversationScreenModel: ObservableObject {
         Task { await refresh(full: false) }
     }
 
-    /// A review round completed from its card: the record is read again, and the lists' ⚑ counts with it.
-    func triageDone() {
-        if let repo { Task { try? await Store.shared.feed(repo).loadSessions(fresh: true) } }
-        Task { await refresh(full: false) }
-    }
-
     func toggle(_ seq: Int) {
         if expanded.contains(seq) { expanded.remove(seq) } else { expanded.insert(seq) }
     }

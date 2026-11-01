@@ -1,6 +1,6 @@
 // A project's settings across the whole pane, the Windows client's sections as tabs along the top (Project with its
-// Active switch and its setup, Database, Code review, Orchestrator, Checkout .env, Run), saved through /settings/projects.
-// A dot marks a tab with unsaved changes; the provider, model and effort pickers serve the code review, each errand step
+// Active switch and its setup, Database, PR actions, Orchestrator, Checkout .env, Run), saved through /settings/projects.
+// A dot marks a tab with unsaved changes; the provider, model and effort pickers serve the PR actions, each errand step
 // and the workers.
 import SwiftUI
 
@@ -277,6 +277,7 @@ struct ProjectSettingsScreen: View {
             check(.enabled); check(.printing)
             Color.clear.frame(height: 4)
             field(.localDir)
+            field(.localLimit)
             field(.board)
             field(.setup)
             field(.php)
@@ -288,23 +289,19 @@ struct ProjectSettingsScreen: View {
             field(.dbRestore)
         case .review:
             HStack(alignment: .top, spacing: 14) {
-                field(.reviewAuthor).frame(maxWidth: .infinity)
+                field(.prAuthor).frame(maxWidth: .infinity)
                 Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
                 Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
             }
             runtimeRow(.review)
-            field(.publish)
-            check(.autoLoop)
             check(.babysit)
-            // Each step runs as a turn of its own, on the code review's runtime unless it names one; a step switched off has none.
-            check(.testSheet)
-            if state.bool(.testSheet) { runtimeRow(.testSheet).padding(.leading, 23) }
+            // The test sheet and test run errands run on the PR actions' runtime unless they name one; a run switched off has none.
+            runtimeRow(.testSheet)
             check(.testRun)
             if state.bool(.testRun) { runtimeRow(.testRun).padding(.leading, 23) }
             Color.clear.frame(height: 4)
             field(.qaNotes)
             field(.sheetSteps)
-            field(.feedbackSteps)
         case .orchestrator:
             runtimeRow(.worker)
             field(.budget)

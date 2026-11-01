@@ -1,5 +1,5 @@
 // What the board, the pull request screen and the issue screen work out without drawing anything: a description as GitHub
-// shows it, the Conversation tab's timeline, the Files changed tree, the findings counts and an issue's own conversations.
+// shows it, the Conversation tab's timeline, the Files changed tree and an issue's own conversations.
 // Ported from the Windows client's screen_pulls.c and screen_files.c.
 import Foundation
 
@@ -199,12 +199,8 @@ func convReviewThreads(reviews: JSON, lines: JSON, review: Int) -> [Int] {
 /// The comments of the thread starting at `root`, in list order.
 func convThread(lines: JSON, root: Int) -> [Int] { lines.items.indices.filter { convThreadRoot(lines, $0) == root } }
 
-// MARK: - Findings
+// MARK: - Errands
 
-/// The findings not yet fixed.
-func findingsUnfixed(_ findings: JSON) -> Int { findings.items.filter { !$0["fixed"].is(true) }.count }
-/// The findings not yet fixed that the user marked fix.
-func findingsToFix(_ findings: JSON) -> Int { findings.items.filter { !$0["fixed"].is(true) && $0["decision"].string == "fix" }.count }
 /// Whether the server's errand list has one; before the list is read, every errand this app knows is taken as offered.
 func catalogLists(_ catalog: JSON, _ id: String) -> Bool { catalog.count == 0 || catalog.items.contains { $0["id"].string == id } }
 

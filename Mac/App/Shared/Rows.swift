@@ -4,14 +4,6 @@ import SwiftUI
 
 // MARK: - Glyphs and colours
 
-/// A finding's severity pill colour (CRIT and HIGH red, MED amber, LOW grey).
-func severityColor(_ severity: String?) -> Color {
-    switch severity?.lowercased() {
-    case "critical", "high": return Theme.danger
-    case "low": return Theme.muted
-    default: return Theme.warn
-    }
-}
 func reviewGlyph(_ status: ReviewStatus) -> (symbol: String?, color: Color) { (status.symbol, Theme.color(status.tone)) }
 /// The glyph a tool event shows, from its name.
 func toolGlyph(kind: String?, name: String?, isError: Bool) -> String {

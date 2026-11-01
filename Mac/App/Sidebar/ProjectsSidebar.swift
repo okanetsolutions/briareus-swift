@@ -36,7 +36,6 @@ enum SidebarCommon {
         case .usage: nav.show(.usage)
         case .whatsapp: nav.show(.webApp(.whatsapp))
         case .mail: nav.show(MailInboxModel.offered ? .mail : .mailSettings(id: nil))
-        case .findings: nav.show(.findings)
         case .status: nav.show(.status)
         case .globalPulls: nav.show(.globalPulls)
         }
@@ -154,7 +153,7 @@ private struct SidebarProjectsScreen: View {
     @ObservedObject private var attention = AttentionModel.shared
 
     var body: some View {
-        let strip = SidebarStrip(selected: navigator.selectedID, waiting: model.findingsWaiting + attention.approvals,
+        let strip = SidebarStrip(selected: navigator.selectedID, approvals: attention.approvals,
                                  needsYou: model.overview.needsYouCount) {
             SidebarCommon.perform($0, newSessionRepo: model.projects.first?.repo)
         }
@@ -201,7 +200,7 @@ private struct SidebarSessionsScreen: View {
 
     var body: some View {
         let selected = navigator.selectedID
-        let strip = SidebarStrip(selected: selected, waiting: projects.findingsWaiting + attention.approvals,
+        let strip = SidebarStrip(selected: selected, approvals: attention.approvals,
                                  needsYou: projects.overview.needsYouCount) {
             SidebarCommon.perform($0, newSessionRepo: model.project.repo)
         }

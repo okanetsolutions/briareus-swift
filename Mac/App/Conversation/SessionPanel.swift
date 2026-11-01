@@ -1,6 +1,5 @@
 // The Windows client's `#pr-panel` (screen_panel.c): the 272px column on the right of a conversation with its pull request,
-// commits, reviews and findings, each finding with its verdict buttons, and under them the session's context usage with
-// the compaction controls. The conversation hands it the session's latest record (`Navigator.panelSession`).
+// commits and reviews, and under them the session's context usage with the compaction controls. The conversation hands it the session's latest record (`Navigator.panelSession`).
 import AppKit
 import SwiftUI
 
@@ -8,11 +7,8 @@ struct SessionPanel: View {
     var session: JSON
     @ObservedObject private var store = Store.shared
     @State private var pr: JSON = .null
-    @State private var findings: JSON = []
     @State private var error: String?
-    @State private var deciding: String?
     @State private var commitsOpen = false
-    @State private var findingsOpen = true
     /// The pull request read: its project and number, nil until the session has one.
     @State private var pull: PullKey?
     /// Bumped by each read, so a slower earlier answer (a poll overtaken by F5) does not land over a newer one.
@@ -73,7 +69,7 @@ struct SessionPanel: View {
         let next = wantedPull
         guard next != pull else { return }
         pull = next
-        pr = .null; findings = []; error = nil
+        pr = .null; error = nil
     }
 
     // MARK: Reading
@@ -81,21 +77,16 @@ struct SessionPanel: View {
     private func cacheKey(_ p: PullKey) -> String { "pull:\(p.repo)#\(p.number)" }
 
     private func load() async -> APIError? {
-        guard let p = pull, deciding == nil else { return nil }
+        guard let p = pull else { return nil }
         loadSeq += 1
         let seq = loadSeq
         if pr.isNull, let saved = store.cache.value(cacheKey(p)) {
-            pr = saved["pr"]; findings = saved["findings"].isArray ? saved["findings"] : []
+            pr = saved["pr"]
         }
         do {
             let answer = try await store.call("pull", ["repo": .string(p.repo), "pr": JSON(p.number)])
             guard pull == p, seq == loadSeq else { return nil }
             pr = answer["pr"]; error = nil
-            if store.supports("findings") {
-                if let f = try? await store.call("findings", ["repo": .string(p.repo), "pr": JSON(p.number)]), pull == p, seq == loadSeq {
-                    findings = f["findings"].isArray ? f["findings"] : []
-                }
-            }
             save()
             return nil
         } catch {
@@ -109,23 +100,11 @@ struct SessionPanel: View {
     private func save() {
         guard let p = pull, !pr.isNull else { return }
         let key = cacheKey(p)
-        var saved: JSON = ["pr": pr, "findings": findings, "row": .null]
-        if let old = store.cache.value(key), !old["row"].isNull { saved["row"] = old["row"] }
+        // The pull request screen saves its row, stack and code reviews under the same key; they are kept.
+        var saved: JSON = ["row": .null]
+        if let old = store.cache.value(key), old.isObject { saved = old }
+        saved["pr"] = pr
         store.cache.store(saved, key)
-    }
-    private func decide(_ key: String, _ decision: String?) {
-        guard deciding == nil, let p = pull else { return }
-        deciding = key
-        Task {
-            do {
-                let answer = try await store.call("finding_decision", ["repo": .string(p.repo), "pr": JSON(p.number), "key": .string(key),
-                                                                       "decision": .string(orNull: decision)])
-                guard pull == p else { deciding = nil; return }
-                findings = answer["findings"].isArray ? answer["findings"] : findings
-                save()
-            } catch { if !error.isCancellation && pull == p { self.error = errorText(error) } }
-            deciding = nil
-        }
     }
 
     // MARK: Pull request
@@ -224,48 +203,6 @@ struct SessionPanel: View {
                 .lineLimit(1).truncationMode(.tail).padding(.bottom, 2)
         }
         if reviews.isEmpty { Text("\u{25CB} none yet").font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1) }
-        // Findings (N · all fixed)
-        if store.supports("findings") { findingsSection() }
-    }
-
-    @ViewBuilder private func findingsSection() -> some View {
-        let list = findings.items
-        let fixed = list.filter { $0["fixed"].is(true) }.count
-        sectionLabel(panelFindingsLabel(count: list.count, fixed: fixed), fold: { findingsOpen.toggle() }, open: findingsOpen)
-        if findingsOpen {
-            if list.isEmpty { Text("No findings reported").font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1) }
-            ForEach(Array(list.enumerated()), id: \.offset) { i, f in
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 6) {
-                        let severity = f["severity"].string
-                        let color = severityColor(severity)
-                        Text(findingSeverityLabel(severity)).font(Theme.tinySemibold).foregroundStyle(color)
-                            .padding(.horizontal, 4).frame(height: 16)
-                            .background(RoundedRectangle(cornerRadius: 4).fill(Theme.sidebar))
-                            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(color == Theme.muted ? Theme.line : color, lineWidth: 1))
-                            .fixedSize()
-                        link(f["url"].string) {
-                            Text(f["title"].string ?? "Finding").font(Theme.caption).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
-                        }
-                        Spacer(minLength: 0)
-                        if f["fixed"].is(true) { Text("\u{2713} fixed").font(Theme.caption2).foregroundStyle(Theme.ok).fixedSize() }
-                    }
-                    .frame(height: 20)
-                    if store.supports("finding_decision"), let key = f["key"].string, store.canManage {
-                        let current = f["decision"].string
-                        Segments(titles: findingDecisionTitles, selected: findingDecisionIndex(current)) { d in
-                            // The same pick twice clears it, as the Windows client does.
-                            decide(key, current == findingDecisionIds[d] ? nil : findingDecisionIds[d])
-                        }
-                        .disabled(deciding != nil)
-                        .padding(.top, 4)
-                    } else {
-                        Spacer().frame(height: 4)
-                    }
-                }
-                .padding(.top, i > 0 ? 8 : 0)
-            }
-        }
     }
 
     // MARK: Context usage

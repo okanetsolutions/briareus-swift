@@ -6,9 +6,9 @@ final class CarTextTests: XCTestCase {
     private func json(_ text: String) -> JSON { JSON.parse(text)! }
 
     func testTheCarShowsAConversationInAFewWords() {
-        let sessions = Session.parseList(json(#"[{"id":"a","status":"running","title":"Fix login","queued":[{"text":"x"}]},{"id":"b","status":"idle","reviewTriage":{"findings":[{"key":"k"}]}},{"id":"c","status":"closed"}]"#))!
-        XCTAssertEqual(sessions.map { CarText.status($0) }, ["Working · 1 queued", "Waiting for you · 1 finding", "Closed"])
-        XCTAssertEqual(CarText.status(sessions[1], asking: true), "Asks you a question · 1 finding")
+        let sessions = Session.parseList(json(#"[{"id":"a","status":"running","title":"Fix login","queued":[{"text":"x"}]},{"id":"b","status":"idle"},{"id":"c","status":"closed"}]"#))!
+        XCTAssertEqual(sessions.map { CarText.status($0) }, ["Working · 1 queued", "Waiting for you", "Closed"])
+        XCTAssertEqual(CarText.status(sessions[1], asking: true), "Asks you a question")
         XCTAssertEqual(CarText.status(sessions[0], asking: true), "Working · Asks you a question · 1 queued")
         let events = json(#"[{"seq":1,"kind":"user","text":"Go"},{"seq":2,"kind":"ask","question":"Which **one**, see [docs](https://e.com)?","options":[{"label":"Left"},{"label":"Right"}]},{"seq":3,"kind":"tool","name":"Bash"}]"#).items.compactMap(Event.init)
         XCTAssertEqual(CarText.openQuestion(events)?.seq, 2)
@@ -24,11 +24,6 @@ final class CarTextTests: XCTestCase {
         XCTAssertEqual(CarText.sent(Session(["id": "a", "status": "running", "liveInput": true])), "Sent into the running turn")
         XCTAssertEqual(CarText.sent(Session(["id": "a", "status": "running"])), "Queued for the next turn")
     }
-    func testFindingsWaitingAreListedOldestHoldFirst() {
-        let sessions = Session.parseList(json(#"[{"id":"new","status":"idle","reviewTriage":{"heldAt":"2026-02-02T00:00:00Z","findings":[{"key":"a"}]}},{"id":"none","status":"idle"},{"id":"empty","status":"idle","reviewTriage":{"heldAt":"2026-01-01T00:00:00Z","findings":[]}},{"id":"old","status":"idle","reviewLoop":{"triage":{"heldAt":"2026-01-01T00:00:00Z","findings":[{"key":"b"}]}}}]"#))!
-        XCTAssertEqual(CarText.holdingFindings(sessions).map(\.id), ["old", "new"])
-    }
-
     func testTheCarShowsAPullRequestInAFewWords() {
         let pr = json(#"{"checks":{"passed":2,"failed":1,"pending":0,"runs":[{"name":"lint","conclusion":"failure"},{"name":"test","conclusion":"success"}]},"reviews":[{"user":"bo","state":"CHANGES_REQUESTED"},{"state":"APPROVED"}]}"#)
         XCTAssertEqual(CarText.checks(pr["checks"]), "2 passed · 1 failed · 0 running")
@@ -39,11 +34,18 @@ final class CarTextTests: XCTestCase {
         let row = PullSummary(json(#"{"number":4,"title":"T","draft":true,"mergeable":"conflicting","checks":"failure","author":"ana","reviewDecision":"APPROVED"}"#))!
         XCTAssertEqual(CarText.review(pr, row: row), "Approved")
         XCTAssertEqual(CarText.pullLine(row), "#4 · Draft · Conflicts · Checks failed · @ana")
-        let finding = json(#"{"title":"Leak","severity":"high","file":"src/io/file.swift"}"#)
-        XCTAssertEqual(CarText.finding(finding, verdict: "Fix"), "Fix · high · file.swift")
-        XCTAssertEqual(CarText.finding(["fixed": true], verdict: "Fix"), "Fixed")
-        XCTAssertEqual(CarText.verdictTitle("dismissed"), "Dismiss")
-        XCTAssertNil(CarText.verdictTitle("later"))
+    }
+    func testACodeReviewFindingIsItsVerdictSeverityAndFile() {
+        let fix = CodeReviewFinding(json(#"{"id":1,"title":"Leak","severity":"high","filePath":"src/io/file.swift","shouldFix":"fix"}"#))!
+        XCTAssertEqual(CarText.finding(fix), [CodeReviewVerdict.fix.title, "high", "file.swift"].joined(separator: " · "))
+        let bare = CodeReviewFinding(json(#"{"id":2,"severity":"low","filePath":"README.md","shouldFix":"dismiss"}"#))!
+        XCTAssertEqual(CarText.finding(bare), [CodeReviewVerdict.dismiss.title, "low", "README.md"].joined(separator: " · "))
+        // Without a verdict yet it still says so first; without a file, nothing is named.
+        let pending = CodeReviewFinding(json(#"{"id":3,"severity":"medium"}"#))!
+        let parts = CarText.finding(pending).components(separatedBy: " · ")
+        XCTAssertEqual(parts.count, 2)
+        XCTAssertEqual(parts[1], "medium")
+        XCTAssertFalse(CodeReviewVerdict.allCases.map(\.title).contains(parts[0]))
     }
     func testAMergeSquashesUnlessTheRepositoryRefuses() {
         XCTAssertEqual(CarText.mergeMethod(allowed: []), "squash")

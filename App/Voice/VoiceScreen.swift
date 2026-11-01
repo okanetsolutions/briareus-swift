@@ -1,5 +1,5 @@
 // A project's voice conversation, opened from its screen: ElevenLabs Agents about that project's agents, pull requests and
-// findings, and nothing else. Opened from one of its conversations, it is a hands-free line to that conversation's agent
+// code reviews, and nothing else. Opened from one of its conversations, it is a hands-free line to that conversation's agent
 // alone. What both sides said scrolls as captions; the actions it ran on the server are listed under them.
 import SwiftUI
 
@@ -188,18 +188,12 @@ extension VoiceSession.Step {
         case .listConversations: return "Read the conversations"
         case .readConversation: return "Read \(session ?? "a conversation")"
         case .listPullRequests: return "Read the pull requests"
-        case .waitingFindings: return "Read the findings waiting"
         case .listIssues: return "Read the issues"
         case .readIssue: return "Read issue #" + (args["issue"].int.map(String.init) ?? "")
         case .mergePullRequest: return (state == .waiting ? "Asked to merge #" : "Merge #") + (args["number"].int.map(String.init) ?? "")
         case .readPullRequest: return "Read the changes of #" + (args["number"].int.map(String.init) ?? "")
         case .workOnIssue: return (state == .waiting ? "Asked to work on issue #" : "Work on issue #") + (args["issue"].int.map(String.init) ?? "")
-        case .readReviewRound: return "Read a review round"
-        case .completeReviewRound: return state == .waiting ? "Asked to complete a review round" : "Complete a review round"
-        case .listFindings: return "Read the findings of #" + (args["number"].int.map(String.init) ?? "")
-        case .decideFinding:
-            let said = ["fix": "Yes to", "dismissed": "No to", "optional": "Optional:"][args["decision"].string ?? ""] ?? "Decide"
-            return "\(said) a finding on #" + (args["number"].int.map(String.init) ?? "")
+        case .listCodeReviews: return "Read the code reviews of #" + (args["number"].int.map(String.init) ?? "")
         case .runErrand:
             let label = Voice.errand(args["errand"].string ?? "")?.label ?? "An errand"
             return (state == .waiting ? "Asked: " : "") + "\(label) on #" + (args["number"].int.map(String.init) ?? "")

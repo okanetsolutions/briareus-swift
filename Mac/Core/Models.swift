@@ -111,20 +111,6 @@ struct Session: Equatable, Sendable {
     /// Background work the running turn still waits on: sub-agents, Monitors and background shell commands.
     var backgroundTasks: [BackgroundTask] { raw["backgroundTasks"].items.compactMap(BackgroundTask.init) }
     var queued: JSON { raw["queued"] }
-    var reviewLoopOn: Bool { !raw["reviewLoop"].isNull }
-    /// The server arms the review loop only on sessions started from scratch on a task.
-    var canReviewLoop: Bool {
-        if status == "closed" { return false }
-        for flag in ["reviewBranch", "qaBranch", "autoClose", "loopParentId", "local", "orchestrator"] where raw[flag].isSet { return false }
-        return true
-    }
-    /// A review round waiting for verdicts: a loop's round or a hand-started review. Nil without one.
-    var heldTriage: JSON? {
-        for candidate in [raw["reviewTriage"], raw["reviewLoop"]["triage"]] where !candidate.isNull && candidate["findings"].count > 0 {
-            return candidate
-        }
-        return nil
-    }
     /// The pull request this conversation works on, once it has one; nil without (the C client's 0).
     var pullNumber: Int? {
         let n = raw["prStatus"]["number"].number ?? raw["startedOnPr"].number
@@ -144,81 +130,6 @@ struct Session: Equatable, Sendable {
         return items.compactMap(Session.init)
     }
     static func json(_ sessions: [Session]) -> JSON { .array(sessions.map(\.raw)) }
-}
-
-// MARK: - Findings
-
-/// A conversation holding a review round, by its index in the list it came from.
-struct HeldRound: Equatable, Sendable {
-    var index: Int
-    var held: JSON
-}
-
-extension Session {
-    /// The review round a conversation holds for a decision, as the Windows client's Findings screen queues them: a loop's round
-    /// or a hand-started review, even one whose every finding was deleted. Nil without one.
-    var heldRound: JSON? {
-        let loop = raw["reviewLoop"]["triage"]
-        if loop.isObject { return loop }
-        let standalone = raw["reviewTriage"]
-        // (A ternary with `nil` would read as JSON.null, since JSON is nil-literal expressible.)
-        return standalone.isObject ? .some(standalone) : .none
-    }
-    /// The conversations holding a round, the oldest hold first, as the Windows client lists them. Equal holds keep the list's order.
-    static func heldRounds(_ sessions: [Session]) -> [HeldRound] {
-        func at(_ held: JSON) -> String { held["heldAt"].string ?? "" }
-        var rounds: [HeldRound] = []
-        for (i, s) in sessions.enumerated() {
-            guard let held = s.heldRound else { continue }
-            var k = rounds.count
-            while k > 0, at(held).bytesPrecede(at(rounds[k - 1].held)) { k -= 1 }
-            rounds.insert(HeldRound(index: i, held: held), at: k)
-        }
-        return rounds
-    }
-    /// The pull request a round is about, as a link: the conversation's own when that is the same pull request, and built
-    /// from the number otherwise (a conversation that moved on to another pull request still holds this round). A round without
-    /// a number has the conversation's link, or nil.
-    func heldRoundPRURL(_ held: JSON) -> String? {
-        let pr = raw["prStatus"]
-        let heldNumber = heldRoundPRNumber(held)
-        if let url = pr["url"].nonEmpty {
-            if heldNumber == nil { return url }
-            if let n = pr["number"].truncatedInt, n == heldNumber { return url }
-        }
-        guard let heldNumber else { return nil }
-        return "https://github.com/\(repo ?? "")/pull/\(heldNumber)"
-    }
-}
-
-/// The pull request number a round was left on; nil without one.
-func heldRoundPRNumber(_ held: JSON) -> Int? {
-    guard let n = held["prNumber"].number, n >= 1, n.isFinite else { return nil }
-    return Int(min(n, 2147483647))
-}
-/// A hand-started review says whose pull request it is; a loop round is always the user's, and takes verdicts.
-func heldRoundIsMine(_ held: JSON) -> Bool {
-    if held["externalFeedback"].is(true) || !held["standalone"].isSet { return true }
-    return held["mine"].is(true)
-}
-/// What `complete_findings` answered, in the Windows client's words; `danger` is set when the verdicts led nowhere.
-func triageOutcomeText(_ outcome: JSON) -> (text: String, danger: Bool) {
-    if outcome["completed"].isSet {
-        if let pr = outcome["prNumber"].int32, pr != 0 { return ("Review completed; what it found stays on PR #\(pr) for its author.", false) }
-        return ("Review completed; what it found stays on the pull request for its author.", false)
-    }
-    if outcome["converged"].isSet { return ("Verdicts recorded; nothing was left to fix, so code-approved was added and the loop converged.", false) }
-    if outcome["approved"].isSet { return ("Verdicts recorded; nothing was left to fix, so code-approved was added.", false) }
-    if outcome["fixing"].isSet { return ("Verdicts recorded; a fix session is running.", false) }
-    if outcome["reviewing"].isSet { return ("Verdicts recorded; nothing was left to fix, but the branch had moved, so the new commits are being reviewed.", false) }
-    if outcome["deferred"].isSet { return ("Verdicts recorded; nothing was left to fix, but the branch had moved. The new commits are reviewed once the session settles idle.", false) }
-    return ("Verdicts recorded, but no fix session started. The session\u{2019}s log says why.", true)
-}
-/// The Findings screen's subtitle: "nothing is waiting", or how many reviews and pull requests wait for a decision.
-func findingsSubtitle(rounds: Int, pullRequests: Int) -> String {
-    if rounds == 0 { return "nothing is waiting" }
-    if pullRequests == rounds { return "\(rounds) review\(rounds == 1 ? "" : "s") waiting for a decision" }
-    return "\(rounds) reviews on \(pullRequests) pull request\(pullRequests == 1 ? "" : "s") waiting for a decision"
 }
 
 // MARK: - Transcript
@@ -390,6 +301,4 @@ enum WorkspaceMode: Equatable, Sendable, CaseIterable {
         if self == .local { out["local"] = true }
         return out
     }
-    /// Only a worktree session has a review loop of its own.
-    var hasReviewLoop: Bool { self == .worktree }
 }

@@ -7,8 +7,6 @@ import Foundation
 enum SessionState: String, Equatable, Sendable {
     /// Idle, its agent waiting for an answer to a question.
     case waiting
-    /// Idle, holding a review round for verdicts.
-    case findings
     /// A turn is queued, preparing or running.
     case working
     /// Idle with nothing asked: done with its turn.
@@ -19,15 +17,14 @@ enum SessionState: String, Equatable, Sendable {
     var label: String {
         switch self {
         case .waiting: return "Needs your answer"
-        case .findings: return "Findings to decide"
         case .working: return "Working"
         case .ready: return "Ready"
         case .failed: return "Failed"
         case .closed: return "Closed"
         }
     }
-    /// It waits on its user: an answer or a decision.
-    var needsYou: Bool { self == .waiting || self == .findings }
+    /// It waits on its user's answer.
+    var needsYou: Bool { self == .waiting }
 }
 
 extension Session {
@@ -37,7 +34,6 @@ extension Session {
 
     var state: SessionState {
         if status == "idle" && awaitingAnswer { return .waiting }
-        if status == "idle" && heldRound != nil { return .findings }
         if isActive { return .working }
         if status == "idle" { return .ready }
         if status == "failed" { return .failed }

@@ -73,6 +73,12 @@ final class ClientUpdatesTests: XCTestCase {
         }
         XCTAssertTrue(SettingsWritePolicy.isUncertain(CancellationError()))
     }
+    func testAFailedWriteSaysMoreOnlyWhenItMayStillHaveLanded() {
+        XCTAssertEqual(SettingsWritePolicy.failureText("Refused.", APIError(.http, status: 400)), "Refused.")
+        let uncertain = SettingsWritePolicy.failureText("Lost.", APIError(.network))
+        XCTAssertTrue(uncertain.hasPrefix("Lost."))
+        XCTAssertGreaterThan(uncertain.count, "Lost.".count)
+    }
     func testPersonalConnectionRecoveryKeepsAddressAndClearsSecret() throws {
         var form = PersonalConnectionFormState()
         let saved = try XCTUnwrap(PersonalConnectionStatus(["connected": false]))
@@ -147,51 +153,12 @@ final class ClientUpdatesTests: XCTestCase {
         let chart = history.charts[0]
         XCTAssertTrue(chart.plots)
         XCTAssertEqual(chart.series[0].isolatedPoints.map(\.value), [0])
-        XCTAssertFalse(history.charts[1].plots)
+        XCTAssertEqual(history.charts.map(\.id), ["cpu"])
         var series = chart.series[0]
         series.points += [.init(at: Date(timeIntervalSince1970: 240), value: 10, segment: 2),
                           .init(at: Date(timeIntervalSince1970: 300), value: 20, segment: 2)]
         XCTAssertEqual(series.isolatedPoints.map(\.value), [0])
         XCTAssertEqual(series.points.map(\.segment), [1, 2, 2])
-    }
-    private var assessment: JSON {
-        ["externalFeedback": true, "standalone": true, "mine": false, "prNumber": 42,
-         "findings": [["key": "a", "title": "Check authorization", "recommendation": "fix",
-                       "sourceBody": "A developer's original feedback", "reviewAuthorLogin": "reviewer",
-                       "assessment": ["verified": true, "worthFixing": true, "evidence": "Checked the route", "reason": "Prevents a regression"]],
-                      ["key": "b", "title": "A second claim", "recommendation": "dismissed"]]]
-    }
-    func testExternalFeedbackAllowsManualVerdictsRegardlessOfPRAuthor() {
-        XCTAssertTrue(triageTakesVerdicts(assessment))
-        XCTAssertTrue(heldRoundIsMine(assessment))
-        let completed = PhoneFindings.completion(assessment, picked: ["a": "fix", "b": "dismissed"], reasons: ["a": "Confirmed"], note: "Only the selected fix")
-        XCTAssertEqual(completed["verdicts"][0], ["key": "a", "decision": "fix", "reason": "Confirmed"])
-        XCTAssertEqual(completed["verdicts"][1]["decision"], "dismissed")
-        XCTAssertEqual(completed["note"], "Only the selected fix")
-        // Ordinary reviews of another author's PR keep their existing read/reply flow.
-        var ordinary = assessment; ordinary["externalFeedback"] = false
-        XCTAssertFalse(triageTakesVerdicts(ordinary)); XCTAssertFalse(heldRoundIsMine(ordinary))
-        XCTAssertEqual(PhoneFindings.completion(ordinary, picked: ["a": "fix"], reasons: [:], note: ""), [:])
-    }
-    func testRecommendationsAreNeverAutomaticallyAppliedAsVerdicts() {
-        let completed = triageCompletion(assessment, picked: [:], note: "")
-        XCTAssertEqual(completed["verdicts"].items.map { $0["decision"] }, ["optional", "optional"])
-        XCTAssertTrue(triageDecision(assessment, assessment["findings"][0], picked: [:]).isEmpty)
-        var saved = assessment
-        saved["drafts"] = ["verdicts": ["a": ["decision": "dismissed"]]]
-        XCTAssertEqual(triageDecision(saved, saved["findings"][0], picked: [:]), "dismissed")
-    }
-    func testAssessmentRetainsOriginalFeedbackAndIndependentEvidence() throws {
-        let details = try XCTUnwrap(FeedbackAssessmentDetails(assessment["findings"][0]))
-        XCTAssertEqual(details.source, "A developer's original feedback")
-        XCTAssertEqual(details.author, "reviewer")
-        XCTAssertTrue(details.verified); XCTAssertTrue(details.worthFixing)
-        XCTAssertEqual(details.evidence, "Checked the route")
-        XCTAssertEqual(details.reason, "Prevents a regression")
-        var unverified = assessment["findings"][0]
-        unverified["assessment"]["verified"] = false
-        XCTAssertFalse(try XCTUnwrap(FeedbackAssessmentDetails(unverified)).verified)
-        XCTAssertNil(FeedbackAssessmentDetails(["title": "Legacy finding"]))
     }
     private func session(_ id: String, created: String, pinned: String? = nil, status: String = "idle") -> Session {
         Session(["id": .string(id), "repo": "o/r", "status": .string(status), "createdAt": .string(created), "pinnedAt": .string(orNull: pinned)])!
@@ -266,7 +233,41 @@ final class ClientUpdatesTests: XCTestCase {
         let points = history.charts[0].series[0].points
         XCTAssertEqual(points.map(\.value), [10, 20, 0, 30])
         XCTAssertEqual(points.map(\.segment), [0, 0, 1, 2])
-        XCTAssertTrue(history.charts[1].series[0].points.isEmpty)
+        XCTAssertEqual(history.charts.map(\.id), ["cpu"])
+    }
+    func testRemoteHistoryHidesChartsWithoutUsableReadings() throws {
+        let empty = try XCTUnwrap(SSHResourceHistory(["serverId": 1, "samples": []]))
+        XCTAssertTrue(empty.charts.isEmpty)
+
+        let history = try XCTUnwrap(SSHResourceHistory(["serverId": 1, "samples": [
+            ["at": 60000, "metrics": [
+                "cpu": ["usagePercent": nil], "memory": ["usedPercent": .number(.nan)],
+                "disks": [["mount": "/"], ["mount": "/data", "usedPercent": nil]],
+                "network": [["name": "veth0"], ["name": "veth1", "rxBytesPerSecond": nil, "txBytesPerSecond": nil],
+                            ["name": "veth2", "rxBytesPerSecond": .number(.infinity)]],
+            ]],
+            ["metrics": ["network": [["name": "veth3", "rxBytesPerSecond": 100]]]],
+        ]]))
+        XCTAssertTrue(history.charts.isEmpty)
+    }
+    func testRemoteHistoryKeepsZeroAndPartialNetworkReadings() throws {
+        let history = try XCTUnwrap(SSHResourceHistory(["serverId": 1, "samples": [
+            ["at": 60000, "metrics": [
+                "cpu": ["usagePercent": 0], "memory": ["usedPercent": 0],
+                "disks": [["mount": "/", "usedPercent": 0], ["mount": "/empty"]],
+                "network": [["name": "eth0", "rxBytesPerSecond": 0],
+                            ["name": "eth1", "txBytesPerSecond": 128], ["name": "veth0"]],
+            ]],
+            ["at": 120000, "metrics": nil],
+        ]]))
+        XCTAssertEqual(history.charts.map(\.id), ["cpu", "memory", "disk:/", "network:eth0", "network:eth1"])
+        let received = try XCTUnwrap(history.charts.first { $0.id == "network:eth0" })
+        XCTAssertEqual(received.series[0].points.map(\.value), [0])
+        XCTAssertTrue(received.series[1].points.isEmpty)
+        let sent = try XCTUnwrap(history.charts.first { $0.id == "network:eth1" })
+        XCTAssertTrue(sent.series[0].points.isEmpty)
+        XCTAssertEqual(sent.series[1].points.map(\.value), [128])
+        XCTAssertTrue(history.charts.allSatisfy(\.plots))
     }
     func testMonitorCredentialRequiresHTTPSAndBothParts() throws {
         let input: JSON = ["serverId": 123, "endpoint": "https://server.test/api/v1/telemetry/ssh/123/samples", "token": "one-time-secret", "intervalSeconds": 60, "retentionHours": 24]
@@ -336,10 +337,6 @@ final class ClientUpdatesTests: XCTestCase {
         XCTAssertEqual(groups.active.map(\.id), ["working"])
         XCTAssertEqual(groups.recent.map(\.id), ["recent"])
         XCTAssertEqual((groups.pinned + groups.active + groups.recent).count, 4)
-    }
-    func testStaleFeedbackDiscardsTheAssessmentWhileOrdinaryRoundsReviewTheNewHead() {
-        XCTAssertEqual(triageStaleResolution(["externalFeedback": true, "stale": true]), .discardAssessment)
-        XCTAssertEqual(triageStaleResolution(["standalone": true, "mine": true, "stale": true]), .reviewMovedHead)
     }
     func testSharingSaveReplacesOnlyOneResourceAndRejectsMismatchedEchoes() throws {
         let previous: JSON = [["kind": "project", "id": "5", "userId": 2], ["kind": "sshServer", "id": "5", "userId": 3], ["kind": "project", "id": "6", "userId": 4]]

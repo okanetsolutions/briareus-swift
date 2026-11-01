@@ -5,16 +5,12 @@ import Foundation
 
 // MARK: - Header
 
-/// `#chat-sub`: provider · model · effort · state · 🔁 loop round · branch · tokens · cost · session id · the pull request.
+/// `#chat-sub`: provider · model · effort · state · branch · tokens · cost · session id · the pull request.
 func conversationStatusLine(_ s: Session) -> String {
     var sub = ""
     for part in [s.provider, s.model, s.raw["effort"].nonEmpty] { if let part { sub += (sub.isEmpty ? "" : " \u{00B7} ") + part } }
     let state = s.status == "idle" && s.raw["awaitingAnswer"].is(true) ? "waiting" : s.status
     sub += (sub.isEmpty ? "" : " \u{00B7} ") + state
-    let loop = s.raw["reviewLoop"]
-    if loop.isObject {
-        if let round = loop["rounds"].truncatedInt { sub += " \u{00B7} \u{1F501} loop round \(round)" } else { sub += " \u{00B7} \u{1F501} loop" }
-    }
     if let branch = s.raw["branch"].nonEmpty { sub += " \u{00B7} \(branch)" }
     let browser = BrowserState.sessionOn(s.raw)
     if browser.on { sub += browser.running ? " \u{00B7} \u{1F310} browser" : " \u{00B7} \u{1F310} browser starts next turn" }
@@ -210,76 +206,12 @@ func appendDictation(_ current: String, _ text: String) -> String {
     return current + gap + text
 }
 
-// MARK: - Review findings held in the conversation
-
-/// The round's title: "Round 2 findings · PR #70", or "Review findings".
-func triageTitle(_ triage: JSON) -> String {
-    if triage["externalFeedback"].is(true) { return "Feedback assessment · PR #\(heldRoundPRNumber(triage) ?? 0)" }
-    var title = triage["round"].truncatedInt.map { "Round \($0) findings" } ?? "Review findings"
-    if let pr = triage["prNumber"].truncatedInt { title += " \u{00B7} PR #\(pr)" }
-    return title
-}
-/// A stale feedback assessment must be rerun; ordinary loop rounds can review the moved branch.
-enum TriageStaleResolution: Equatable, Sendable { case reviewMovedHead, discardAssessment }
-func triageStaleResolution(_ triage: JSON) -> TriageStaleResolution {
-    triage["externalFeedback"].is(true) ? .discardAssessment : .reviewMovedHead
-}
-func triageStaleMessage(_ triage: JSON) -> String {
-    triageStaleResolution(triage) == .discardAssessment
-        ? "The pull request or source feedback changed. Run Implement feedback again before selecting fixes; completing with nothing to fix discards this assessment."
-        : "The branch moved after this round was reviewed: some findings may already be fixed. Sending with nothing to fix reviews the new commits instead of closing the loop."
-}
-/// A round takes verdicts unless the server says it is not this user's (`mine: false`).
-func triageTakesVerdicts(_ triage: JSON) -> Bool { triage["externalFeedback"].is(true) || triage["mine"].bool != false }
-/// "file.ts:12", or nil without a file.
-func findingLocation(_ finding: JSON) -> String? {
-    guard let file = finding["file"].string else { return nil }
-    if let line = finding["line"].truncatedInt { return "\(file):\(line)" }
-    return file
-}
-/// The Complete button's title.
-func triageCompleteTitle(takesVerdicts: Bool, fixes: Int, externalFeedback: Bool = false) -> String {
-    guard takesVerdicts else { return "Complete" }
-    if externalFeedback && fixes == 0 { return "Complete assessment · nothing to fix" }
-    return fixes > 0 ? "Complete \u{00B7} send \(fixes) to be fixed" : "Complete \u{00B7} nothing to fix, approve and close"
-}
-/// The confirmation before completing.
-func triageConfirmTitle(takesVerdicts: Bool, fixes: Int) -> String {
-    if !takesVerdicts { return "Take this review off the queue?" }
-    if fixes == 0 { return "Complete with nothing to fix?" }
-    return "Start a paid fix session for \(fixes) finding\(fixes == 1 ? "" : "s")?"
-}
-/// A finding's verdict: the one picked here, else the round's saved draft, else "".
-func triageDecision(_ triage: JSON, _ finding: JSON, picked: [String: String]) -> String {
-    guard let key = finding["key"].string else { return "" }
-    if let d = picked[key] { return d }
-    return triage["drafts"]["verdicts"][key]["decision"].string ?? ""
-}
-/// What `complete_findings` is sent: every keyed finding's verdict (optional when none was picked) with its draft reason,
-/// and the trimmed note.
-func triageCompletion(_ triage: JSON, picked: [String: String], note: String) -> JSON {
-    var extra: JSON = [:]
-    guard triageTakesVerdicts(triage) else { return extra }
-    var verdicts: [JSON] = []
-    for f in triage["findings"].items {
-        guard let key = f["key"].string else { continue }
-        let chosen = triageDecision(triage, f, picked: picked)
-        var v: JSON = ["key": .string(key), "decision": .string(chosen.isEmpty ? "optional" : chosen)]
-        if let reason = triage["drafts"]["verdicts"][key]["reason"].nonEmpty { v["reason"] = .string(reason) }
-        verdicts.append(v)
-    }
-    if !verdicts.isEmpty { extra["verdicts"] = .array(verdicts) }
-    let trimmed = note.cTrimmed
-    if !trimmed.isEmpty { extra["note"] = .string(trimmed) }
-    return extra
-}
-
 // MARK: - Composer
 
 /// The composer's chips, in their order.
-enum ComposerChip: CaseIterable { case workspace, project, branch, provider, model, effort, loop }
+enum ComposerChip: CaseIterable { case workspace, project, branch, provider, model, effort }
 
-/// A conversation's chip text; empty hides it (the loop chip is shown by the caller's rule).
+/// A conversation's chip text; empty hides it.
 func conversationChipText(_ s: Session, _ chip: ComposerChip) -> String {
     switch chip {
     case .workspace:
@@ -291,10 +223,8 @@ func conversationChipText(_ s: Session, _ chip: ComposerChip) -> String {
     case .provider: return s.provider ?? ""
     case .model: return s.model ?? ""
     case .effort: return s.raw["effort"].nonEmpty ?? ""
-    case .loop: return reviewLoopChipText(s.reviewLoopOn)
     }
 }
-func reviewLoopChipText(_ on: Bool) -> String { on ? "\u{1F501} Review loop: on" : "\u{1F501} Review loop" }
 
 /// One piece of background work a running turn waits on, from a session record's `backgroundTasks`.
 struct BackgroundTask: Equatable, Sendable {
@@ -381,13 +311,6 @@ final class AttachmentUploadQueue {
 
 // MARK: - Panel
 
-/// "Findings (3 · all fixed)", "Findings (3 · 1 fixed)", "Findings (3)" or "Findings".
-func panelFindingsLabel(count: Int, fixed: Int) -> String {
-    guard count > 0 else { return "Findings" }
-    if fixed == count { return "Findings (\(count) \u{00B7} all fixed)" }
-    if fixed > 0 { return "Findings (\(count) \u{00B7} \(fixed) fixed)" }
-    return "Findings (\(count))"
-}
 /// A pull request's state tag in the panel: draft for an open draft, else its state (open when unknown).
 func panelStateText(_ pr: JSON) -> String {
     let state = pr["state"].string

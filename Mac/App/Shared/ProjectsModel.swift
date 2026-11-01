@@ -1,7 +1,7 @@
-// The projects the sidebar lists, for the screens that pick one (projects_list), the ⚑ count of review rounds waiting, and
+// The projects the sidebar lists, for the screens that pick one (projects_list), and
 // the ◉ Status overview of what waits for you and what is working.
 // The sidebar owns the reading; other screens only read what it holds. It is screen_projects.c's ProjectsScreen state
-// (projects_load, projects_count, projects_recount_findings) and sessions_forget, kept here because the sidebar's views
+// (projects_load, projects_count) and sessions_forget, kept here because the sidebar's views
 // come and go (Settings takes the sidebar's place) while the Windows client's screens stay on their pane's stack.
 import Combine
 import Foundation
@@ -13,8 +13,6 @@ final class ProjectsModel: ObservableObject {
     @Published var projects: [Project] = []
     /// What `projects` answered, whole: the run profiles and other per-project fields ride along.
     @Published var raw: JSON = .null
-    /// Review rounds waiting for a decision across the projects, the ⚑ badge.
-    @Published var findingsWaiting = 0
     /// Per project (by repo): how many conversations, and whether one is working.
     @Published private(set) var counts: [String: Int] = [:]
     @Published private(set) var busy: [String: Bool] = [:]
@@ -48,9 +46,6 @@ final class ProjectsModel: ObservableObject {
             let repo = note.userInfo?["repo"] as? String, id = note.userInfo?["id"] as? String
             MainActor.assumeIsolated { ProjectsModel.shared.forget(repo: repo, id: id) }
         })
-        observers.append(center.addObserver(forName: .findingsRecount, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { ProjectsModel.shared.recount() }
-        })
         observers.append(center.addObserver(forName: .projectsChanged, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { _ = Task { await ProjectsModel.shared.load() } }
         })
@@ -81,7 +76,7 @@ final class ProjectsModel: ObservableObject {
         generation += 1
         recountTask?.cancel(); recountTask = nil
         allSessions = AllSessions(sessions: [], projects: []); sessionsLoaded = false; sessionsError = nil
-        projects = []; raw = .null; findingsWaiting = 0; counts = [:]; busy = [:]; overview = SessionOverview([])
+        projects = []; raw = .null; counts = [:]; busy = [:]; overview = SessionOverview([])
         loaded = false; error = nil; openProject = nil; showingAllSessions = false
     }
 
@@ -95,22 +90,19 @@ final class ProjectsModel: ObservableObject {
         }
     }
 
-    /// projects_count: what the saved lists say about each project's conversations, and the ⚑ count across them.
+    /// projects_count: what the saved lists say about each project's conversations.
     func recount() {
         recountTask?.cancel(); recountTask = nil
         var counts: [String: Int] = [:], busy: [String: Bool] = [:]
-        var waiting = 0
         var all: [Session] = []
         for p in projects {
             guard let list = Store.shared.cache.value("sessions:\(p.repo)"), let sessions = Session.parseList(list) else { continue }
             counts[p.repo] = sessions.count
             busy[p.repo] = sessions.contains { $0.isActive }
-            waiting += sessions.filter { $0.heldRound != nil }.count
             all += sessions
         }
         if counts != self.counts { self.counts = counts }
         if busy != self.busy { self.busy = busy }
-        if waiting != findingsWaiting { findingsWaiting = waiting }
         let list = AllSessions(sessions: all, projects: projects)
         if list != allSessions { allSessions = list }
         let loaded = list.cacheIsLoaded(projectsLoaded: Project.parseList(raw) != nil,
@@ -141,7 +133,7 @@ final class ProjectsModel: ObservableObject {
         if error != nil { error = nil }
         Store.shared.cache.store(answer, "projects")
         recount()
-        // The approvals agents wait on count on the ⚑ too.
+        // The approvals agents wait on count on the ◉ too.
         _ = await AttentionModel.shared.load()
         guard mine == generation else { return nil }
         guard Store.shared.supports("sessions") else {

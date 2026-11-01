@@ -1,4 +1,4 @@
-// The Server dashboard: focused tabs on the existing page, loading only the visible panel.
+// The Server dashboard, opened from the Status tab: focused tabs on the existing page, loading only the visible panel.
 import SwiftUI
 
 struct ServerStatsScreen: View {
