@@ -1,6 +1,6 @@
 // SQL run on a server's MySQL over SSH (the Windows client's app/ssh_query.c): this Mac's OpenSSH client, /usr/bin/ssh,
 // starts the server's own `mysql` client, which reads the password and then the statements from its standard input
-// (SQLLogin), so neither shows on a command line. With no terminal, ssh asks for passwords and host keys through
+// (SQLLogin), so neither shows on a command line. New host keys are saved automatically; ssh asks for passwords through
 // SSH_ASKPASS, which is this app (Askpass.swift), as the SFTP sessions' do. Each query is a process of its own, in the home
 // folder where ~/.ssh is; a cancelled one is ended.
 import Foundation
@@ -17,8 +17,7 @@ enum SSHQuery {
         let askpass = Bundle.main.executablePath ?? CommandLine.arguments[0]
         let p = Process()
         p.executableURL = URL(fileURLWithPath: client)
-        p.arguments = ["-T", "-p", String(target.port), "-o", "User=\(target.user)", "-o", "ServerAliveInterval=30", "-o", "LogLevel=ERROR",
-                       "--", target.host, login.remoteCommand]
+        p.arguments = target.sshQueryArguments + [login.remoteCommand]
         p.environment = SSHAskpass.environment(base: ProcessInfo.processInfo.environment, askpass: askpass)
         p.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
         let input = Pipe(), output = Pipe(), errors = Pipe()

@@ -1,6 +1,6 @@
 // The SFTP sessions tab's sessions (the Windows client's sftp_session.c): this Mac's OpenSSH sftp client, /usr/bin/sftp,
 // run without a terminal, fed one command at a time through a pipe (SFTPSessionCore), its answers read back into a tree
-// of the server's folders. With no terminal, ssh asks for passwords and host keys through SSH_ASKPASS, which is this app
+// of the server's folders. New host keys are saved automatically; ssh asks for passwords through SSH_ASKPASS, which is this app
 // (Askpass.swift). Each runs as a process group of its own, so closing it (or the app) ends sftp and the ssh it started.
 import Foundation
 
