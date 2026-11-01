@@ -63,12 +63,9 @@ final class Store: ObservableObject {
         feeds[repo] = feed
         return feed
     }
-    /// A project's conversations as its feed holds them, without making a feed (and reading its saved board) to ask.
-    /// Nil until the feed has the full list.
-    func loadedSessions(_ repo: String) -> [Session]? {
-        guard let feed = feeds[repo], feed.sessionsLoaded else { return nil }
-        return feed.sessions
-    }
+    /// A project's saved conversations as its feed holds them, without making a feed (and reading its saved board) to
+    /// ask. Nil while the feed has no full list saved.
+    func loadedSessions(_ repo: String) -> [Session]? { feeds[repo]?.savedSessions }
 
     // MARK: Pairing
 

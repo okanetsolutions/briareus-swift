@@ -17,6 +17,7 @@ final class Store: ObservableObject {
         feeds[repo] = feed
         return feed
     }
+    func loadedSessions(_ repo: String) -> [Session]? { feeds[repo]?.savedSessions }
 }
 
 @MainActor

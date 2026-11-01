@@ -58,35 +58,28 @@ extension Array where Element == Session {
 
 /// Each project's saved conversation list (`sessions:<repo>`), parsed once and kept beside the cache. The live stream
 /// opens with every session and then changes one per event; parsing the saved list back for each one made its catch-up
-/// cost the main thread the whole list per session. Every save goes through here so the two stay the same, and a cache
-/// emptied meanwhile (a new device or repository list) leaves nothing behind.
+/// cost the main thread the whole list per session. Every save goes through here so the two stay the same, and a list
+/// removed from the cache meanwhile (signing out, a new device or repository list) is not kept or saved again.
 final class SavedSessionLists {
     private let cache: DiskCache
     private var lists: [String: [Session]] = [:]
-    private var clears: Int
 
-    init(cache: DiskCache) {
-        self.cache = cache
-        clears = cache.clears
-    }
+    init(cache: DiskCache) { self.cache = cache }
 
     private func key(_ repo: String) -> String { "sessions:\(repo)" }
-    private func current() {
-        let now = cache.clears
-        if now != clears { lists = [:]; clears = now }
-    }
 
     /// The saved full list, or nil when none was read.
     func list(_ repo: String) -> [Session]? {
-        current()
-        if let list = lists[repo] { return list }
+        if let list = lists[repo] {
+            if cache.contains(key(repo)) { return list }
+            lists[repo] = nil
+        }
         guard let list = cache.value(key(repo)).flatMap(Session.parseList) else { return nil }
         lists[repo] = list
         return list
     }
     /// A full list as read from the server.
     func save(_ list: [Session], repo: String) {
-        current()
         lists[repo] = list
         cache.store(Session.json(list), key(repo))
     }
@@ -104,7 +97,7 @@ final class SavedSessionLists {
         return list
     }
     /// Signing out: what was read goes with the cache.
-    func reset() { lists = [:]; clears = cache.clears }
+    func reset() { lists = [:] }
 }
 
 // MARK: - One conversation

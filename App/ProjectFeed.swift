@@ -95,9 +95,12 @@ final class ProjectFeed: ObservableObject {
         Store.shared.cache.remove("transcript:\(id)")
         ProjectsModel.shared.scheduleRecount()
     }
+    /// The full list, while it is the one saved. One removed from the cache since (the device's repositories changed)
+    /// stays unsaved until the next full read.
+    var savedSessions: [Session]? { sessionsLoaded && Store.shared.cache.contains("sessions:\(repo)") ? sessions : nil }
     /// Live records alone cannot make a full list, so only one already read is saved.
     private func save() {
-        guard sessionsLoaded else { return }
+        guard savedSessions != nil else { return }
         Store.shared.cache.store(Session.json(sessions), "sessions:\(repo)")
     }
 

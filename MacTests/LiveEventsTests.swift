@@ -106,6 +106,15 @@ final class LiveEventsTests: XCTestCase {
         saved.save([session("s1")], repo: repo)
         saved.reset()
         XCTAssertEqual(saved.list(repo), [session("s1")])
+        // So does a list removed on its own; the cache's other keys say nothing about it.
+        XCTAssertTrue(cache.contains("sessions:\(repo)"))
+        cache.remove("sessions:\(repo)")
+        XCTAssertFalse(cache.contains("sessions:\(repo)"))
+        XCTAssertNil(saved.remove("s1", repo: repo))
+        XCTAssertNil(cache.value("sessions:\(repo)"))
+        cache.store(Session.json([session("s1")]), "sessions:\(repo)")
+        cache.flush()
+        XCTAssertTrue(DiskCache(directory: directory, protection: []).contains("sessions:\(repo)"))
     }
 
     // MARK: One conversation

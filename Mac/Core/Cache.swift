@@ -134,15 +134,15 @@ final class DiskCache: @unchecked Sendable {
         documents.removeObject(forKey: key as NSString)
         try? FileManager.default.removeItem(at: url(key))
     }
-    /// How many times everything was removed, so a copy kept beside the cache can tell it is gone.
-    var clears: Int {
+    /// Whether a document is saved under the key, without reading it: a copy kept beside the cache checks it is still
+    /// there before saving over it.
+    func contains(_ key: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        return clearCount
+        if pending[key] != nil || documents.object(forKey: key as NSString) != nil { return true }
+        return FileManager.default.fileExists(atPath: url(key).path)
     }
-    private var clearCount = 0
     func removeAll() {
         lock.lock(); defer { lock.unlock() }
-        clearCount += 1
         // A save still waiting is dropped with the rest: its revision no longer matches.
         for key in pending.keys { _ = bump(key) }
         pending = [:]

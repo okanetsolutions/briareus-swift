@@ -31,6 +31,9 @@ final class Navigator {
 }
 
 func errorText(_ error: Error) -> String { String(describing: error) }
+/// This harness's app is always in front.
+@MainActor
+func untilActive() async {}
 extension Error {
     var isCancellation: Bool { self is CancellationError || (self as? APIError)?.kind == .cancelled }
 }
