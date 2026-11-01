@@ -77,7 +77,7 @@ final class NewSessionModel: ObservableObject {
         choicesTask?.cancel()
         catalog = nil; quietly { runtime = nil }; branches = []; defaultBranch = nil; branch = nil
         // A project without a local checkout cannot keep Local.
-        if workspace == .local && !(project?.hasLocal ?? false) { workspace = .worktree }
+        if !workspace.isAvailable(hasLocal: project?.hasLocal ?? false) { workspace = .worktree }
         guard let p = project else { return }
         let store = Store.shared
         if store.supports("runtimes"), let saved = store.cache.value("runtimes:\(p.repo)") { adopt(RuntimeCatalog(saved)) }
@@ -136,7 +136,7 @@ final class NewSessionModel: ObservableObject {
         switch chip {
         case .provider, .model: return !(catalog?.providers.isEmpty ?? true)
         case .effort: return effective.map { !(catalog?.efforts(for: $0).isEmpty ?? true) } ?? false
-        case .branch: return workspace != .orchestrator && Store.shared.supports("branches")
+        case .branch: return workspace.takesBranch && Store.shared.supports("branches")
         default: return true
         }
     }
@@ -176,7 +176,7 @@ final class NewSessionModel: ObservableObject {
         case .workspace:
             let hasLocal = project?.hasLocal ?? false
             let modes = WorkspaceMode.allCases
-            let rows = modes.map { MenuRow(title: $0.menuTitle(hasLocal: hasLocal), checked: $0 == workspace, enabled: $0 != .local || hasLocal) }
+            let rows = modes.map { MenuRow(title: $0.menuTitle(hasLocal: hasLocal), checked: $0 == workspace, enabled: $0.isAvailable(hasLocal: hasLocal)) }
             // Each mode starts with its own branch default; an orchestrator cannot take a branch at all.
             if let i = popUpMenu(rows), modes[i] != workspace { workspace = modes[i]; branch = nil }
         }

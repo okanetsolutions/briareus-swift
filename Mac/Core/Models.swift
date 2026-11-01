@@ -291,6 +291,10 @@ enum WorkspaceMode: Equatable, Sendable, CaseIterable {
         case .orchestrator: return ("Start an orchestrator for ", " to plan and coordinate worker sessions.")
         }
     }
+    /// Local needs the project's own checkout; the other modes can always be picked.
+    func isAvailable(hasLocal: Bool) -> Bool { self != .local || hasLocal }
+    /// An orchestrator takes no branch, so its branch picker is hidden.
+    var takesBranch: Bool { self != .orchestrator }
     /// The branch chip with none picked: something else in each mode.
     func noBranchLabel(defaultBranch: String?) -> String { self == .local ? "Current branch" : "New branch off \(defaultBranch ?? "main")" }
     /// `start_session`'s workspace arguments: an orchestrator takes no branch.
