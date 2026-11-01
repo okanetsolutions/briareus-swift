@@ -24,7 +24,6 @@ struct ScreenView: View {
         case .slackWorkspaceSettings(let row, let defaults): SlackWorkspaceSettingsScreen(row: row, defaults: defaults)
         case .mcpServerSettings(let row, let defaults): McpServerSettingsScreen(row: row, defaults: defaults)
         case .envoyerAccountSettings(let row, let defaults): EnvoyerAccountSettingsScreen(row: row, defaults: defaults)
-        case .meetingSettings: MeetingSettingsScreen()
         case .mailSettings(let id): MailSettingsScreen(accountID: id).id(id ?? 0)
         case .mail: MailScreen()
         case .serverSettings: ServerSettingsScreen()

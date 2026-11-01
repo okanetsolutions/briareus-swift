@@ -435,7 +435,7 @@ extension HTTPTransport {
 /// URLSession with no cookies, no cache, no stored credentials and no redirects.
 final class URLSessionTransport: NSObject, HTTPTransport, URLSessionTaskDelegate, @unchecked Sendable {
     /// The one every client shares. A URLSession holds its delegate until it is invalidated, so a transport made per
-    /// client (each reconnect, each voice call) was never freed, along with its session and connection pool.
+    /// client (each connect, restore or failed pairing) was never freed, along with its session and connection pool.
     static let shared = URLSessionTransport()
 
     /// Made in `init`, not lazily: every client's requests share it from many threads, and two first uses of a `lazy`
