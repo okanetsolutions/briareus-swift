@@ -56,22 +56,48 @@ extension Array where Element == Session {
     }
 }
 
-extension DiskCache {
-    /// A live record updates a saved full list; it cannot establish that every session has been read.
-    func upsertSession(_ session: Session, repo: String) -> [Session]? {
-        let key = "sessions:\(repo)"
-        guard let saved = value(key).flatMap(Session.parseList), let list = saved.upserting(session) else { return nil }
-        store(Session.json(list), key)
-        return list
-    }
+/// Each project's saved conversation list (`sessions:<repo>`), parsed once and kept beside the cache. The live stream
+/// opens with every session and then changes one per event; parsing the saved list back for each one made its catch-up
+/// cost the main thread the whole list per session. Every save goes through here so the two stay the same, and a list
+/// removed from the cache meanwhile (signing out, a new device or repository list) is not kept or saved again.
+final class SavedSessionLists {
+    private let cache: DiskCache
+    private var lists: [String: [Session]] = [:]
 
-    /// A deletion updates a saved full list; live-only rows cannot establish a complete cache.
-    func removeSession(_ id: String, repo: String) -> [Session]? {
-        let key = "sessions:\(repo)"
-        guard let saved = value(key).flatMap(Session.parseList), let list = saved.removing(id) else { return nil }
-        store(Session.json(list), key)
+    init(cache: DiskCache) { self.cache = cache }
+
+    private func key(_ repo: String) -> String { "sessions:\(repo)" }
+
+    /// The saved full list, or nil when none was read.
+    func list(_ repo: String) -> [Session]? {
+        if let list = lists[repo] {
+            if cache.contains(key(repo)) { return list }
+            lists[repo] = nil
+        }
+        guard let list = cache.value(key(repo)).flatMap(Session.parseList) else { return nil }
+        lists[repo] = list
         return list
     }
+    /// A full list as read from the server.
+    func save(_ list: [Session], repo: String) {
+        lists[repo] = list
+        cache.store(Session.json(list), key(repo))
+    }
+    /// A live record updates a saved full list; it cannot establish that every session has been read. Nil when there is
+    /// no saved list or nothing changed.
+    func upsert(_ session: Session, repo: String) -> [Session]? {
+        guard let list = list(repo)?.upserting(session) else { return nil }
+        save(list, repo: repo)
+        return list
+    }
+    /// A deletion updates a saved full list; live-only rows cannot establish a complete cache.
+    func remove(_ id: String, repo: String) -> [Session]? {
+        guard let list = list(repo)?.removing(id) else { return nil }
+        save(list, repo: repo)
+        return list
+    }
+    /// Signing out: what was read goes with the cache.
+    func reset() { lists = [:] }
 }
 
 // MARK: - One conversation

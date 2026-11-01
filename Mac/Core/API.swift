@@ -434,7 +434,20 @@ extension HTTPTransport {
 
 /// URLSession with no cookies, no cache, no stored credentials and no redirects.
 final class URLSessionTransport: NSObject, HTTPTransport, URLSessionTaskDelegate, @unchecked Sendable {
-    private lazy var session: URLSession = {
+    /// The one every client shares. A URLSession holds its delegate until it is invalidated, so a transport made per
+    /// client (each connect, restore or failed pairing) was never freed, along with its session and connection pool.
+    static let shared = URLSessionTransport()
+
+    /// Made in `init`, not lazily: every client's requests share it from many threads, and two first uses of a `lazy`
+    /// property at once could each make (and leak) a session.
+    private var session: URLSession!
+
+    override init() {
+        super.init()
+        session = Self.makeSession(delegate: self)
+    }
+
+    private static func makeSession(delegate: URLSessionTaskDelegate) -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieStorage = nil
         config.httpShouldSetCookies = false
@@ -443,8 +456,8 @@ final class URLSessionTransport: NSObject, HTTPTransport, URLSessionTaskDelegate
         config.urlCredentialStorage = nil
         config.tlsMinimumSupportedProtocolVersion = .TLSv12
         config.httpAdditionalHeaders = ["User-Agent": "Briareus-Mac/1.0"]
-        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
-    }()
+        return URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+    }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
@@ -532,7 +545,7 @@ final class APIClient: @unchecked Sendable {
     var authorization: String { "Bearer \(token)" }
 
     /// Fails with `.invalidToken` unless the token has the token shape.
-    init(address: ServerAddress, token: String, transport: HTTPTransport = URLSessionTransport()) throws {
+    init(address: ServerAddress, token: String, transport: HTTPTransport = URLSessionTransport.shared) throws {
         guard apiTokenValid(token) else { throw APIError(.invalidToken) }
         self.address = address; self.token = token; self.transport = transport
     }

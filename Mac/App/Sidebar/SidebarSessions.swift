@@ -48,7 +48,7 @@ final class SidebarSessions: ObservableObject {
             guard mine == generation else { return nil }
             show(answer, fromServer: true)
             if error != nil { error = nil }
-            Store.shared.cache.store(Session.json(sessions), key)
+            ProjectsModel.shared.saved.save(sessions, repo: project.repo)
             ProjectsModel.shared.scheduleRecount()
             return nil
         } catch {

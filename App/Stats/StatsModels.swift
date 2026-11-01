@@ -30,9 +30,10 @@ final class SessionStatsModel: ObservableObject {
         loaded = true
     }
 
-    /// Reads now, then again every sampling interval until the screen goes.
+    /// Reads now, then again every sampling interval until the screen goes, pausing while the app is out of sight.
     func follow() async {
         while !Task.isCancelled {
+            await untilActive()
             await load()
             try? await Task.sleep(for: .seconds(statsPollSeconds(reading?.host)))
         }
@@ -90,6 +91,7 @@ final class ServerStatsModel: ObservableObject {
             guard let supported = tab.resolved(in: tabs) else { return }
             if supported != tab { tab = supported; return }
             guard tab.operation != nil else { return }
+            await untilActive()
             await load()
             guard tabs.contains(tab) else { continue }
             do { try await Task.sleep(for: .seconds(tab.pollSeconds(server: server?.host, sessions: sessionsHost))) }

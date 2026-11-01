@@ -71,11 +71,38 @@ func workingVerb(_ tick: Int) -> String { workingVerbs[((tick / 25) % 6 + 6) % 6
 
 // MARK: - Times
 
+/// One formatter per format, locale and zone: every visible message row asks for its time, and making a DateFormatter
+/// costs far more than using one. Formatting and parsing from several threads at once is safe. A locale's identifier
+/// leaves out the user's settings (24-hour time), so a change to them or to the time zone starts afresh. Callers never
+/// change a formatter they are handed.
+final class DateFormatters: @unchecked Sendable {
+    static let shared = DateFormatters()
+    private let lock = NSLock()
+    private var made: [String: DateFormatter] = [:]
+
+    private init() {
+        for name in [NSLocale.currentLocaleDidChangeNotification, NSNotification.Name.NSSystemTimeZoneDidChange] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in self?.reset() }
+        }
+    }
+    func reset() {
+        lock.lock(); defer { lock.unlock() }
+        made = [:]
+    }
+
+    func formatter(_ format: String?, locale: Locale, timeZone: TimeZone) -> DateFormatter {
+        let key = "\(format ?? "")|\(locale.identifier)|\(timeZone.identifier)"
+        lock.lock(); defer { lock.unlock() }
+        if let f = made[key] { return f }
+        let f = DateFormatter()
+        f.locale = locale; f.timeZone = timeZone
+        if let format { f.dateFormat = format } else { f.dateStyle = .none; f.timeStyle = .short }
+        made[key] = f
+        return f
+    }
+}
 private func formatter(_ format: String?, locale: Locale, timeZone: TimeZone) -> DateFormatter {
-    let f = DateFormatter()
-    f.locale = locale; f.timeZone = timeZone
-    if let format { f.dateFormat = format } else { f.dateStyle = .none; f.timeStyle = .short }
-    return f
+    DateFormatters.shared.formatter(format, locale: locale, timeZone: timeZone)
 }
 /// The clock alone for today, else "MMM d, clock", in the user's locale. The offset is that of the date itself, not today's.
 func formatEventTime(_ when: Date, now: Date = Date(), locale: Locale = .current, timeZone: TimeZone = .current) -> String {

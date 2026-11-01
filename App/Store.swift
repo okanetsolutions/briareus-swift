@@ -63,6 +63,9 @@ final class Store: ObservableObject {
         feeds[repo] = feed
         return feed
     }
+    /// A project's saved conversations as its feed holds them, without making a feed (and reading its saved board) to
+    /// ask. Nil while the feed has no full list saved.
+    func loadedSessions(_ repo: String) -> [Session]? { feeds[repo]?.savedSessions }
 
     // MARK: Pairing
 
@@ -239,13 +242,20 @@ func poll(every base: @autoclosure () -> TimeInterval, immediately: Bool = true,
     while !Task.isCancelled {
         if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
         if Task.isCancelled { return }
-        while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000_000) }
+        await untilActive()
         if Task.isCancelled { return }
         let error = await read()
         if error?.unauthorized == true { return }
         if let error, error.kind != .cancelled { failures += 1 } else { failures = 0 }
         delay = pollDelay(base: base(), failures: failures, retryAfter: error?.retryAfter)
     }
+}
+
+/// Returns once the app is in front of its user again, or the task is cancelled: a screen's own refresh loop waits here
+/// so it asks nothing while the app runs in the background.
+@MainActor
+func untilActive() async {
+    while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000_000) }
 }
 
 /// Runs a read for `poll`, answering its error as `poll` wants it.

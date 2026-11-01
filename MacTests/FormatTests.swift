@@ -61,8 +61,8 @@ final class FormatTests: XCTestCase {
         let f = DateFormatter(); f.locale = posix; f.timeZone = tz; f.dateStyle = .none; f.timeStyle = .short
         return f.string(from: d)
     }
-    private func date(_ d: Date, _ format: String, _ tz: TimeZone) -> String {
-        let f = DateFormatter(); f.locale = posix; f.timeZone = tz; f.dateFormat = format
+    private func date(_ d: Date, _ format: String, _ tz: TimeZone, _ locale: Locale? = nil) -> String {
+        let f = DateFormatter(); f.locale = locale ?? posix; f.timeZone = tz; f.dateFormat = format
         return f.string(from: d)
     }
     func testEventTimeTodayIsTheClockAlone() {
@@ -88,6 +88,25 @@ final class FormatTests: XCTestCase {
         XCTAssertEqual(plain(formatEventTime(summer, now: later, locale: posix, timeZone: ny)), "Jul 1, 8:00 AM")
         XCTAssertEqual(formatDateAbbrev(winter, locale: posix, timeZone: ny), "Jan 1, 2026")
         XCTAssertEqual(formatDateAbbrev(summer, locale: posix, timeZone: ny), "Jul 1, 2026")
+    }
+    func testReusedFormattersKeepEachZoneAndLocaleApart() {
+        let ny = TimeZone(identifier: "America/New_York")!, tokyo = TimeZone(identifier: "Asia/Tokyo")!
+        let winter = Date(timeIntervalSince1970: 1767268800)   // 2026-01-01 12:00 UTC
+        // The same format asked for in turn under different zones and locales, and again, answers each as its own.
+        for _ in 0..<2 {
+            XCTAssertEqual(formatDateAbbrev(winter, locale: posix, timeZone: ny), "Jan 1, 2026")
+            XCTAssertEqual(formatDateAbbrev(winter.addingTimeInterval(14 * 3600), locale: posix, timeZone: tokyo), "Jan 2, 2026")
+            XCTAssertEqual(formatDateAbbrev(winter, locale: Locale(identifier: "de_DE"), timeZone: ny),
+                           date(winter, "MMM d, yyyy", ny, Locale(identifier: "de_DE")))
+        }
+        // A change to the user's locale settings (24-hour time) or zone makes the next formatter afresh.
+        let before = DateFormatters.shared.formatter(nil, locale: posix, timeZone: utc)
+        XCTAssertTrue(before === DateFormatters.shared.formatter(nil, locale: posix, timeZone: utc))
+        NotificationCenter.default.post(name: NSLocale.currentLocaleDidChangeNotification, object: nil)
+        XCTAssertFalse(before === DateFormatters.shared.formatter(nil, locale: posix, timeZone: utc))
+        let header = "Thu, 01 Jan 2026 12:00:00 GMT"
+        XCTAssertEqual(ServerTimeReference(header).map { Int($0.now().timeIntervalSince1970) / 10 }, 1767268800 / 10)
+        XCTAssertNil(ServerTimeReference("yesterday"))
     }
     func testDateAbbrevIsMonthDayAndYear() {
         let now = Date()

@@ -50,6 +50,7 @@ final class SSHMonitoringModel: ObservableObject {
     }
     func follow() async {
         while !Task.isCancelled {
+            await untilActive()
             await load()
             try? await Task.sleep(for: .seconds(60))
         }

@@ -7,10 +7,9 @@ struct ServerTimeReference: Sendable {
 
     init?(_ header: String?, at receivedAt: ContinuousClock.Instant = .now) {
         guard let header else { return nil }
-        let format = DateFormatter()
-        format.locale = Locale(identifier: "en_US_POSIX")
-        format.timeZone = TimeZone(identifier: "GMT")
-        format.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        // Every response carries one, so the formatter is made once.
+        let format = DateFormatters.shared.formatter("EEE, dd MMM yyyy HH:mm:ss zzz", locale: Locale(identifier: "en_US_POSIX"),
+                                                     timeZone: TimeZone(identifier: "GMT")!)
         guard let date = format.date(from: header) else { return nil }
         self.date = date
         self.receivedAt = receivedAt

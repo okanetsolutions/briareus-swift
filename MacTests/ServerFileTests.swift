@@ -27,4 +27,13 @@ final class ServerFileTests: XCTestCase {
         do { _ = try await client.serverFile("https://example.com/api/v1/videos/missing.webm", under: "videos/"); XCTFail("no error") }
         catch let e as APIError { XCTAssertEqual(e.status, 404) }
     }
+
+    func testClientsShareOneTransport() throws {
+        // A URLSession keeps its delegate until invalidated: a transport per client was never freed.
+        let token = "brm_" + String(repeating: "a", count: 43)
+        let a = try APIClient(address: ServerAddress("https://example.com")!, token: token)
+        let b = try APIClient(address: ServerAddress("https://example.org")!, token: token)
+        XCTAssertTrue(a.transport as AnyObject === URLSessionTransport.shared)
+        XCTAssertTrue(b.transport as AnyObject === URLSessionTransport.shared)
+    }
 }

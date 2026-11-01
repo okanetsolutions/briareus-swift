@@ -70,14 +70,14 @@ struct MacProjectsChecks {
 
     @MainActor
     static func streamBurst() async throws {
-        let store = Store.shared, model = ProjectsModel.shared
+        let model = ProjectsModel.shared
         var changes = 0
         let subscription = model.$overview.dropFirst().sink { _ in changes += 1 }
         defer { subscription.cancel() }
         for n in 1...100 {
             let repo = n.isMultiple(of: 2) ? "o/a" : "o/b"
             let session = Session(["id": .string("s\(n)"), "repo": .string(repo), "status": "running"])!
-            precondition(store.cache.upsertSession(session, repo: repo) != nil)
+            precondition(model.saved.upsert(session, repo: repo) != nil)
             model.scheduleRecount()
         }
         precondition(changes == 0, "A catch-up burst must not aggregate every project's sessions for each record")
