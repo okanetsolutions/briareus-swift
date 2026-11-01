@@ -99,6 +99,11 @@ final class FormatTests: XCTestCase {
             XCTAssertEqual(formatDateAbbrev(winter, locale: Locale(identifier: "de_DE"), timeZone: ny),
                            date(winter, "MMM d, yyyy", ny, Locale(identifier: "de_DE")))
         }
+        // A change to the user's locale settings (24-hour time) or zone makes the next formatter afresh.
+        let before = DateFormatters.shared.formatter(nil, locale: posix, timeZone: utc)
+        XCTAssertTrue(before === DateFormatters.shared.formatter(nil, locale: posix, timeZone: utc))
+        NotificationCenter.default.post(name: NSLocale.currentLocaleDidChangeNotification, object: nil)
+        XCTAssertFalse(before === DateFormatters.shared.formatter(nil, locale: posix, timeZone: utc))
         let header = "Thu, 01 Jan 2026 12:00:00 GMT"
         XCTAssertEqual(ServerTimeReference(header).map { Int($0.now().timeIntervalSince1970) / 10 }, 1767268800 / 10)
         XCTAssertNil(ServerTimeReference("yesterday"))
