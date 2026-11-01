@@ -52,7 +52,7 @@ struct SSHMonitoringScreen: View {
                     if embedded { Text(model.title) }
                     Text(server.repo)
                 }
-                if model.history != nil {
+                if !model.charts.isEmpty {
                     Section("Last 24 hours") { ForEach(model.charts) { StatsChartView(chart: $0) } }
                 }
                 SSHMonitorControls(model: model)

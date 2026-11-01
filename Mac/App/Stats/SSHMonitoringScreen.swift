@@ -61,7 +61,7 @@ struct SSHMonitoringScreen: View {
             if let at = server.measuredAt { Text("Last sample: \(at.formatted())").font(Theme.caption).foregroundStyle(Theme.muted) }
             if server.tiles.isEmpty { EmptyNote(title: "No metrics received yet.") }
             StatTiles(width: width, tiles: server.tiles)
-            if model.history != nil { ForEach(model.charts) { StatsChartView(chart: $0) } }
+            ForEach(model.charts) { StatsChartView(chart: $0) }
             SSHMonitorControls(model: model)
         }
     }
