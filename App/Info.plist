@@ -11,7 +11,6 @@
     <key>ITSAppUsesNonExemptEncryption</key><false/>
     <key>LSRequiresIPhoneOS</key><true/>
     <key>NSMicrophoneUsageDescription</key><string>Briareus records the voice notes you dictate and sends them to your server to be written out as text.</string>
-    <key>UIBackgroundModes</key><array><string>audio</string></array>
     <key>UIApplicationSceneManifest</key><dict>
         <key>UIApplicationSupportsMultipleScenes</key><true/>
         <key>UISceneConfigurations</key><dict>
