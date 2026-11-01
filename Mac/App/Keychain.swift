@@ -14,8 +14,6 @@ enum Keychain {
 
     /// The device token, one per server origin.
     static let device = "com.okanetsolutions.briareus.client"
-    /// The meeting assistant's API keys, one per service ("elevenlabs").
-    static let meeting = "com.okanetsolutions.briareus.meeting"
 
     private static func query(_ origin: String, _ service: String = device) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,

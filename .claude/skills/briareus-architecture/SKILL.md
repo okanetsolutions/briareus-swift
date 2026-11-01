@@ -33,11 +33,11 @@ View (`App/**`, `Mac/App/**`) -> Model (`@MainActor ObservableObject`, `*Model.s
 | Settings | `Settings/` | `Settings/` | `SettingsLogic.swift`, `SSHServerLogic.swift` (the SSH server form), `AccountSettingsLogic.swift` |
 | Forge | `Forge/` | `Board/ProjectForgeTab.swift`, `Board/ForgeSiteView.swift` | `Forge.swift` |
 | Shared browser | `Conversations/SharedBrowserScreen.swift` | `Conversation/SharedBrowserScreen.swift` | `SharedBrowser.swift` |
-| Voice | `Voice/` | `Conversation/VoiceNote.swift` | `Voice.swift` |
+| Voice notes | `Conversations/ComposerVoiceNote.swift` | `Conversation/VoiceNote.swift` | n/a |
 | CarPlay | `Car/` | n/a | `CarText.swift` |
 | SSH, SFTP, DB, terminal | n/a | `Remote/` | `SFTP*.swift`, `SQL.swift`, `VT.swift`, `TerminalInput.swift` |
 | Files tab | n/a | `Board/ProjectFilesTab.swift`, `Board/FilesNavigator.swift` | `RepoFiles.swift`, `RepoIndex.swift`, `CodeSymbols.swift`, `CodeHighlight.swift` |
-| Meeting, Mail | n/a | `Meeting/`, `Mail/` | `Meet*.swift`, `Mail.swift` |
+| Mail | n/a | `Mail/` | `Mail.swift` |
 
 ## Component catalog
 

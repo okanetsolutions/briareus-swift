@@ -4,7 +4,7 @@
 import Combine
 import SwiftUI
 
-enum BoardTab: Int { case pulls, issues, ssh, sftp, board, run, db, forge, meeting, review, files, memories, deploy, envoyer }
+enum BoardTab: Int { case pulls, issues, ssh, sftp, board, run, db, forge, review, files, memories, deploy, envoyer }
 
 @MainActor
 final class BoardModel: ObservableObject {
@@ -260,7 +260,6 @@ struct BoardScreen: View {
     @ObservedObject private var store = Store.shared
     /// Which projects name a board (`hasBoard`), for the Board tab.
     @ObservedObject private var projects = ProjectsModel.shared
-    @ObservedObject private var meeting = Meeting.shared
     @State private var remoteRevision = 0
     @State private var cooldownRevision = 0
 
@@ -275,7 +274,7 @@ struct BoardScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             if model.tab == .board {
-                ProjectBoardHeader(model: model.projectBoard, title: model.title, lead: meetButton, status: meeting.isFor(repo) ? meeting.status : nil)
+                ProjectBoardHeader(model: model.projectBoard, title: model.title)
             } else { header }
             switch model.tab {
             case .board:
@@ -303,13 +302,6 @@ struct BoardScreen: View {
                     .padding(.horizontal, Theme.paneMargin)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
-            case .meeting:
-                VStack(alignment: .leading, spacing: 0) {
-                    tabs.padding(.horizontal, Theme.paneMargin)
-                    Spacer().frame(height: 14)
-                    MeetingTranscript(transcript: meeting.transcript(for: repo) ?? "")
-                }
-                .onChange(of: meeting.logRepo) { _, _ in if meeting.transcript(for: repo) == nil { model.tab = .pulls } }
             default:
                 ScrollView {
                     // Lazy: a busy repository lists a hundred pull requests, and only the rows in view are built and redrawn.
@@ -379,7 +371,6 @@ struct BoardScreen: View {
             if let s = model.forge.subtitle { sub = s }
             buttons = model.forge.headerButtons
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read it from Forge again") { model.refresh() })
-        case .meeting: break
         case .memories:
             sub = "\(repo) · \(model.memories.memories.filter { !$0.archived }.count) memories"
             buttons.append(HeaderButton(glyph: Glyph.symbol(0xE72C), tip: "Read the memories again") { Task { await model.memories.load() } })
@@ -401,17 +392,7 @@ struct BoardScreen: View {
                 toggleLaterStacked: model.toggleLaterStacked, toggleFailingChecks: model.toggleFailingChecks)
             buttons.append(refresh)
         }
-        // 🎙 Meet: the meeting assistant, on this project, on every tab; a meeting about it leads the line with its time,
-        // cost and what it is doing.
-        if meeting.isFor(repo) { sub = "\(meeting.status) · \(sub)" }
-        buttons.insert(meetButton, at: 0)
         return PaneHeader(title: model.title, subtitle: sub, status: status, buttons: buttons)
-    }
-    private var meetButton: HeaderButton {
-        HeaderButton(glyph: "mic", label: meeting.isFor(repo) ? "🎙 Meeting ●" : "🎙 Meet",
-                     tip: "Join a meeting with an assistant that can look up this project") {
-            MeetingMenu.show(repo: repo, title: model.title)
-        }
     }
 
     // MARK: Tabs
@@ -438,12 +419,10 @@ struct BoardScreen: View {
         if ProjectMemoriesModel.offered { labels.append((.memories, "🧠 Memories")) }
         if ProjectDeploymentsModel.offered { labels.append((.deploy, "🚀 Deploy")) }
         if ProjectEnvoyerModel.offered { labels.append((.envoyer, "🚢 Envoyer")) }
-        // The meeting's transcript, while one runs on this project and after it.
-        if meeting.transcript(for: repo) != nil { labels.append((.meeting, meeting.isFor(repo) ? "🎙 Meeting ●" : "🎙 Meeting")) }
         return BoardTabStrip(labels: labels, active: model.tab) { select($0) }
     }
     private func select(_ tab: BoardTab) {
-        model.tab = tab == .issues || tab == .review || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) || projectTabOffered(tab) || tab == .meeting ? tab : .pulls
+        model.tab = tab == .issues || tab == .review || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) || projectTabOffered(tab) ? tab : .pulls
         if model.tab == .run { model.run.open() }
     }
 

@@ -36,7 +36,7 @@ struct SettingsSidebar: View {
 
     @ViewBuilder private var content: some View {
         // This computer's own settings come first: they need no Admin token.
-        ThisComputerRows(selected: selected == Screen.meetingSettings.id)
+        ThisComputerRows()
         ClientSettingsRows(selected: selected)
         // Mail under This computer, each mailbox a row as a project is (Windows #141).
         if MailSettingsModel.offered { MailSettingsRows(selected: selected) }

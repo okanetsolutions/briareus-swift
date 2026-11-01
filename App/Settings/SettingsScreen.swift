@@ -1,4 +1,4 @@
-// The Settings tab: this device's connection, ElevenLabs voice and device settings, then for an Admin token
+// The Settings tab: this device's connection and device settings, then for an Admin token
 // the projects (in server order, rearranged by Edit or Move up/down), providers, database pool, SSH servers,
 // Forge accounts and Slack workspaces. Each row opens its form, matching the Mac settings sidebar.
 import SwiftUI
@@ -17,7 +17,6 @@ struct SettingsScreen: View {
         List {
             SettingsConnectionSections()
             ClientSettingsSection()
-            VoiceSettingsSection()
             DeviceSettingsSections()
             let why = settingsUnavailableReason("settings_projects", path: "settings/projects", what: "Project settings", manage: "projects")
             if let why {

@@ -2,7 +2,7 @@
 // its cost and summary, whether someone has handled its findings, and every finding it registered with the verification
 // step's verdict. A person may mark a review handled or reopen it (`update_code_review`) and overrule a finding's verdict
 // with a reason (`update_code_review_finding`); the answers are folded back into the list as read. Both apps' Code reviews
-// tab, the voice and the meeting read these. No UI here.
+// tab reads these. No UI here.
 import Foundation
 
 /// The verify step's ruling on whether the pull request must change for a finding.
