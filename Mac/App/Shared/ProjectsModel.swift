@@ -32,6 +32,8 @@ final class ProjectsModel: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     private var signOut: AnyCancellable?
     private var recountTask: Task<Void, Never>?
+    /// Each project's saved conversations, parsed once: every save of them goes through here.
+    let saved = SavedSessionLists(cache: Store.shared.cache)
 
     private init() {
         if let saved = Store.shared.cache.value("projects") { adopt(saved); recount() }
@@ -68,6 +70,7 @@ final class ProjectsModel: ObservableObject {
     private func reset() {
         generation += 1
         recountTask?.cancel(); recountTask = nil
+        saved.reset()
         sessionsError = nil
         projects = []; raw = .null; counts = [:]; busy = [:]; overview = SessionOverview([])
         loaded = false; error = nil; openProject = nil
@@ -89,7 +92,7 @@ final class ProjectsModel: ObservableObject {
         var counts: [String: Int] = [:], busy: [String: Bool] = [:]
         var all: [Session] = []
         for p in projects {
-            guard let list = Store.shared.cache.value("sessions:\(p.repo)"), let sessions = Session.parseList(list) else { continue }
+            guard let sessions = saved.list(p.repo) else { continue }
             counts[p.repo] = sessions.count
             busy[p.repo] = sessions.contains { $0.isActive }
             all += sessions
@@ -133,7 +136,7 @@ final class ProjectsModel: ObservableObject {
             guard mine == generation else { return nil }
             guard let items = Session.parseList(all) else { throw APIError(.nonJSON) }
             for p in projects {
-                Store.shared.cache.store(Session.json(items.filter { $0.repo == p.repo }), "sessions:\(p.repo)")
+                saved.save(items.filter { $0.repo == p.repo }, repo: p.repo)
             }
             if sessionsError != nil { sessionsError = nil }
             recount()
@@ -150,7 +153,7 @@ final class ProjectsModel: ObservableObject {
     /// then asks the server again in case the list changed in other ways too.
     func forget(repo: String?, id: String?) {
         guard let repo, !repo.isEmpty, let id, !id.isEmpty else { return }
-        _ = Store.shared.cache.removeSession(id, repo: repo)
+        _ = saved.remove(id, repo: repo)
         Store.shared.cache.remove("transcript:\(id)")
         scheduleRecount()
         guard let open = openProject, open.project.repo == repo else { return }
@@ -205,11 +208,11 @@ final class SessionFeed: ObservableObject {
         switch SessionsEvent(event, j) {
         case .session(let s)?:
             guard let repo = s.repo else { return }
-            if cache.upsertSession(s, repo: repo) != nil { ProjectsModel.shared.scheduleRecount() }
+            if ProjectsModel.shared.saved.upsert(s, repo: repo) != nil { ProjectsModel.shared.scheduleRecount() }
             post(.sessionLive, ["repo": repo, "session": s.raw])
         case .deleted(let id)?:
             for p in ProjectsModel.shared.projects {
-                let saved = cache.removeSession(id, repo: p.repo)
+                let saved = ProjectsModel.shared.saved.remove(id, repo: p.repo)
                 guard saved != nil || ProjectsModel.shared.openProject?.project.repo == p.repo else { continue }
                 cache.remove("transcript:\(id)")
                 post(.sessionForgotten, ["id": id, "repo": p.repo])
