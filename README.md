@@ -23,7 +23,7 @@ A native SwiftUI client for [Briareus](https://github.com/nadinyamaui/briareus),
 
 ## What it does
 
-The iPhone and iPad app opens on tabs, the Mac app's sidebar strip laid out for a phone: **Projects** (the projects, their conversations and boards), **Pull requests**, **Status** (how many conversations need you, are working and are ready, each waiting one's question answered in place with its options or a reply, and what is working now, with links to the server's resources and its CI/CD statistics; the tab's badge is the count needing you), and **Settings**. The **Usage** dashboard is available on iPad only; iPhone never creates its model, loads its cached ledger or starts its requests and polling. Tabs depend on the server's supported routes. It runs on the Mac app's core (`Mac/Core`), so both apps read the server the same way. The screen stays on while the app is open.
+The iPhone and iPad app opens on tabs, the Mac app's sidebar strip laid out for a phone: **Projects** (the projects, their conversations and boards), **Status** (how many conversations need you, are working and are ready, each waiting one's question answered in place with its options or a reply, and what is working now, with links to the server's resources and its CI/CD statistics; the tab's badge is the count needing you), and **Settings**. The **Usage** dashboard is available on iPad only; iPhone never creates its model, loads its cached ledger or starts its requests and polling. Tabs depend on the server's supported routes. It runs on the Mac app's core (`Mac/Core`), so both apps read the server the same way. The screen stays on while the app is open.
 
 **Conversations**
 
@@ -63,7 +63,7 @@ The iPhone and iPad app opens on tabs, the Mac app's sidebar strip laid out for 
 
 **Recent server features**
 
-- Pin or unpin a conversation from its actions; pinned conversations lead both project and All lists, including live updates.
+- Pin or unpin a conversation from its actions; pinned conversations lead the project's list, including live updates.
 - Code reviews are stored on the server and read per pull request (`GET /pulls/{number}/code-reviews`) in its Code reviews tab, where a review is marked handled and a finding's verdict overruled; the review loop, findings triage and feedback assessments are gone, as the server dropped them. Implement feedback is back as a plain errand, suggested on a pull request labelled `feedback-given`.
 - CI/CD statistics (`GET /stats/ci`, `GET /ci/runs`) open from Status: totals, success rate and durations over 7, 30 or 90 days, per day, per repository and per check, and the runs themselves, for every project or one.
 - Project settings keep the PR actions' runtime and PR author (renamed from the code review's), and set how many Local mode sessions may share the local checkout. Providers can run DeepSeek Harness (`dsh`) and Qwen Code (`qwen`).
