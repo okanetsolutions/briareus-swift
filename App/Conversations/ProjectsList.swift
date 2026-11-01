@@ -20,11 +20,6 @@ struct ProjectsList: View {
                 Section { ErrorNotice(message: error) }.listRowBackground(Theme.row)
             }
             Section {
-                if !model.projects.isEmpty {
-                    DestinationLink(destination: .allSessions) {
-                        ProjectRowLabel(title: "All", sessions: model.allSessions.shown, loaded: model.sessionsLoaded)
-                    }
-                }
                 ForEach(model.projects, id: \.repo) { project in
                     DestinationLink(destination: .project(repo: project.repo)) {
                         ProjectFeedRowLabel(project: project, feed: store.feed(project.repo))

@@ -43,6 +43,9 @@ extension Session {
 
 /// The counts and lists of the overview, from every session the app holds.
 struct SessionOverview: Equatable, Sendable {
+    /// Why the overview stays empty when the server or the token cannot list sessions.
+    static let unavailableMessage = "Sessions are unavailable on this server or for this device."
+
     /// Waiting for an answer or a decision, the longest-waiting first.
     var needingYou: [Session]
     /// Working now, by title.

@@ -317,4 +317,22 @@ extension BoardLogicTests {
         changed.checks = "expected"
         XCTAssertEqual(boardPullMergeQuestion(changed), pending)
     }
+
+    func testBoardProgressKeepsBackgroundReadsOutOfLoadedLists() {
+        XCTAssertTrue(boardShowsLoading(loaded: false, refreshing: false))
+        XCTAssertTrue(boardShowsLoading(loaded: false, refreshing: true))
+        XCTAssertFalse(boardShowsLoading(loaded: true, refreshing: false))
+        XCTAssertTrue(boardShowsLoading(loaded: true, refreshing: true))
+    }
+
+    func testListTabsOfferTheirOwnFiltersAndReviewNone() {
+        XCTAssertEqual(BoardListTab.pulls.filterKinds, [.author, .reviewer, .label])
+        XCTAssertEqual(BoardListTab.issues.filterKinds, [.author, .assignee, .label])
+        XCTAssertTrue(BoardListTab.review.filterKinds.isEmpty)
+    }
+
+    func testReviewTabLabelAddsTheCountOnceRead() {
+        XCTAssertNotEqual(boardReviewTabLabel(count: nil), boardReviewTabLabel(count: 3))
+        XCTAssertTrue(boardReviewTabLabel(count: 3).contains("3"))
+    }
 }

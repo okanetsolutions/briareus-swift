@@ -41,7 +41,7 @@ struct MacProjectsChecks {
         store.read = { operation, _ in operation == "projects" ? projects : ["sessions": []] }
         let model = ProjectsModel.shared
         await model.load()
-        precondition(model.sessionsLoaded && model.allSessions.sessions.isEmpty)
+        precondition(model.sessionsError == nil && model.overview.quiet)
         try await unchangedReads()
         try await streamBurst()
         try await immediateRecount()
@@ -72,7 +72,7 @@ struct MacProjectsChecks {
     static func streamBurst() async throws {
         let store = Store.shared, model = ProjectsModel.shared
         var changes = 0
-        let subscription = model.$allSessions.dropFirst().sink { _ in changes += 1 }
+        let subscription = model.$overview.dropFirst().sink { _ in changes += 1 }
         defer { subscription.cancel() }
         for n in 1...100 {
             let repo = n.isMultiple(of: 2) ? "o/a" : "o/b"
@@ -85,7 +85,7 @@ struct MacProjectsChecks {
             if changes > 0 { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        precondition(changes == 1 && model.allSessions.sessions.count == 100 && model.overview.workingCount == 100,
+        precondition(changes == 1 && model.overview.workingCount == 100,
                      "One aggregation must include all projects in the burst")
         precondition(model.counts == ["o/a": 50, "o/b": 50] && model.busy == ["o/a": true, "o/b": true])
     }
@@ -98,7 +98,7 @@ struct MacProjectsChecks {
         defer { subscription.cancel() }
         model.forget(repo: "o/b", id: "s1")
         model.recount()
-        precondition(model.allSessions.sessions.count == 99 && model.counts["o/b"] == 49,
+        precondition(model.overview.workingCount == 99 && model.counts["o/b"] == 49,
                      "An explicit recount must include a pending deletion immediately")
         let before = changes
         try await Task.sleep(for: .milliseconds(150))
@@ -112,7 +112,7 @@ struct MacProjectsChecks {
         store.cache.removeAll()
         store.client = nil
         try await Task.sleep(for: .milliseconds(150))
-        precondition(model.projects.isEmpty && model.allSessions.sessions.isEmpty && !model.sessionsLoaded,
+        precondition(model.projects.isEmpty && model.sessionsError == nil,
                      "A pending aggregation must not restore state after sign-out")
         precondition(model.counts.isEmpty && model.busy.isEmpty && model.overview.quiet)
     }

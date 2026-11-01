@@ -163,12 +163,9 @@ final class ClientUpdatesTests: XCTestCase {
     private func session(_ id: String, created: String, pinned: String? = nil, status: String = "idle") -> Session {
         Session(["id": .string(id), "repo": "o/r", "status": .string(status), "createdAt": .string(created), "pinnedAt": .string(orNull: pinned)])!
     }
-    func testPinnedSessionsLeadActiveSessionsAndNewestPinsLeadOlderPins() {
-        let older = session("older", created: "2026-01-01T00:00:00Z", pinned: "2026-10-27T00:00:00Z")
+    func testPinBodiesToggleAndPinsSurviveSaving() {
         let newer = session("newer", created: "2026-01-02T00:00:00Z", pinned: "2026-10-28T00:00:00Z")
         let active = session("active", created: "2026-10-28T00:00:00Z", status: "running")
-        let all = AllSessions(sessions: [active, older, newer], projects: [])
-        XCTAssertEqual(all.shown.map(\.id), ["newer", "older", "active"])
         XCTAssertEqual(newer.pinBody, ["pinned": false])
         XCTAssertEqual(active.pinBody, ["pinned": true])
         XCTAssertEqual(Session.parseList(Session.json([newer]))?.first?.pinnedAt, newer.pinnedAt)

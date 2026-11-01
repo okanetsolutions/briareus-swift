@@ -8,7 +8,7 @@ import SwiftUI
 
 struct BoardScreen: View {
     let repo: String
-    private typealias Tab = GlobalBoardTab
+    private typealias Tab = BoardListTab
 
     @EnvironmentObject private var store: Store
     @ObservedObject private var feed: ProjectFeed

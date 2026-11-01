@@ -86,7 +86,7 @@ struct ProjectFeedChecks {
         try await model.load()
         let feed = store.feed(repo)
         var changes = 0
-        let subscription = model.$allSessions.dropFirst().sink { _ in changes += 1 }
+        let subscription = model.$overview.dropFirst().sink { _ in changes += 1 }
         defer { subscription.cancel() }
         for n in 1...100 {
             feed.upsert(Session(["id": .string("s\(n)"), "repo": .string(repo), "status": "running"])!)
@@ -96,11 +96,11 @@ struct ProjectFeedChecks {
             if changes > 0 { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        precondition(changes == 1 && model.allSessions.sessions.count == 100 && model.overview.working.count == 100,
+        precondition(changes == 1 && model.overview.working.count == 100,
                      "One overview refresh must include the entire burst")
         feed.remove("s1")
         model.recount()
-        precondition(changes == 2 && model.allSessions.sessions.count == 99,
+        precondition(changes == 2 && model.overview.working.count == 99,
                      "An explicit recount must reflect deletions immediately")
         try await Task.sleep(for: .milliseconds(150))
         precondition(changes == 2, "An explicit recount must cancel the pending refresh")
@@ -108,7 +108,7 @@ struct ProjectFeedChecks {
         store.cache.removeAll()
         store.client = nil
         try await Task.sleep(for: .milliseconds(150))
-        precondition(model.projects.isEmpty && model.allSessions.sessions.isEmpty && !model.sessionsLoaded,
+        precondition(model.projects.isEmpty && model.overview.working.isEmpty,
                      "A pending overview refresh must not restore data after sign-out")
     }
 
@@ -168,9 +168,6 @@ struct ProjectFeedChecks {
                 let saved = store.cache.value(key).flatMap(Session.parseList)
                 precondition(saved == (state == "saved" ? [second] : nil),
                              "Deletion may update only an existing full-list cache")
-                let all = AllSessions(sessions: feed.sessions, projects: [Project(repo: repo)])
-                precondition(all.cacheIsLoaded(projectsLoaded: true, cachedRepos: saved == nil ? [] : [repo]) == (state == "saved"),
-                             "Live-only deletions must not make All complete")
                 if drop { feed.drop("s2") } else { feed.remove("s2") }
                 precondition(feed.sessions.isEmpty)
                 precondition(store.cache.value(key).flatMap(Session.parseList) == (state == "saved" ? [] : nil),

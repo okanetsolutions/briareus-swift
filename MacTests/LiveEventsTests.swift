@@ -37,11 +37,7 @@ final class LiveEventsTests: XCTestCase {
         let cache = DiskCache(directory: directory, protection: [])
         defer { cache.flush(); try? FileManager.default.removeItem(at: directory) }
         let repo = "okanet/app", key = "sessions:\(repo)"
-        let all = AllSessions(sessions: [], projects: [Project(repo: repo)])
-        func loaded() -> Bool {
-            all.cacheIsLoaded(projectsLoaded: true,
-                              cachedRepos: cache.value(key).flatMap(Session.parseList) == nil ? [] : [repo])
-        }
+        func loaded() -> Bool { cache.value(key).flatMap(Session.parseList) != nil }
 
         XCTAssertNil(cache.upsertSession(session("s1"), repo: repo))
         XCTAssertNil(cache.value(key))

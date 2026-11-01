@@ -25,17 +25,7 @@ extension BoardModel {
     }
 }
 
-/// The global board uses the same menus and toggles as a project's board.
-extension GlobalPullsModel {
-    func pick(_ kind: FilterKind) {
-        guard let selected = BoardFilterControls.pick(kind, filter: currentFilter, rows: filterRows) else { return }
-        currentFilter = selected
-    }
-    func toggleLaterStacked() { currentFilter.hideLaterStacked.toggle() }
-    func toggleFailingChecks() { currentFilter.hideFailingChecks.toggle() }
-}
-
-/// Shared drawing and native popup menus for the project and global board headers.
+/// Shared drawing and native popup menus for the project board headers.
 @MainActor
 enum BoardFilterControls {
     static func pick(_ kind: FilterKind, filter: BoardFilter, rows: [BoardRow]) -> BoardFilter? {

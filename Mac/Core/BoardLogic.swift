@@ -367,3 +367,19 @@ func boardPullMergeQuestion(_ pull: PullSummary) -> String {
     else if pull.checks == "pending" || pull.checks == "expected" { message += "\n\nSome checks are still running." }
     return message
 }
+
+/// Background reads keep cached board rows in place; initial loads and user refreshes show progress.
+func boardShowsLoading(loaded: Bool, refreshing: Bool) -> Bool { !loaded || refreshing }
+
+/// The lists a project's board offers, each with its own filters.
+enum BoardListTab: Hashable, CaseIterable, Sendable {
+    case pulls, issues, review
+
+    var filterKinds: [FilterKind] {
+        self == .review ? [] : boardFilterKinds(pulls: self == .pulls)
+    }
+    var loadingText: String { self == .issues ? "Loading issues…" : "Loading pull requests…" }
+}
+
+/// The Review List tab's label on the Mac's boards, its count once the board is read.
+func boardReviewTabLabel(count: Int?) -> String { count.map { "✓ Review List \($0)" } ?? "✓ Review List" }

@@ -1,12 +1,11 @@
-// The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then Pull requests, WhatsApp, ✉, ◉ Status with
+// The strip along the top of the sidebar (screen_projects.c sidebar_top): ＋ New session, then WhatsApp, ✉, ◉ Status with
 // the count of conversations and approvals waiting on you, 📊, as compact icon buttons (⚙ Settings is at the foot's left). WhatsApp's mark is drawn, as no font has it.
 import SwiftUI
 
-enum StripAction { case newSession, whatsapp, mail, status, usage, globalPulls }
+enum StripAction { case newSession, whatsapp, mail, status, usage }
 
 struct SidebarStrip: View {
-    @ObservedObject private var store = Store.shared
-    /// The detail pane's root id, for the Pull requests, WhatsApp, ✉, ◉ and 📊 switches' accent.
+    /// The detail pane's root id, for the WhatsApp, ✉, ◉ and 📊 switches' accent.
     var selected: String?
     /// Approvals an agent waits on (the attention inbox), counted on the ◉ badge.
     var approvals: Int
@@ -20,7 +19,7 @@ struct SidebarStrip: View {
 
     var body: some View {
         HStack(spacing: Self.gap) {
-            // Five compact icons and their gaps leave 98pt for New session in the 248pt strip, including its insets.
+            // Four compact icons and their gaps leave 123pt for New session in the 248pt strip, including its insets.
             if canStartSession {
                 StripButton(active: false, action: { action(.newSession) }) {
                     Text("＋ New session").font(Theme.footnote).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.tail)
@@ -31,13 +30,6 @@ struct SidebarStrip: View {
                 .help("New session")
             } else {
                 Spacer(minLength: 0)
-            }
-            if store.supports("projects") && store.supports("pulls") {
-                StripButton(active: selected == "global-pulls", action: { action(.globalPulls) }) {
-                    Image(systemName: "arrow.triangle.pull").font(Theme.footnote)
-                        .foregroundStyle(selected == "global-pulls" ? Theme.accent : Theme.ink)
-                }
-                .frame(width: Self.iconWidth).help("Pull requests across all projects").accessibilityLabel("Pull requests")
             }
             StripButton(active: selected == "whatsapp", action: { action(.whatsapp) }) { WhatsAppMark() }
                 .frame(width: Self.iconWidth).help("WhatsApp")
