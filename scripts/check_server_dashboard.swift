@@ -10,6 +10,8 @@ final class Store {
     var calls: [String] = []
     var respond: (String) async throws -> JSON = { _ in [:] }
     func supports(_ name: String) -> Bool { offered.contains(name) }
+    /// No feed has read a project here: the saved lists name the sessions.
+    func loadedSessions(_ repo: String) -> [Session]? { nil }
     func call(_ name: String, _ args: JSON = [:]) async throws -> JSON {
         calls.append(name)
         return try await respond(name)

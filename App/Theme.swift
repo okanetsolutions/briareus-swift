@@ -76,8 +76,8 @@ extension Color {
     }
 }
 
-/// A status's dot, still as the Mac's and Windows' are: a pulse that never stopped redrew every list holding a working
-/// conversation many times a second for as long as it was on screen.
+/// A status's dot, still as the Mac's is: a pulse that never stopped redrew every list holding a working conversation
+/// many times a second for as long as it was on screen.
 struct StatusDot: View {
     let status: String
     var body: some View {

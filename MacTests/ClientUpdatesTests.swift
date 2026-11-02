@@ -324,14 +324,6 @@ final class ClientUpdatesTests: XCTestCase {
         XCTAssertEqual(body["host"], "host.test")
     }
 
-    func testProjectConversationListPutsEveryPinBeforeUnpinnedWorkingSessions() {
-        let working = session("working", created: "2026-10-28T00:00:00Z", status: "running")
-        let recent = session("recent", created: "2026-10-28T00:00:00Z")
-        let oldPin = session("old-pin", created: "2026-01-01T00:00:00Z", pinned: "2026-10-27T00:00:00Z", status: "running")
-        let idlePin = session("idle-pin", created: "2026-01-01T00:00:00Z", pinned: "2026-10-28T00:00:00Z")
-        XCTAssertEqual(conversationsShown([working, oldPin, recent, idlePin], search: "", showClosed: false).map(\.id),
-                       ["idle-pin", "old-pin", "working", "recent"])
-    }
     func testSharingSaveReplacesOnlyOneResourceAndRejectsMismatchedEchoes() throws {
         let previous: JSON = [["kind": "project", "id": "5", "userId": 2], ["kind": "sshServer", "id": "5", "userId": 3], ["kind": "project", "id": "6", "userId": 4]]
         let update = try SharingUpdate(["kind": "project", "id": "5", "userIds": [7]], kind: .project, resourceID: "5", previous: previous)

@@ -1,4 +1,5 @@
-// A conversation's row in the project's list, drawn from Core's ConversationRow.
+// A conversation's row in the project's list, drawn from Core's ConversationRow, and the mark beside its title that the
+// conversation's strip draws too.
 import SwiftUI
 
 /// A conversation in a list: its mark, its title, and a line of provider, branch, state and age. Equatable on its row's

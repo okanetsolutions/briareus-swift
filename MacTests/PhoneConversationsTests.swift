@@ -68,9 +68,14 @@ final class PhoneConversationsTests: XCTestCase {
         XCTAssertNil(working.markTone)
         XCTAssertNotNil(working.pullBadge)
         XCTAssertTrue(ConversationRow(session(["status": "closed"]), now: now).closed)
-        // A row is equal to the one before while its record says the same, whatever else changed in the list.
-        XCTAssertEqual(ConversationRow(waiting, now: now), ConversationRow(waiting, now: now))
-        XCTAssertNotEqual(ConversationRow(waiting, now: now), ConversationRow(session(["id": "a", "title": "Renamed"]), now: now))
+        // A record whose change the row does not draw (its spend, its context) makes the same row; a renamed one does not.
+        var busier = waiting.raw
+        busier["usage"] = ["costUsd": 2]
+        busier["contextTokens"] = 90_000
+        XCTAssertEqual(ConversationRow(Session(busier)!, now: now), row)
+        var renamed = waiting.raw
+        renamed["title"] = "Renamed"
+        XCTAssertNotEqual(ConversationRow(Session(renamed)!, now: now), row)
     }
 
     // MARK: The list
@@ -84,7 +89,7 @@ final class PhoneConversationsTests: XCTestCase {
         XCTAssertEqual(conversationsShown([session(["id": "d"])], search: "new", showClosed: false).map(\.id), ["d"])
     }
     func testShownConversationsPutThePinnedFirstAndKeepTheRestInPlace() {
-        let older = session(["id": "older", "pinnedAt": "2026-10-27T00:00:00Z"])
+        let older = session(["id": "older", "status": "running", "pinnedAt": "2026-10-27T00:00:00Z"])
         let newer = session(["id": "newer", "pinnedAt": "2026-10-28T00:00:00Z"])
         let list = [session(["id": "a"]), older, session(["id": "work", "status": "running"]), newer, session(["id": "b"])]
         XCTAssertEqual(conversationsShown(list, search: "", showClosed: false).map(\.id), ["newer", "older", "a", "work", "b"])
