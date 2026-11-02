@@ -132,8 +132,12 @@ struct ProjectFeedChecks {
                      "Live events must not restore a wiped full-list cache")
         feed.adopt([added, running, second])
         feed.upsert(first)
-        precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, first, second],
-                     "Live events must keep updating the cache after a full read")
+        precondition(feed.sessions == [added, first, second], "Live events must keep changing the list after a full read")
+        precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, running, second],
+                     "Live events must leave the saved full read for the next read to replace")
+        feed.remove("s2")
+        precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, first],
+                     "A deletion must save the list held, with the live records since the full read")
     }
 
     @MainActor

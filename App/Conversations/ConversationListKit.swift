@@ -1,5 +1,4 @@
-// What the conversation lists draw around their rows: the Show more row ending a long list, shared by the project and
-// All lists.
+// What the project's conversation list draws around its rows: the Show more row ending a long list.
 import SwiftUI
 
 /// The last row of a long list: a button drawing the next page, with how many conversations wait below it.

@@ -1,5 +1,5 @@
-// What the iPhone app's conversation list and screen work out: the pull request mark, the list's filters, the bulk
-// actions' targets and the polling pace.
+// What the iPhone app's conversation list and screen work out: the pull request mark, what a row draws, the list's
+// filters and order, and the polling pace.
 import XCTest
 @testable import BriareusMacCore
 
@@ -49,6 +49,30 @@ final class PhoneConversationsTests: XCTestCase {
         XCTAssertEqual(session(["status": "running", "zeus": true]).conversationRowDetail(now: now), "\u{26A1} zeus \u{00B7} running")
     }
 
+    func testRowCarriesTheRecordsValues() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let waiting = session(["id": "a", "title": "Fix it", "awaitingAnswer": true, "pinnedAt": "2026-10-28T00:00:00Z",
+                               "createdAt": "2023-11-14T22:03:20Z", "prStatus": ["number": 9, "state": "merged"]])
+        let row = ConversationRow(waiting, now: now)
+        XCTAssertEqual(row.id, "a")
+        XCTAssertEqual(row.title, waiting.displayTitle)
+        XCTAssertEqual(row.detail, waiting.conversationRowDetail(now: now))
+        XCTAssertEqual(row.dot, "queued")
+        XCTAssertEqual(row.markTone, "merged")
+        XCTAssertEqual(row.pullBadge, waiting.pullBadge)
+        XCTAssertTrue(row.pinned)
+        XCTAssertFalse(row.closed)
+        // At work, the dot shows instead of the pull request's mark.
+        let working = ConversationRow(session(["status": "running", "prStatus": ["number": 9, "state": "open"]]), now: now)
+        XCTAssertEqual(working.dot, "running")
+        XCTAssertNil(working.markTone)
+        XCTAssertNotNil(working.pullBadge)
+        XCTAssertTrue(ConversationRow(session(["status": "closed"]), now: now).closed)
+        // A row is equal to the one before while its record says the same, whatever else changed in the list.
+        XCTAssertEqual(ConversationRow(waiting, now: now), ConversationRow(waiting, now: now))
+        XCTAssertNotEqual(ConversationRow(waiting, now: now), ConversationRow(session(["id": "a", "title": "Renamed"]), now: now))
+    }
+
     // MARK: The list
 
     func testShownConversationsHideClosedAndMatchTheSearch() {
@@ -59,6 +83,12 @@ final class PhoneConversationsTests: XCTestCase {
         XCTAssertEqual(conversationsShown(list, search: " LOGIN ", showClosed: true).map(\.id), ["a", "b"])
         XCTAssertEqual(conversationsShown([session(["id": "d"])], search: "new", showClosed: false).map(\.id), ["d"])
     }
+    func testShownConversationsPutThePinnedFirstAndKeepTheRestInPlace() {
+        let older = session(["id": "older", "pinnedAt": "2026-10-27T00:00:00Z"])
+        let newer = session(["id": "newer", "pinnedAt": "2026-10-28T00:00:00Z"])
+        let list = [session(["id": "a"]), older, session(["id": "work", "status": "running"]), newer, session(["id": "b"])]
+        XCTAssertEqual(conversationsShown(list, search: "", showClosed: false).map(\.id), ["newer", "older", "a", "work", "b"])
+    }
     func testPageStopsAtTheLimitAndCountsTheRest() {
         let list = (0..<5).map { session(["id": .string("s\($0)")]) }
         let page = conversationPage(list, limit: 3)
@@ -67,28 +97,6 @@ final class PhoneConversationsTests: XCTestCase {
         XCTAssertEqual(conversationPage(list, limit: 9).hidden, 0)
         XCTAssertEqual(conversationPage(list, limit: -1).rows.count, 0)
         XCTAssertEqual(conversationPage(list, limit: -1).hidden, 5)
-    }
-    func testGroupsLimitOnlyRecentAndSelectOnlyWhatIsDrawn() {
-        let pinned = session(["id": "pin", "pinnedAt": "2026-10-28T00:00:00Z"])
-        let working = session(["id": "work", "status": "running"])
-        let recent = (0..<4).map { session(["id": .string("r\($0)")]) }
-        let groups = ConversationGroups([pinned, working] + recent, limit: 1)
-        XCTAssertEqual(groups.pinned.map(\.id), ["pin"])
-        XCTAssertEqual(groups.active.map(\.id), ["work"])
-        XCTAssertEqual(groups.recent.map(\.id), ["r0"])
-        XCTAssertEqual(groups.hidden, 3)
-        XCTAssertEqual(groups.drawnIDs, ["pin", "work", "r0"])
-        XCTAssertEqual(ConversationGroups([pinned, working] + recent).hidden, 0)
-    }
-    func testBulkCloseTakesOnlyOpenConversations() {
-        let list = [session(["id": "a", "status": "running"]), session(["id": "b", "status": "closed"]),
-                    session(["id": "c", "status": "failed"]), session(["id": "d", "status": "idle"])]
-        let picked: Set<String> = ["a", "b", "c", "d"]
-        XCTAssertEqual(bulkConversationTargets(list, picked: picked, delete: false), ["a", "d"])
-        XCTAssertEqual(bulkConversationTargets(list, picked: picked, delete: true), ["a", "b", "c", "d"])
-        XCTAssertEqual(bulkConversationTargets(list, picked: ["b"], delete: false), [])
-        XCTAssertEqual(bulkConversationQuestion(count: 1, delete: true).title, "Delete 1 conversation and their logs?")
-        XCTAssertEqual(bulkConversationQuestion(count: 3, delete: false).title, "Close 3 sessions?")
     }
 
     // MARK: The conversation

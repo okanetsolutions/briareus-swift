@@ -79,12 +79,12 @@ final class ProjectFeed: ObservableObject {
     }
     /// A record from the live stream, in its row's place or first when new; the overview and its badge follow it, as a
     /// turn starting or ending or a question asked all change them.
-    /// Once the full list is held it is the one changed and saved: parsing the saved copy back for every event made the
-    /// stream's catch-up (every session at once) cost the main thread the whole list per session.
+    /// Only the list held here changes: the stream sends a working session's record at every step of its turn, and
+    /// writing the project's whole list to disk again for each one kept the phone busy for as long as an agent worked.
+    /// The next full read saves it.
     func upsert(_ s: Session) {
         guard let list = sessions.upserting(s) else { return }
         sessions = list
-        save()
         ProjectsModel.shared.scheduleRecount()
     }
     /// A conversation the live stream says was deleted, if it is in this list.
@@ -95,8 +95,8 @@ final class ProjectFeed: ObservableObject {
         Store.shared.cache.remove("transcript:\(id)")
         ProjectsModel.shared.scheduleRecount()
     }
-    /// The full list, while it is the one saved. One removed from the cache since (the device's repositories changed)
-    /// stays unsaved until the next full read.
+    /// The full list, with the live records since it was read, while a full read of it is saved. One removed from the
+    /// cache since (the device's repositories changed) stays unsaved until the next full read.
     var savedSessions: [Session]? { sessionsLoaded && Store.shared.cache.contains("sessions:\(repo)") ? sessions : nil }
     /// Live records alone cannot make a full list, so only one already read is saved.
     private func save() {
