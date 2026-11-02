@@ -35,7 +35,7 @@ The iPhone and iPad app opens on tabs, the Mac app's sidebar strip laid out for 
 - Opens the session's shared browser, the headless Chromium its agent drives, full screen from the conversation's menu, or from the 🌐 line over the transcript while it is on: switch it on or off, watch the tab in view live and use it on the same tabs the agent does, with its tabs, an address field, back, forward and reload. A tap clicks, a drag scrolls the page (or, in Drag mode, drags in it), and the keyboard types into it, with Escape, Tab, the arrows and Paste above it.
 - With an Admin token, opens a session's ⚡ Webhook from the conversation's menu (● while armed): arm it, set its hourly and turns-in-a-row caps, SSH unattended and the instructions webhook, copy its URLs and keys (hidden until shown), see held deliveries and pauses, and rotate its keys. Going back with changes not saved asks first.
 - Records voice notes and has the server transcribe them into the message box, in whichever language was spoken. On a server that cannot transcribe, the microphone says what the server is missing.
-- On an iPad, keeps the projects and conversations in a column on the left and the chosen conversation on the right. A window too narrow for both falls back to the phone's single column. Open in New Window, in a conversation's menu, opens it in a window of its own beside the app's, as the Mac pops one out; Status, Usage and a conversation's shared browser open in one the same way.
+- On an iPad, keeps the projects and conversations in a column on the left and the chosen conversation on the right. A window too narrow for both falls back to the phone's single column. Open in New Window, in a conversation's menu or its row's, opens it in a window of its own beside the app's, as the Mac pops one out; Status, Usage and a conversation's shared browser open in one the same way.
 - On a Mac, runs as a Mac app of its own (`Mac/`), the twin of [Briareus for Windows](https://github.com/okanetsolutions/briareus-windows): the same screens, layout and features, on the client API (`/api/v1`). See [The Mac app](#the-mac-app).
 
 **Project board**
@@ -333,7 +333,7 @@ Manual acceptance with a deployed test project:
 
 The iPhone and iPad app has what the Mac app has, except what needs the Mac itself: SSH and SFTP sessions (run by the Mac's own `ssh` and `sftp`), the music player and WhatsApp Web. The API offers no push notifications.
 
-- A project's conversation list on the phone is kept light: a row opens its conversation and does nothing else, and there is no ☑ Select for closing or deleting several at once, as the Mac's sidebar has. A conversation's own menu renames, pins, closes, reopens and deletes it.
+- A project's conversation list on the iPhone and iPad is kept light: a row opens its conversation (on an iPad, holding it opens it in a new window too), and there is no ☑ Select for closing or deleting several at once, as the Mac's sidebar has. A conversation's own menu renames, pins, closes, reopens and deletes it.
 - In a car the agent's replies are not shown or read aloud: the screen says what a conversation is doing and what it asks, and the transcript, file changes and diffs stay on the phone. Search, and a branch that is not on the list, need the phone too, as does pairing.
 - CarPlay lists show as many rows as the car allows, fewer while it moves; the rest are on the phone.
 - Diffs GitHub does not return (binary or very large files) open on GitHub instead.

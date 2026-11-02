@@ -98,8 +98,9 @@ final class ProjectFeed: ObservableObject {
     /// The full list, with the live records since it was read, while a full read of it is saved. One removed from the
     /// cache since (the device's repositories changed) stays unsaved until the next full read.
     var savedSessions: [Session]? { sessionsLoaded && Store.shared.cache.contains("sessions:\(repo)") ? sessions : nil }
-    /// Live records alone cannot make a full list, so only one already read is saved.
-    private func save() {
+    /// Saves the list held, with the live records since its full read, so the next launch (offline, or in a car) opens
+    /// on what was last shown. Live records alone cannot make a full list, so only one already read is saved.
+    func save() {
         guard savedSessions != nil else { return }
         Store.shared.cache.store(Session.json(sessions), "sessions:\(repo)")
     }

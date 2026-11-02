@@ -1,7 +1,8 @@
 // A project's conversations, as plainly as a phone can draw them: one list, the pinned first and then the newest, found
 // by their title and the closed ones on request, each row marked by its pull request where it has one. The toolbar opens
 // the project's board and a new conversation, and its menu ▶ Run on the default branch and the project's Laravel Forge.
-// Renaming, pinning, closing, reopening and deleting a conversation are on its own screen.
+// Renaming, pinning, closing, reopening and deleting a conversation are on its own screen; on an iPad, holding a row
+// opens it in a new window.
 import SwiftUI
 
 struct ProjectView: View {
@@ -9,6 +10,7 @@ struct ProjectView: View {
     @EnvironmentObject private var store: Store
     @ObservedObject private var feed: ProjectFeed
     @Environment(\.navigate) private var navigate
+    @WindowOpener private var openInWindow
     @State private var search = ""
     @State private var showClosed = false
     /// How many conversations are drawn; Show more adds a page.
@@ -58,17 +60,30 @@ struct ProjectView: View {
         let shown = conversationsShown(feed.sessions, search: search, showClosed: showClosed)
         let page = conversationPage(shown, limit: limit)
         let now = Date()
-        ForEach(page.rows, id: \.id) { s in
-            DestinationLink(destination: .conversation(id: s.id, session: s.raw)) {
-                ConversationRowLabel(row: ConversationRow(s, now: now)).equatable()
-            }
-        }
+        ForEach(page.rows, id: \.id) { row($0, now: now) }
         if page.hidden > 0 { ShowMoreRow(hidden: page.hidden) { limit += conversationPageSize } }
         if feed.sessionsLoaded && shown.isEmpty {
             Text(search.isEmpty ? (feed.sessions.isEmpty ? "No conversations here yet." : "No open conversations.") : "No matching conversations.")
                 .foregroundStyle(.secondary)
         }
         if !feed.sessionsLoaded && error == nil { ProgressView().frame(maxWidth: .infinity) }
+    }
+
+    /// A link to the conversation. On an iPad, holding it opens the conversation in a window of its own without reading
+    /// it in the column first; a phone has no menu on its rows.
+    @ViewBuilder private func row(_ s: Session, now: Date) -> some View {
+        let link = DestinationLink(destination: .conversation(id: s.id, session: s.raw)) {
+            ConversationRowLabel(row: ConversationRow(s, now: now)).equatable()
+        }
+        if let openInWindow {
+            link.contextMenu {
+                Button("Open in New Window", systemImage: "plus.rectangle.on.rectangle") {
+                    openInWindow(.conversation(id: s.id, session: s.raw))
+                }
+            }
+        } else {
+            link
+        }
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
