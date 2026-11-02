@@ -135,6 +135,9 @@ struct ProjectFeedChecks {
         precondition(feed.sessions == [added, first, second], "Live events must keep changing the list after a full read")
         precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, running, second],
                      "Live events must leave the saved full read for the next read to replace")
+        feed.saveChanges()
+        precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, first, second],
+                     "Leaving the front must save the live records since the full read")
         feed.remove("s2")
         precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, first],
                      "A deletion must save the list held, with the live records since the full read")

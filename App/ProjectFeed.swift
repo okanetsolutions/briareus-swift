@@ -70,6 +70,7 @@ final class ProjectFeed: ObservableObject {
         if list != sessions { sessions = list }
         sessionsLoaded = true
         Store.shared.cache.store(Session.json(list), "sessions:\(repo)")
+        unsaved = false
         for id in gone { Store.shared.cache.remove("transcript:\(id)") }
         ProjectsModel.shared.scheduleRecount()
     }
@@ -81,10 +82,11 @@ final class ProjectFeed: ObservableObject {
     /// turn starting or ending or a question asked all change them.
     /// Only the list held here changes: the stream sends a working session's record at every step of its turn, and
     /// writing the project's whole list to disk again for each one kept the phone busy for as long as an agent worked.
-    /// The next full read saves it.
+    /// The next full read saves it, or the app leaving the front (`saveChanges`).
     func upsert(_ s: Session) {
         guard let list = sessions.upserting(s) else { return }
         sessions = list
+        unsaved = true
         ProjectsModel.shared.scheduleRecount()
     }
     /// A conversation the live stream says was deleted, if it is in this list.
@@ -98,10 +100,15 @@ final class ProjectFeed: ObservableObject {
     /// The full list, with the live records since it was read, while a full read of it is saved. One removed from the
     /// cache since (the device's repositories changed) stays unsaved until the next full read.
     var savedSessions: [Session]? { sessionsLoaded && Store.shared.cache.contains("sessions:\(repo)") ? sessions : nil }
-    /// Saves the list held, with the live records since its full read, so the next launch (offline, or in a car) opens
-    /// on what was last shown. Live records alone cannot make a full list, so only one already read is saved.
-    func save() {
+    /// Live records changed the list since it was last saved.
+    private var unsaved = false
+    /// Saves the list if live records changed it since it was last saved, as the app leaves the front, so the next
+    /// launch (offline, or in a car) opens on what was last shown.
+    func saveChanges() { if unsaved { save() } }
+    /// Live records alone cannot make a full list, so only one already read is saved.
+    private func save() {
         guard savedSessions != nil else { return }
+        unsaved = false
         Store.shared.cache.store(Session.json(sessions), "sessions:\(repo)")
     }
 

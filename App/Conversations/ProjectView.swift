@@ -2,7 +2,7 @@
 // by their title and the closed ones on request, each row marked by its pull request where it has one. The toolbar opens
 // the project's board and a new conversation, and its menu ▶ Run on the default branch and the project's Laravel Forge.
 // Renaming, pinning, closing, reopening and deleting a conversation are on its own screen; on an iPad, holding a row
-// opens it in a new window.
+// offers Open in New Window.
 import SwiftUI
 
 struct ProjectView: View {
@@ -69,8 +69,8 @@ struct ProjectView: View {
         if !feed.sessionsLoaded && error == nil { ProgressView().frame(maxWidth: .infinity) }
     }
 
-    /// A link to the conversation. On an iPad, holding it opens the conversation in a window of its own without reading
-    /// it in the column first; a phone has no menu on its rows.
+    /// A link to the conversation. On an iPad, holding it offers Open in New Window, which opens the conversation in a
+    /// window of its own without reading it in the column first; a phone has no menu on its rows.
     @ViewBuilder private func row(_ s: Session, now: Date) -> some View {
         let link = DestinationLink(destination: .conversation(id: s.id, session: s.raw)) {
             ConversationRowLabel(row: ConversationRow(s, now: now)).equatable()

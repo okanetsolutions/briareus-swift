@@ -17,8 +17,11 @@ final class Store: ObservableObject {
     @Published var connectionError: String?
     /// The origin shown in the pairing field.
     @Published var server: String
-    /// The app is in front of its user (a window or the car's screen); polling pauses otherwise.
-    @Published var active = true
+    /// The app is in front of its user (a window or the car's screen); polling pauses otherwise. Leaving the front,
+    /// from a window or the car's screen, saves the feeds' lists that live records changed.
+    @Published var active = true {
+        didSet { if oldValue && !active { saveFeeds() } }
+    }
 
     let cache: DiskCache
     private static let originKey = "serverOrigin"
@@ -74,8 +77,8 @@ final class Store: ObservableObject {
     /// A project's saved conversations as its feed holds them, without making a feed (and reading its saved board) to
     /// ask. Nil while the feed has no full list saved.
     func loadedSessions(_ repo: String) -> [Session]? { feeds[repo]?.savedSessions }
-    /// Saves every feed's list as it holds it, as the app leaves the front: live records change only the lists in memory.
-    func saveFeeds() { for feed in feeds.values { feed.save() } }
+    /// Saves the feeds' lists that live records changed: those change only the lists in memory.
+    func saveFeeds() { for feed in feeds.values { feed.saveChanges() } }
 
     // MARK: Pairing
 

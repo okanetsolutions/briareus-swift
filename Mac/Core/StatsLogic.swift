@@ -349,8 +349,8 @@ struct KnownSessions: Sendable {
     var sessions: [Session]
 
     init(_ sessions: [Session]) { self.sessions = sessions }
-    /// Each of `repos`' conversation lists: as `held` has it (the iPhone's feed of a project, with the live records
-    /// since it was read, which are not saved), else as saved (`sessions:<repo>`).
+    /// Each of `repos`' conversation lists: as `held` has it (the iPhone's feed of a project, with live records its
+    /// saved list may not have yet), else as saved (`sessions:<repo>`).
     init(repos: [String], held: (String) -> [Session]? = { _ in nil }, cache: DiskCache) {
         sessions = repos.flatMap { held($0) ?? cache.value("sessions:\($0)").flatMap(Session.parseList) ?? [] }
     }

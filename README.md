@@ -333,7 +333,7 @@ Manual acceptance with a deployed test project:
 
 The iPhone and iPad app has what the Mac app has, except what needs the Mac itself: SSH and SFTP sessions (run by the Mac's own `ssh` and `sftp`), the music player and WhatsApp Web. The API offers no push notifications.
 
-- A project's conversation list on the iPhone and iPad is kept light: a row opens its conversation (on an iPad, holding it opens it in a new window too), and there is no ☑ Select for closing or deleting several at once, as the Mac's sidebar has. A conversation's own menu renames, pins, closes, reopens and deletes it.
+- A project's conversation list on the iPhone and iPad is kept light: a row opens its conversation (on an iPad, holding it also offers Open in New Window), and there is no ☑ Select for closing or deleting several at once, as the Mac's sidebar has. A conversation's own menu renames, pins, closes, reopens and deletes it.
 - In a car the agent's replies are not shown or read aloud: the screen says what a conversation is doing and what it asks, and the transcript, file changes and diffs stay on the phone. Search, and a branch that is not on the list, need the phone too, as does pairing.
 - CarPlay lists show as many rows as the car allows, fewer while it moves; the rest are on the phone.
 - Diffs GitHub does not return (binary or very large files) open on GitHub instead.
