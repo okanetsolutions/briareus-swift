@@ -82,11 +82,13 @@ final class ProjectFeed: ObservableObject {
     /// turn starting or ending or a question asked all change them.
     /// Only the list held here changes: the stream sends a working session's record at every step of its turn, and
     /// writing the project's whole list to disk again for each one kept the phone busy for as long as an agent worked.
-    /// The next full read saves it, or the app leaving the front (`saveChanges`).
+    /// The next full read saves it, or the app leaving the front (`saveChanges`). A record that lands after the app has
+    /// left, before its stream closes, is saved at once, as no later save would come.
     func upsert(_ s: Session) {
         guard let list = sessions.upserting(s) else { return }
         sessions = list
         unsaved = true
+        if !Store.shared.active { save() }
         ProjectsModel.shared.scheduleRecount()
     }
     /// A conversation the live stream says was deleted, if it is in this list.

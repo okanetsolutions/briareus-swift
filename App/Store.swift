@@ -85,7 +85,7 @@ final class Store: ObservableObject {
     private func adopt(_ connection: Connection) {
         device = connection.device; routes = connection.routes; transcribes = connection.transcribe
     }
-    private func dropClient() { client = nil; device = nil; routes = []; transcribes = nil; feeds = [:] }
+    private func dropClient() { saveFeeds(); client = nil; device = nil; routes = []; transcribes = nil; feeds = [:] }
     private func saveConnection(_ connection: Connection) { cache.store(connection.json, "connection") }
 
     private static func pair(_ client: APIClient) async throws -> Connection {

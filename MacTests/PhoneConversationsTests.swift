@@ -94,6 +94,11 @@ final class PhoneConversationsTests: XCTestCase {
         let list = [session(["id": "a"]), older, session(["id": "work", "status": "running"]), newer, session(["id": "b"])]
         XCTAssertEqual(conversationsShown(list, search: "", showClosed: false).map(\.id), ["newer", "older", "a", "work", "b"])
     }
+    func testShownConversationsPutTheNewestFirstWhateverTheFeedsOrder() {
+        let list = [session(["id": "old", "createdAt": "2026-10-01T00:00:00.000Z"]),
+                    session(["id": "new", "createdAt": "2026-10-02T00:00:00.000Z"])]
+        XCTAssertEqual(conversationsShown(list, search: "", showClosed: false).map(\.id), ["new", "old"])
+    }
     func testPageStopsAtTheLimitAndCountsTheRest() {
         let list = (0..<5).map { session(["id": .string("s\($0)")]) }
         let page = conversationPage(list, limit: 3)

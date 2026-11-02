@@ -74,15 +74,15 @@ struct ConversationRow: Equatable, Identifiable, Sendable {
     }
 }
 
-/// The conversations a project's list shows, in its order: the pinned first (the latest pin on top), then the rest as
-/// the feed holds them, newest first. Closed ones only when asked for, and only those whose title holds the search. A
+/// The conversations a project's list shows, in its order: the pinned first (the latest pin on top), then the rest
+/// newest first, as the Mac's sidebar orders them (`orderedByPins`). Closed ones only when asked for, and only those whose title holds the search. A
 /// conversation keeps its place while it starts and stops working: only its dot changes.
 func conversationsShown(_ sessions: [Session], search: String, showClosed: Bool) -> [Session] {
     let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
     let shown = sessions.filter { s in
         (showClosed || !s.isClosed) && (needle.isEmpty || s.displayTitle.localizedCaseInsensitiveContains(needle))
     }
-    return shown.filter(\.isPinned).orderedByPins() + shown.filter { !$0.isPinned }
+    return shown.orderedByPins()
 }
 
 /// How many rows a long conversation list draws at first and adds per Show more: drawing and diffing every closed

@@ -6,6 +6,7 @@ import Foundation
 final class Store: ObservableObject {
     static let shared = Store()
     @Published var client: APIClient?
+    var active = true
     let cache = DiskCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
     var read: (JSON) async throws -> JSON = { _ in [:] }
     func supports(_ operation: String) -> Bool { true }
@@ -141,6 +142,11 @@ struct ProjectFeedChecks {
         feed.remove("s2")
         precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, first],
                      "A deletion must save the list held, with the live records since the full read")
+        store.active = false
+        defer { store.active = true }
+        feed.upsert(running)
+        precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, running],
+                     "A live record landing after the app left the front must be saved, as no later save comes")
     }
 
     @MainActor
