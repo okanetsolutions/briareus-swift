@@ -166,7 +166,7 @@ struct ConversationScreen: View {
         if let text = conversationStripText(session) {
             Button { showingDetails = true } label: {
                 HStack(spacing: 8) {
-                    if session.pullTone != nil { ConversationMark(session: session) }
+                    if session.pullTone != nil { ConversationMark(dot: session.dotStatus, tone: session.markTone) }
                     else { Image(systemName: "gauge.with.dots.needle.33percent").font(.caption).foregroundStyle(.secondary) }
                     Text(text).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     Spacer(minLength: 0)

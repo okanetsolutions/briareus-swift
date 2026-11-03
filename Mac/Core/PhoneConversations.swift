@@ -1,6 +1,6 @@
 // What the iPhone app's conversation list and conversation screen work out for themselves: the pull request mark that
-// takes a row's status dot, which conversations a search and the closed switch leave, what a bulk Close or Delete works
-// through, and how often an open conversation is read again. No UI here.
+// takes a row's status dot, what a row draws, which conversations a search and the closed switch leave and in what
+// order, and how often an open conversation is read again. No UI here.
 import Foundation
 
 // MARK: - The pull request mark
@@ -32,6 +32,10 @@ extension Session {
 
     /// The Windows client's `sessionState`: an idle conversation with a question up is "waiting".
     var conversationState: String { status == "idle" && raw["awaitingAnswer"].is(true) ? "waiting" : status }
+    /// The status a conversation's dot shows: one waiting on a question reads as queued.
+    var dotStatus: String { conversationState == "waiting" ? "queued" : status }
+    /// The pull request mark that takes the status dot's place (`pullTone`); nil while the agent works, when the dot shows.
+    var markTone: String? { isActive ? nil : pullTone }
     /// A row's second line: provider, branch (an orchestrator's role in its place), state and age, the empty ones left out.
     func conversationRowDetail(now: Date = Date()) -> String {
         var parts: [String] = []
@@ -47,30 +51,38 @@ extension Session {
 
 // MARK: - The list
 
-/// Pins lead the project's list even when an unpinned conversation is working.
-/// Pinned and working ones are always drawn whole; the rest stop at `limit`, the others left for Show more.
-struct ConversationGroups: Equatable, Sendable {
-    let pinned: [Session]
-    let active: [Session]
-    let recent: [Session]
-    /// The recent conversations past the limit, not drawn.
-    let hidden: Int
-    init(_ sessions: [Session], limit: Int = .max) {
-        pinned = sessions.filter(\.isPinned).orderedByPins()
-        active = sessions.filter { !$0.isPinned && $0.isActive }
-        let page = conversationPage(sessions.filter { !$0.isPinned && !$0.isActive }, limit: limit)
-        recent = Array(page.rows); hidden = page.hidden
+/// A conversation as its row in the list draws it, worked out from the record once per redraw of the list. The row
+/// compares these values rather than the record, so a live update redraws only the rows whose values changed.
+struct ConversationRow: Equatable, Identifiable, Sendable {
+    let id: String
+    let title: String
+    /// Provider, branch, state and age (`conversationRowDetail`).
+    let detail: String
+    /// What the status dot shows (`dotStatus`).
+    let dot: String
+    /// The pull request mark that takes the dot's place (`markTone`).
+    let markTone: String?
+    /// The pull request badge, which VoiceOver reads after the row (`pullBadge`).
+    let pullBadge: String?
+    let pinned: Bool
+    let closed: Bool
+
+    init(_ s: Session, now: Date = Date()) {
+        id = s.id; title = s.displayTitle; detail = s.conversationRowDetail(now: now)
+        dot = s.dotStatus; markTone = s.markTone; pullBadge = s.pullBadge
+        pinned = s.isPinned; closed = s.isClosed
     }
-    /// The ids of every row drawn, which is all Select All picks: never a conversation the user cannot see.
-    var drawnIDs: Set<String> { Set((pinned + active + recent).map(\.id)) }
 }
 
-/// The conversations a project's list shows: closed ones only when asked for, and those whose title holds the search.
+/// The conversations a project's list shows, in its order: the pinned first (the latest pin on top), then the rest
+/// newest first, as the Mac's sidebar orders them (`orderedByPins`). Closed ones only when asked for, and only those whose title holds the search. A
+/// conversation keeps its place while it starts and stops working: only its dot changes.
 func conversationsShown(_ sessions: [Session], search: String, showClosed: Bool) -> [Session] {
     let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
-    return sessions.filter { s in
-        (showClosed || s.status != "closed") && (needle.isEmpty || s.displayTitle.localizedCaseInsensitiveContains(needle))
+    let shown = sessions.filter { s in
+        (showClosed || !s.isClosed) && (needle.isEmpty || s.displayTitle.localizedCaseInsensitiveContains(needle))
     }
+    return shown.orderedByPins()
 }
 
 /// How many rows a long conversation list draws at first and adds per Show more: drawing and diffing every closed
@@ -81,21 +93,6 @@ let conversationPageSize = 50
 func conversationPage(_ sessions: [Session], limit: Int) -> (rows: ArraySlice<Session>, hidden: Int) {
     let rows = sessions.prefix(max(0, limit))
     return (rows, sessions.count - rows.count)
-}
-
-/// Still holding a workspace and a database: the only kind a Close has anything to release.
-func conversationIsOpen(_ s: Session) -> Bool { ["queued", "preparing", "running", "idle"].contains(s.status) }
-
-/// The picked conversations a bulk action works through, in the list's order: every picked one for Delete, the open
-/// ones for Close.
-func bulkConversationTargets(_ sessions: [Session], picked: Set<String>, delete: Bool) -> [String] {
-    sessions.filter { picked.contains($0.id) && (delete || conversationIsOpen($0)) }.map(\.id)
-}
-/// The question before a bulk action, as the Mac's ☑ Select asks it.
-func bulkConversationQuestion(count n: Int, delete: Bool) -> (title: String, message: String) {
-    delete
-        ? ("Delete \(n) conversation\(n == 1 ? "" : "s") and their logs?", "This cannot be undone.")
-        : ("Close \(n) session\(n == 1 ? "" : "s")?", "Each one releases its workspace and database; the conversation stays readable.")
 }
 
 // MARK: - The conversation

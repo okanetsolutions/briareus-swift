@@ -89,6 +89,19 @@ final class StatsLogicTests: XCTestCase {
         XCTAssertEqual(known.record(rows[1])["repo"].string, "o/one")
         XCTAssertEqual(known.record(rows[0]), ["id": "z", "title": "z"])
     }
+    func testKnownSessionsPreferTheListAFeedHolds() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("briareus-stats-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = DiskCache(directory: directory, protection: [])
+        cache.store(j(#"[{"id":"a","status":"idle","title":"Saved"}]"#), "sessions:o/one")
+        cache.store(j(#"[{"id":"b","status":"idle","title":"Beta"}]"#), "sessions:o/two")
+        // o/one's feed holds a newer list, with a session the saved one has not seen; o/two falls back to what was saved.
+        let held = [Session(j(#"{"id":"c","status":"running","title":"Started live"}"#))!,
+                    Session(j(#"{"id":"a","status":"running","title":"Renamed live"}"#))!]
+        let known = KnownSessions(repos: ["o/one", "o/two"], held: { $0 == "o/one" ? held : nil }, cache: cache)
+        XCTAssertEqual(known.sessions.map(\.id), ["c", "a", "b"])
+        XCTAssertEqual(known.titles, ["c": "Started live", "a": "Renamed live", "b": "Beta"])
+    }
 
     func testServerStatsTilesDisksAndCharts() throws {
         let server = try XCTUnwrap(ServerStats(j(#"""

@@ -76,17 +76,12 @@ extension Color {
     }
 }
 
+/// A status's dot, still as the Mac's is: a pulse that never stopped redrew every list holding a working conversation
+/// many times a second for as long as it was on screen.
 struct StatusDot: View {
     let status: String
-    @State private var pulse = false
     var body: some View {
         Circle().fill(Theme.statusColor(status)).frame(width: CGFloat(BriareusLayout.statusDot), height: CGFloat(BriareusLayout.statusDot))
-            .overlay {
-                if status == "running" {
-                    Circle().stroke(Theme.statusColor(status), lineWidth: 1.5).scaleEffect(pulse ? 2.4 : 1).opacity(pulse ? 0 : 0.8)
-                        .onAppear { withAnimation(.easeOut(duration: BriareusMotion.pulse).repeatForever(autoreverses: false)) { pulse = true } }
-                }
-            }
             .accessibilityHidden(true)
     }
 }

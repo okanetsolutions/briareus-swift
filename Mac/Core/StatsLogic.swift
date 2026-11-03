@@ -343,15 +343,16 @@ extension SessionStatsReading {
     }
 }
 
-/// The conversations this device has read, every project's saved list together: what names an open session's row and
-/// which record the row opens its Resources with.
+/// The conversations this device has read, every project's list together: what names an open session's row and which
+/// record the row opens its Resources with.
 struct KnownSessions: Sendable {
     var sessions: [Session]
 
     init(_ sessions: [Session]) { self.sessions = sessions }
-    /// Each of `repos`' saved conversation lists (`sessions:<repo>`).
-    init(repos: [String], cache: DiskCache) {
-        sessions = repos.flatMap { cache.value("sessions:\($0)").flatMap(Session.parseList) ?? [] }
+    /// Each of `repos`' conversation lists: as `held` has it (the iPhone's feed of a project, with live records its
+    /// saved list may not have yet), else as saved (`sessions:<repo>`).
+    init(repos: [String], held: (String) -> [Session]? = { _ in nil }, cache: DiskCache) {
+        sessions = repos.flatMap { held($0) ?? cache.value("sessions:\($0)").flatMap(Session.parseList) ?? [] }
     }
 
     /// Each conversation's title by its id; the first of a repeated id wins.
