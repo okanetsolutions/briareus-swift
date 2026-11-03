@@ -26,9 +26,12 @@ final class BoardModel: ObservableObject {
     @Published var cooldownTick = 0
     @Published var pullFilter = BoardFilter()
     @Published var issueFilter = BoardFilter()
-    /// The issues past the 100 a board lists, read on Load more (BoardModel+IssuePages.swift).
+    /// The issues past the 100 a board lists, read on Load more (BoardModel+IssuePages.swift, which is why these three
+    /// are not private).
     @Published var issuePages = IssuePages()
+    /// A page of them is being read.
     @Published var issuePagesLoading = false
+    /// Bumped by a refresh, so a page asked for before it does not land after it.
     var issuePagesGen = 0
     @Published var loaded = false
     @Published var error: String?

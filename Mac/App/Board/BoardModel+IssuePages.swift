@@ -6,9 +6,11 @@ extension BoardModel {
     /// The board's issues followed by the ones read past them: what the Issues tab lists and filters.
     var listedIssues: [(summary: IssueSummary, raw: JSON)] { issuePages.issues(after: issues, answer: board) }
     /// The board stopped short, its pages have not ended, and the server has the route.
-    var canLoadMoreIssues: Bool { issuePages.canLoadMore(board: board) && Store.shared.supports("issues") }
-    /// The board stopped short and this server cannot read past it, so the list says it is cut.
-    var issuesCutShort: Bool { IssuePages.offered(board: board) && !Store.shared.supports("issues") }
+    var canLoadMoreIssues: Bool { issuePages.canLoadMore(board: board, routed: Store.shared.supports("issues")) }
+    /// The board stopped short and nothing reads past it, so the list says it is cut.
+    var issuesCutShort: Bool { issuePages.cutShort(board: board, routed: Store.shared.supports("issues")) }
+    /// Why the last page failed, while Load more can read it again.
+    var issuePagesError: String? { issuePages.retryError(board: board, routed: Store.shared.supports("issues")) }
 
     /// The next page, or the one that failed again.
     func loadMoreIssues() {

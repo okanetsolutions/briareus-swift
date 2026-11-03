@@ -34,12 +34,21 @@ struct IssuePages: Equatable, Sendable {
     /// The board stopped short of every open issue, and it could read them at all.
     static func offered(board: JSON) -> Bool { board["issuesTruncated"].is(true) && !board["issuesError"].isSet }
 
-    /// Load more is offered while the board stopped short and the pages have not reached the end.
-    func canLoadMore(board: JSON) -> Bool { Self.offered(board: board) && !ended }
+    /// Load more is offered while the board stopped short, the pages have not reached the end, and the server has
+    /// `GET /issues` (`routed`).
+    func canLoadMore(board: JSON, routed: Bool) -> Bool { routed && Self.offered(board: board) && !ended }
 
-    /// The next page's arguments: after the rows the board listed, then wherever the last page said.
+    /// The board stopped short and nothing reads past it: the server has no `GET /issues` (`routed`), or its pages
+    /// ended without a row the board lacked, so the list says it is cut.
+    func cutShort(board: JSON, routed: Bool) -> Bool { Self.offered(board: board) && (!routed || (ended && rows.isEmpty)) }
+
+    /// Why the last read failed, while Load more is there to read it again; a board that no longer stops short drops it.
+    func retryError(board: JSON, routed: Bool) -> String? { canLoadMore(board: board, routed: routed) ? error : nil }
+
+    /// The next page's arguments: after the rows the board listed, then wherever the last page said, but never inside
+    /// the board's rows, which a newer board may hold more of.
     func query(repo: String, board: JSON) -> JSON {
-        ["repo": .string(repo), "offset": JSON(nextOffset ?? board["issues"].count), "limit": JSON(Self.pageSize)]
+        ["repo": .string(repo), "offset": JSON(max(nextOffset ?? 0, board["issues"].count)), "limit": JSON(Self.pageSize)]
     }
 
     /// A read is under way: the last failure goes, so the apps show progress rather than an old error.

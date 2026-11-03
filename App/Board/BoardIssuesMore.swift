@@ -7,7 +7,7 @@ struct BoardIssuesMore: View {
     let board: JSON
 
     var body: some View {
-        if let error = model.pages.error { ErrorNotice(message: error) }
+        if let error = model.retryError(board: board) { ErrorNotice(message: error) }
         if model.canLoadMore(board: board) {
             Button { Task { await model.loadMore(board: board) } } label: {
                 HStack {

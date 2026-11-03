@@ -13,10 +13,12 @@ final class IssuePagesModel: ObservableObject {
     init(repo: String) { self.repo = repo }
 
     /// The board stopped short, its pages have not ended, and the server has the route.
-    func canLoadMore(board: JSON) -> Bool { pages.canLoadMore(board: board) && Store.shared.supports("issues") }
+    func canLoadMore(board: JSON) -> Bool { pages.canLoadMore(board: board, routed: Store.shared.supports("issues")) }
 
-    /// The board stopped short and this server cannot read past it, so the list says it is cut.
-    func cutShort(board: JSON) -> Bool { IssuePages.offered(board: board) && !Store.shared.supports("issues") }
+    /// The board stopped short and nothing reads past it, so the list says it is cut.
+    func cutShort(board: JSON) -> Bool { pages.cutShort(board: board, routed: Store.shared.supports("issues")) }
+    /// Why the last page failed, while Load more can read it again.
+    func retryError(board: JSON) -> String? { pages.retryError(board: board, routed: Store.shared.supports("issues")) }
 
     /// The board's issues followed by the ones read past them.
     func issues(after rows: [(summary: IssueSummary, raw: JSON)], board: JSON) -> [(summary: IssueSummary, raw: JSON)] {

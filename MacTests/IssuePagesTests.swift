@@ -18,10 +18,44 @@ final class IssuePagesTests: XCTestCase {
 
     func testOfferedOnlyWhenTheBoardStoppedShortAndCouldReadIssues() {
         let pages = IssuePages()
-        XCTAssertTrue(pages.canLoadMore(board: board([3, 2])))
-        XCTAssertFalse(pages.canLoadMore(board: board([3, 2], truncated: false)))
-        XCTAssertFalse(pages.canLoadMore(board: board([], error: "Resource not accessible")))
-        XCTAssertFalse(pages.canLoadMore(board: .null))
+        XCTAssertTrue(pages.canLoadMore(board: board([3, 2]), routed: true))
+        XCTAssertFalse(pages.canLoadMore(board: board([3, 2], truncated: false), routed: true))
+        XCTAssertFalse(pages.canLoadMore(board: board([], error: "Resource not accessible"), routed: true))
+        XCTAssertFalse(pages.canLoadMore(board: .null, routed: true))
+    }
+
+    func testAServerWithoutTheRouteSaysTheListIsCutInstead() {
+        let pages = IssuePages(), cut = board([3, 2])
+        XCTAssertFalse(pages.canLoadMore(board: cut, routed: false))
+        XCTAssertTrue(pages.cutShort(board: cut, routed: false))
+        XCTAssertFalse(pages.cutShort(board: cut, routed: true))
+        XCTAssertFalse(pages.cutShort(board: board([3, 2], truncated: false), routed: false))
+    }
+
+    func testPagesThatEndWithNothingNewLeaveTheListSayingItIsCut() {
+        let cut = board([3, 2])
+        var pages = IssuePages()
+        pages.receive(page([2], next: nil), board: cut)
+        XCTAssertFalse(pages.canLoadMore(board: cut, routed: true))
+        XCTAssertTrue(pages.cutShort(board: cut, routed: true))
+        // Pages that added issues read to the end: nothing is cut.
+        var read = IssuePages()
+        read.receive(page([1], next: nil), board: cut)
+        XCTAssertFalse(read.cutShort(board: cut, routed: true))
+    }
+
+    func testTheNextPageNeverStartsInsideTheBoardsRows() {
+        var pages = IssuePages()
+        pages.receive(page([7], next: 3), board: board([9, 8]))
+        // A newer board lists more than the page said to skip.
+        XCTAssertEqual(pages.query(repo: "o/r", board: board([9, 8, 7, 6, 5]))["offset"].int, 5)
+    }
+
+    func testAnErrorShowsOnlyWhileLoadMoreCanReadItAgain() {
+        var pages = IssuePages()
+        pages.fail("offline")
+        XCTAssertEqual(pages.retryError(board: board([9]), routed: true), "offline")
+        XCTAssertNil(pages.retryError(board: board([9], truncated: false), routed: true))
     }
 
     func testFirstPageStartsAfterTheBoardThenFollowsNextOffset() {
@@ -34,7 +68,7 @@ final class IssuePagesTests: XCTestCase {
         pages.receive(page([6, 5], next: 53), board: b)
         q = pages.query(repo: "o/r", board: b)
         XCTAssertEqual(q["offset"].int, 53)
-        XCTAssertTrue(pages.canLoadMore(board: b))
+        XCTAssertTrue(pages.canLoadMore(board: b, routed: true))
     }
 
     func testKeepsEachIssueOnceAndEndsWithTheLastPage() {
@@ -45,7 +79,7 @@ final class IssuePagesTests: XCTestCase {
         pages.receive(page([6, 5], next: nil), board: b)
         XCTAssertEqual(pages.rows.compactMap { $0["number"].int }, [7, 6, 5])
         XCTAssertTrue(pages.ended)
-        XCTAssertFalse(pages.canLoadMore(board: b))
+        XCTAssertFalse(pages.canLoadMore(board: b, routed: true))
     }
 
     func testAFailedPageIsReadAgainFromTheSameOffset() {
@@ -54,7 +88,7 @@ final class IssuePagesTests: XCTestCase {
         pages.receive(page([8], next: 2), board: b)
         pages.fail("offline")
         XCTAssertEqual(pages.error, "offline")
-        XCTAssertTrue(pages.canLoadMore(board: b))
+        XCTAssertTrue(pages.canLoadMore(board: b, routed: true))
         XCTAssertEqual(pages.query(repo: "o/r", board: b)["offset"].int, 2)
         pages.reading()
         XCTAssertNil(pages.error)

@@ -69,8 +69,8 @@ final class IssueModel: ObservableObject {
             if !saved, detail.isNull, let fresh = IssueSummary(row) { issue = fresh }
             break
         }
-        // A board GitHub refused the issues of says nothing about this one.
-        if !saved { gone = !found && !board["issuesError"].isSet }
+        // A board GitHub refused the issues of, or one cut short, says nothing about this one.
+        if !saved { gone = !found && boardListsEveryIssue(board) }
         boardRead = true
     }
     /// Takes the issue's own read: the row it shares with the board, and all the board does not carry.

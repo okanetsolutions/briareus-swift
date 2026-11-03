@@ -48,7 +48,7 @@ struct BoardIssueList: View {
     }
 
     @ViewBuilder private var more: some View {
-        if let error = model.issuePages.error { Notice(message: error).padding(.bottom, 6) }
+        if let error = model.issuePagesError { Notice(message: error).padding(.bottom, 6) }
         if model.canLoadMoreIssues {
             Button(model.issuePagesLoading ? "Loading\u{2026}" : model.issuePages.error == nil ? "Load more" : "Retry") { model.loadMoreIssues() }
                 .dashButton(.bordered).disabled(model.issuePagesLoading).padding(.bottom, 8)

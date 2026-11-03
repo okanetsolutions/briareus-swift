@@ -177,9 +177,9 @@ struct IssueScreen: View {
     private var row: IssueSummary {
         model.summary ?? boardIssues.first { $0.summary.number == number }?.summary ?? IssueSummary(issue) ?? IssueSummary(["number": JSON(max(number, 1))])!
     }
-    /// The board was read and this issue is not on it; a board GitHub refused the issues of says nothing about it.
+    /// The board was read and this issue is not on it; a board GitHub refused the issues of, or one cut short, says nothing.
     private var gone: Bool {
-        boardRead && closedReason == nil && !feed.board["issuesError"].isSet && !boardIssues.contains { $0.summary.number == number }
+        boardRead && closedReason == nil && boardListsEveryIssue(feed.board) && !boardIssues.contains { $0.summary.number == number }
     }
     private var state: IssuePageState { IssuePageState(detail: model.detail, closedHere: closedReason != nil, closedReason: closedReason, gone: gone) }
     private var runs: [Session] { feed.sessions.filter { issueRunMatches($0, issue: row, repo: repo) } }
