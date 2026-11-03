@@ -11,7 +11,7 @@ struct BoardIssuesMore: View {
         if model.canLoadMore(board: board) {
             Button { Task { await model.loadMore(board: board) } } label: {
                 HStack {
-                    Text(model.pages.error == nil ? "Load more issues" : "Retry")
+                    Text(model.pages.retries ? "Retry" : "Load more issues")
                     if model.loading { Spacer(); ProgressView() }
                 }
             }

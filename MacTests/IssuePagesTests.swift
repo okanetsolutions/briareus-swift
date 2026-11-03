@@ -44,11 +44,34 @@ final class IssuePagesTests: XCTestCase {
         XCTAssertFalse(read.cutShort(board: cut, routed: true))
     }
 
-    func testTheNextPageNeverStartsInsideTheBoardsRows() {
+    func testTheNextPageReachesOnlyTheOverlapInsideTheBoardsRows() {
         var pages = IssuePages()
-        pages.receive(page([7], next: 3), board: board([9, 8]))
+        pages.receive(page([7], next: 30), board: board(Array(1...20)))
         // A newer board lists more than the page said to skip.
-        XCTAssertEqual(pages.query(repo: "o/r", board: board([9, 8, 7, 6, 5]))["offset"].int, 5)
+        XCTAssertEqual(pages.query(repo: "o/r", board: board(Array(1...50)))["offset"].int, 50 - IssuePages.overlap)
+        XCTAssertEqual(IssuePages().query(repo: "o/r", board: board([9, 8]))["offset"].int, 0)
+    }
+
+    func testAnIssueANewerBoardPushesPastItsEdgeStaysListed() {
+        // The board lists 1...100; the first page reaches back over its last rows.
+        let first = board(Array(1...100))
+        var pages = IssuePages()
+        XCTAssertEqual(pages.query(repo: "o/r", board: first)["offset"].int, 100 - IssuePages.overlap)
+        pages.receive(page(Array(91...140), next: 140), board: first)
+        // A new issue 0 pushes 100 off a fresh board, which the pages are not reset for.
+        let newer = board(Array(0...99))
+        let listed = pages.issues(after: rows(newer), answer: newer).map(\.summary.number)
+        XCTAssertEqual(listed, Array(0...140))
+        XCTAssertEqual(pages.query(repo: "o/r", board: newer)["offset"].int, 140 - IssuePages.overlap)
+    }
+
+    func testAMirrorThatStoppedShortLeavesTheListSayingItIsCut() {
+        let cut = board([3, 2])
+        var pages = IssuePages()
+        pages.receive(IssuesPage(["issues": [["number": 1, "title": "Issue 1"]], "nextOffset": .null, "issuesTruncated": true]),
+                      board: cut)
+        XCTAssertFalse(pages.canLoadMore(board: cut, routed: true))
+        XCTAssertTrue(pages.cutShort(board: cut, routed: true))
     }
 
     func testAnErrorShowsOnlyWhileLoadMoreCanReadItAgain() {
@@ -63,11 +86,11 @@ final class IssuePagesTests: XCTestCase {
         var pages = IssuePages()
         var q = pages.query(repo: "o/r", board: b)
         XCTAssertEqual(q["repo"], "o/r")
-        XCTAssertEqual(q["offset"].int, 3)
+        XCTAssertEqual(q["offset"].int, 0)
         XCTAssertEqual(q["limit"].int, IssuePages.pageSize)
         pages.receive(page([6, 5], next: 53), board: b)
         q = pages.query(repo: "o/r", board: b)
-        XCTAssertEqual(q["offset"].int, 53)
+        XCTAssertEqual(q["offset"].int, 53 - IssuePages.overlap)
         XCTAssertTrue(pages.canLoadMore(board: b, routed: true))
     }
 
@@ -77,7 +100,8 @@ final class IssuePagesTests: XCTestCase {
         // The list moved: 8 is on the board and 6 came back on the second page.
         pages.receive(page([8, 7, 6], next: 5), board: b)
         pages.receive(page([6, 5], next: nil), board: b)
-        XCTAssertEqual(pages.rows.compactMap { $0["number"].int }, [7, 6, 5])
+        XCTAssertEqual(pages.rows.compactMap { $0["number"].int }, [8, 7, 6, 5])
+        XCTAssertEqual(pages.issues(after: rows(b), answer: b).map(\.summary.number), [9, 8, 7, 6, 5])
         XCTAssertTrue(pages.ended)
         XCTAssertFalse(pages.canLoadMore(board: b, routed: true))
     }
@@ -85,13 +109,15 @@ final class IssuePagesTests: XCTestCase {
     func testAFailedPageIsReadAgainFromTheSameOffset() {
         let b = board([9])
         var pages = IssuePages()
-        pages.receive(page([8], next: 2), board: b)
+        pages.receive(page([8], next: 60), board: b)
         pages.fail("offline")
         XCTAssertEqual(pages.error, "offline")
+        XCTAssertTrue(pages.retries)
         XCTAssertTrue(pages.canLoadMore(board: b, routed: true))
-        XCTAssertEqual(pages.query(repo: "o/r", board: b)["offset"].int, 2)
+        XCTAssertEqual(pages.query(repo: "o/r", board: b)["offset"].int, 60 - IssuePages.overlap)
         pages.reading()
         XCTAssertNil(pages.error)
+        XCTAssertFalse(pages.retries)
     }
 
     func testListsTheBoardsIssuesThenThoseReadPastThem() {
@@ -111,6 +137,8 @@ final class IssuePagesTests: XCTestCase {
         let p = IssuesPage(j(#"{"repo":"o/r","issues":[{"number":4},{"number":3}],"total":120,"nextOffset":null}"#))
         XCTAssertEqual(p.issues.count, 2)
         XCTAssertNil(p.nextOffset)
+        XCTAssertFalse(p.truncated)
         XCTAssertEqual(IssuesPage(j(#"{"issues":[],"nextOffset":150}"#)).nextOffset, 150)
+        XCTAssertTrue(IssuesPage(j(#"{"issues":[],"nextOffset":null,"issuesTruncated":true}"#)).truncated)
     }
 }
