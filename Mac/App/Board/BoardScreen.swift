@@ -26,6 +26,10 @@ final class BoardModel: ObservableObject {
     @Published var cooldownTick = 0
     @Published var pullFilter = BoardFilter()
     @Published var issueFilter = BoardFilter()
+    /// The issues past the 100 a board lists, read on Load more (BoardModel+IssuePages.swift).
+    @Published var issuePages = IssuePages()
+    @Published var issuePagesLoading = false
+    var issuePagesGen = 0
     @Published var loaded = false
     @Published var error: String?
     @Published var catalog: JSON = []
@@ -77,7 +81,7 @@ final class BoardModel: ObservableObject {
         get { tab == .pulls ? pullFilter : issueFilter }
         set { if tab == .pulls { pullFilter = newValue } else { issueFilter = newValue } }
     }
-    var rows: [BoardRow] { tab == .pulls ? pulls.map(BoardRow.init) : issues.map { BoardRow($0.summary) } }
+    var rows: [BoardRow] { tab == .pulls ? pulls.map(BoardRow.init) : listedIssues.map { BoardRow($0.summary) } }
 
     // MARK: Filters, kept on disk per repository
 
@@ -151,6 +155,7 @@ final class BoardModel: ObservableObject {
             guard !refreshing else { return }
             uncertain = false; writeError = nil
             issueStatus.reset()
+            resetIssuePages()
             Task { if !refreshing { await load(fresh: true) } }
         }
     }
@@ -474,7 +479,7 @@ struct BoardScreen: View {
             }
             .frame(height: 20).padding(.bottom, 8)
         }
-        if model.tab == .pulls { pullList(filter: filter, shown: shown) } else { issueList(filter: filter, shown: shown) }
+        if model.tab == .pulls { pullList(filter: filter, shown: shown) } else { BoardIssueList(model: model, filter: filter, shown: shown) }
     }
 
     /// The pull requests waiting on the user's review: labelled requires-dev-review, not theirs, and not stacked on
@@ -498,39 +503,6 @@ struct BoardScreen: View {
         }
         if !boardShowsLoading(loaded: model.loaded, refreshing: model.refreshing) && shown == 0 && model.error == nil {
             Text(model.pulls.isEmpty ? "No open pull requests." : "No pull requests match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)
-        }
-    }
-
-    @ViewBuilder private func issueList(filter: BoardFilter, shown: Int) -> some View {
-        if let refused = model.board["issuesError"].string {
-            BoardBox(padding: 12, radius: 10) {
-                Text("GitHub would not read this repository’s issues with the server’s token. A fine-grained token needs Issues: read. The pull requests are unaffected.")
-                    .font(Theme.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
-                Notice(message: refused).padding(.top, 6)
-            }
-        } else {
-            let visible = model.issues.indices.filter { filter.passes(BoardRow(model.issues[$0].summary)) }
-            let summaries = visible.map { model.issues[$0].summary }
-            let nested = issuesFolded(issuesNested(summaries, repo: repo), summaries, folded: model.foldedEpics)
-            ForEach(Array(nested.enumerated()), id: \.offset) { _, row in
-                let i = visible[row.index]
-                let depth = min(row.depth, 4)
-                let number = model.issues[i].summary.number
-                IssueRowView(issue: model.issues[i].summary, repo: repo, nested: depth > 0,
-                             folded: row.children > 0 ? model.foldedEpics.contains(number) : nil,
-                             fold: { if model.foldedEpics.remove(number) == nil { model.foldedEpics.insert(number) } }) {
-                    model.openIssue(model.issues[i].raw)
-                }
-                    .padding(.leading, CGFloat(depth) * 18)
-                    .padding(.bottom, 8)
-            }
-            if model.board["issuesTruncated"].is(true) {
-                Text("This repository has more open issues; only the most recently updated are listed.")
-                    .font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
-            }
-            if !boardShowsLoading(loaded: model.loaded, refreshing: model.refreshing) && shown == 0 && model.error == nil {
-                Text(model.issues.isEmpty ? "No open issues." : "No issues match the filters.").font(Theme.footnote).foregroundStyle(Theme.muted)
-            }
         }
     }
 }
