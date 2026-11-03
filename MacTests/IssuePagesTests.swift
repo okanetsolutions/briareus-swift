@@ -53,15 +53,15 @@ final class IssuePagesTests: XCTestCase {
     }
 
     func testAnIssueANewerBoardPushesPastItsEdgeStaysListed() {
-        // The board lists 1...100; the first page reaches back over its last rows.
-        let first = board(Array(1...100))
+        // The board lists 2...101; the first page reaches back over its last rows.
+        let first = board(Array(2...101))
         var pages = IssuePages()
         XCTAssertEqual(pages.query(repo: "o/r", board: first)["offset"].int, 100 - IssuePages.overlap)
-        pages.receive(page(Array(91...140), next: 140), board: first)
-        // A new issue 0 pushes 100 off a fresh board, which the pages are not reset for.
-        let newer = board(Array(0...99))
+        pages.receive(page(Array(92...141), next: 140), board: first)
+        // A new issue 1 pushes 101 off a fresh board, which the pages are not reset for.
+        let newer = board(Array(1...100))
         let listed = pages.issues(after: rows(newer), answer: newer).map(\.summary.number)
-        XCTAssertEqual(listed, Array(0...140))
+        XCTAssertEqual(listed, Array(1...141))
         XCTAssertEqual(pages.query(repo: "o/r", board: newer)["offset"].int, 140 - IssuePages.overlap)
     }
 
