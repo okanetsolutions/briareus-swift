@@ -69,8 +69,8 @@ final class IssueModel: ObservableObject {
             if !saved, detail.isNull, let fresh = IssueSummary(row) { issue = fresh }
             break
         }
-        // A board GitHub refused the issues of says nothing about this one.
-        if !saved { gone = !found && !board["issuesError"].isSet }
+        // A board GitHub refused the issues of, or one cut short, says nothing about this one.
+        if !saved { gone = !found && boardListsEveryIssue(board) }
         boardRead = true
     }
     /// Takes the issue's own read: the row it shares with the board, and all the board does not carry.
@@ -261,10 +261,10 @@ final class IssueModel: ObservableObject {
             closing = false
             switch r {
             case .success(let v):
-                closed = true; gone = false
+                closed = true; gone = false; writeError = nil
                 closedReason = v["issue"]["stateReason"].string ?? (notPlanned ? "not_planned" : "completed")
-                writeError = nil
-                // The board drops it; reading it again keeps the epic's counts and its siblings true.
+                // The board drops it, and the pages read past it drop it now; reading it again keeps the epic's counts true.
+                BoardModel.issueClosed(issue.number, repo: repo)
                 await load(fresh: true)
             case .failure(let e):
                 // Closing twice only restates the reason, so trying again is safe.
