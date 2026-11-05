@@ -26,6 +26,10 @@ final class SessionFeed {
     var live = false
 }
 
+/// The board screen's Load more pages, which the feed only points at.
+@MainActor
+final class IssuePagesModel {}
+
 func errorText(_ error: Error) -> String { error.localizedDescription }
 extension Error {
     var isCancellation: Bool { (self as? APIError)?.kind == .cancelled || self is CancellationError }

@@ -10,7 +10,10 @@ final class IssuePagesModel: ObservableObject {
     /// Bumped by `reset`, so a page asked for before a refresh does not land after it.
     private var generation = 0
 
-    init(repo: String) { self.repo = repo }
+    init(repo: String) {
+        self.repo = repo
+        Store.shared.feed(repo).issuePages = self
+    }
 
     /// The board stopped short, its pages have not ended, and the server has the route.
     func canLoadMore(board: JSON) -> Bool { pages.canLoadMore(board: board, routed: Store.shared.supports("issues")) }
@@ -35,12 +38,15 @@ final class IssuePagesModel: ObservableObject {
         do {
             let answer = try await Store.shared.call("issues", pages.query(repo: repo, board: board))
             guard mine == generation else { return }
-            pages.receive(IssuesPage(answer), board: board)
+            pages.receive(IssuesPage(answer))
         } catch {
             guard mine == generation else { return }
             if let said = failure(error) { pages.fail(said) }
         }
     }
+
+    /// An issue closed on its own screen: the board's next read drops it, but a row read here would stay listed.
+    func drop(_ number: Int) { pages.drop(number) }
 
     /// A pull to refresh reads the board afresh; its pages start again after it.
     func reset() {

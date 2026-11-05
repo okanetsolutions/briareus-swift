@@ -33,6 +33,8 @@ final class ProjectFeed: ObservableObject {
     /// The board's pull requests and issues, each issue with what the server sent for it.
     private(set) var pulls: [PullSummary] = []
     private(set) var issues: [(summary: IssueSummary, raw: JSON)] = []
+    /// The board screen's issues read past the board, so an issue closed on its own screen leaves them too.
+    weak var issuePages: IssuePagesModel?
     private func parseBoard() {
         pulls = PullSummary.parseList(board["pulls"])
         issues = board["issues"].items.compactMap { j in IssueSummary(j).map { ($0, j) } }

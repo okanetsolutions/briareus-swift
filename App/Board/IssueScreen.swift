@@ -644,9 +644,9 @@ struct IssueScreen: View {
         if let comment { args["comment"] = .string(comment) }
         do {
             let v = try await store.call("close_issue", args)
-            closedReason = v["issue"]["stateReason"].string ?? reason.rawValue
-            comment = nil
-            // The board drops it; reading it again keeps the epic's counts and its siblings true.
+            closedReason = v["issue"]["stateReason"].string ?? reason.rawValue; comment = nil
+            // The board drops it, and the pages read past it drop it now; reading it again keeps the epic's counts true.
+            feed.issuePages?.drop(number)
             model.reset()
             _ = await reading { try await load(fresh: true) }
         } catch {

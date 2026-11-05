@@ -75,7 +75,7 @@ struct IssuePages: Equatable, Sendable {
 
     /// Keeps the page's rows that no earlier page holds. The list moves between pages as issues are updated, so a row
     /// can come back; it is kept once, where it was first seen. Rows on the board are kept too and left out when listed.
-    mutating func receive(_ page: IssuesPage, board: JSON) {
+    mutating func receive(_ page: IssuesPage) {
         var held = Set(summaries.map(\.number))
         for row in page.issues {
             guard let issue = IssueSummary(row), held.insert(issue.number).inserted else { continue }
@@ -88,7 +88,16 @@ struct IssuePages: Equatable, Sendable {
         error = nil
     }
 
+    /// The page could not be read; Load more reads it again from the same offset.
     mutating func fail(_ error: String) { self.error = error }
+
+    /// An issue the app closed: the board drops it on its next read, but a row read here is listed until a refresh unless
+    /// it goes too.
+    mutating func drop(_ number: Int) {
+        guard let at = summaries.firstIndex(where: { $0.number == number }) else { return }
+        summaries.remove(at: at)
+        rows.remove(at: at)
+    }
 
     /// The board's issues followed by the ones read here that it does not list now. A board that no longer stops short
     /// lists every open issue itself, so what was read is left out.

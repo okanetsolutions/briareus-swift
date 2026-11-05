@@ -23,10 +23,15 @@ extension BoardModel {
             guard mine == issuePagesGen else { return }
             issuePagesLoading = false
             switch r {
-            case .success(let v): issuePages.receive(IssuesPage(v), board: board)
+            case .success(let v): issuePages.receive(IssuesPage(v))
             case .failure(let e): if e.kind != .cancelled { issuePages.fail(e.description) }
             }
         }
+    }
+
+    /// An issue this app closed leaves its open board's loaded pages, which the board's next read would not drop.
+    static func issueClosed(_ number: Int, repo: String) {
+        (BoardModels.models["pulls:\(repo)"] as? BoardModel)?.issuePages.drop(number)
     }
 
     /// A refresh reads the board afresh; its pages start again after it.

@@ -261,10 +261,10 @@ final class IssueModel: ObservableObject {
             closing = false
             switch r {
             case .success(let v):
-                closed = true; gone = false
+                closed = true; gone = false; writeError = nil
                 closedReason = v["issue"]["stateReason"].string ?? (notPlanned ? "not_planned" : "completed")
-                writeError = nil
-                // The board drops it; reading it again keeps the epic's counts and its siblings true.
+                // The board drops it, and the pages read past it drop it now; reading it again keeps the epic's counts true.
+                BoardModel.issueClosed(issue.number, repo: repo)
                 await load(fresh: true)
             case .failure(let e):
                 // Closing twice only restates the reason, so trying again is safe.
