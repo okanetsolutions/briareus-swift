@@ -68,10 +68,16 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
 }
 
 /// An ISO-8601 time, with or without fractions.
-func attentionDate(_ s: String) -> Date? {
+func attentionDate(_ s: String) -> Date? { isoFractional.date(from: s) ?? isoWhole.date(from: s) }
+/// Made once: every item of a list parsed asks, and making a formatter costs far more than using one. Never changed
+/// after this, so reading from several threads is safe.
+private let isoFractional: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let d = f.date(from: s) { return d }
+    return f
+}()
+private let isoWhole: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime]
-    return f.date(from: s)
-}
+    return f
+}()

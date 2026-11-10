@@ -153,8 +153,8 @@ final class PullModel: ObservableObject {
         var failure: APIError?
         switch r {
         case .success(let v):
-            pr = v["pr"]
-            error = nil
+            if v["pr"] != pr { pr = v["pr"] }
+            if error != nil { error = nil }
             // The description is its own read, once per visit and on refresh.
             if pr["body"].string == nil && !bodyRead && !readingBody && Store.shared.supports("pull_description") { Task { await loadBody() } }
             if Store.shared.supports("code_reviews") {
@@ -199,14 +199,14 @@ final class PullModel: ObservableObject {
         guard let v = await PullsGate.read(repo)?.value, gen == rowsGen else { return }
         // A pull request the board no longer lists has been merged or closed, and its row went with it.
         let rows = PullSummary.parseList(v["pulls"])
-        row = nil
-        if let r = rows.first(where: { $0.number == number }) {
-            row = r
+        let r = rows.first { $0.number == number }
+        if r != row { row = r }
+        if let r {
             // Its place in a stack, with the branches of the rows it is built on; a row no longer stacked drops the overview.
             var s = StackPosition(r.raw["stack"], stacks: v["stacks"])
             s?.fillBranches(rows)
-            stack = s
-            if s == nil { stackOpen = false }
+            if s != stack { stack = s }
+            if s == nil && stackOpen { stackOpen = false }
         }
         rowRead = true
         rebuildActions()
@@ -214,7 +214,7 @@ final class PullModel: ObservableObject {
     }
     private func loadActions() async {
         guard let v = await boardCall("actions").value else { return }
-        catalog = v["actions"]
+        if v["actions"] != catalog { catalog = v["actions"] }
         Store.shared.cache.store(v, "actions")
         rebuildActions()
     }
@@ -224,7 +224,7 @@ final class PullModel: ObservableObject {
         sessionsGen += 1
         let gen = sessionsGen
         guard let v = await boardCall("sessions", ["repo": .string(repo)]).value, gen == sessionsGen, let all = Session.parseList(v) else { return }
-        runs = all.filter { $0.pullNumber == number }
+        if case let mine = all.filter({ $0.pullNumber == number }), mine != runs { runs = mine }
         runsRead = true
         if runPending { runPending = false; runResume() }
     }

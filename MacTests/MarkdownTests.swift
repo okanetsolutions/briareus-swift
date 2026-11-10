@@ -45,6 +45,15 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(Markdown.parse("").count, 0)
         XCTAssertEqual(Markdown.parse("\n\n  \n\t\n").count, 0)
     }
+    func testAReplyParsedAgainGivesTheSameBlocks() {
+        let source = "# Title\n\nA paragraph with `code`.\n\n- one\n- two\n\n```swift\nlet a = 1\n```"
+        let first = Markdown.parse(source)
+        XCTAssertEqual(first.map(\.kind), [.heading, .paragraph, .bullet, .bullet, .code])
+        XCTAssertEqual(Markdown.parse(source), first)
+        // Sources that differ only late are kept apart.
+        XCTAssertNotEqual(Markdown.parse(source + "\n\nmore"), first)
+    }
+
     func testHeadingsTakeOneToSixHashesAndASpace() {
         XCTAssertEqual(blocks("# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six"), "<h1>One<h2>Two<h3>Three<h4>Four<h5>Five<h6>Six")
         XCTAssertEqual(blocks("####### Seven"), "<p>####### Seven")

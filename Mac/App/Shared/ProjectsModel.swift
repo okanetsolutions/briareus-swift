@@ -89,6 +89,8 @@ final class ProjectsModel: ObservableObject {
     /// projects_count: what the saved lists say about each project's conversations.
     func recount() {
         recountTask?.cancel(); recountTask = nil
+        // The lists live records changed are saved here, once per burst rather than once per record.
+        saved.saveChanges()
         var counts: [String: Int] = [:], busy: [String: Bool] = [:]
         var all: [Session] = []
         for p in projects {

@@ -394,6 +394,11 @@ func transcriptFindPieces(_ block: TranscriptBlock, open: Bool) -> [String] {
     }
 }
 
+/// Every block's seq and searchable pieces, in reading order: what `TranscriptFind` searches, on both apps.
+func transcriptFindBlocks(_ blocks: TranscriptRows, expanded: Set<Int>) -> [(seq: Int, pieces: [String])] {
+    blocks.map { ($0.seq, transcriptFindPieces($0, open: expanded.contains($0.seq))) }
+}
+
 /// A reply's pieces as MarkdownView draws them: a paragraph, heading, list item or quote each, a code block whole, a
 /// table cell by cell, row by row.
 func markdownFindPieces(_ source: String?) -> [String] {

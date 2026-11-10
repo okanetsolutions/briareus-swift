@@ -88,7 +88,7 @@ final class ConversationModel: ObservableObject {
         if !restored {
             // Saved events show at once and move the cursor, so only what happened since is downloaded.
             restored = true
-            let saved = Store.shared.cache.lines(cacheKey)
+            let saved = await Store.shared.cache.readLines(cacheKey)
             if !saved.isEmpty { append(.array(saved)) }
         }
         // A transcript saved before messages showed their time has none; it is read again once to get them.
@@ -98,7 +98,7 @@ final class ConversationModel: ObservableObject {
         do {
             let answer = try await Store.shared.call("session", ["sessionId": .string(id), "since": JSON(full ? 0 : transcript.cursor)])
             loading = false
-            if let next = Session(answer["session"]) { snapshot = next }
+            if let next = Session(answer["session"]), next != snapshot { snapshot = next }
             let events = answer["events"]
             append(events, full: full)
             error = nil; loaded = true
@@ -154,7 +154,7 @@ final class ConversationModel: ObservableObject {
     private func applyLive(_ event: String, _ j: JSON) {
         live = true
         switch ConversationEvent(event, j) {
-        case .record(let next)?: snapshot = next; showPanel(); return
+        case .record(let next)?: if next != snapshot { snapshot = next; showPanel() }; return
         case .line?: break
         case nil: return
         }
@@ -205,7 +205,7 @@ final class ConversationModel: ObservableObject {
     // MARK: Find in the conversation
 
     private var findBlocks: [(seq: Int, pieces: [String])] {
-        blocks.map { ($0.seq, transcriptFindPieces($0, open: expanded.contains($0.seq))) }
+        transcriptFindBlocks(blocks, expanded: expanded)
     }
     func openFind() { finding = true; findFocus += 1 }
     /// Focus for the find field: bumped by ⌘F, also while it is open.

@@ -100,6 +100,16 @@ final class CacheTests: XCTestCase {
         XCTAssertEqual(cache.lines("replace"), [["n": 2], ["n": 3]])
     }
 
+    func testALogReadOffTheCallerIsTheSameLog() async {
+        XCTAssertTrue(cache.replace([["seq": 1], ["seq": 2]], "log"))
+        XCTAssertTrue(cache.append([["seq": 3]], "log"))
+        let read = await cache.readLines("log")
+        XCTAssertEqual(read, cache.lines("log"))
+        XCTAssertEqual(read.count, 3)
+        let missing = await cache.readLines("none")
+        XCTAssertEqual(missing, [])
+    }
+
     func testPruningDropsDecodedCopiesOfExpiredDocuments() {
         cache.store(["n": 1], "k")
         cache.flush()
