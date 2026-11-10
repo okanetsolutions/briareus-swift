@@ -80,4 +80,17 @@ final class TranscriptFindTests: XCTestCase {
         f.search("composer", in: transcriptFindBlocks(rows, expanded: [folded.seq]))
         XCTAssertEqual(f.matches.map(\.block), [folded.seq, 4])
     }
+
+    func testAnOccurrencesRangeIsWhatMatchedNotTheQuerysLength() {
+        // Ignoring case folds "ß" to "ss": the occurrence is one unit long and ends inside the text.
+        let text = "Straße"
+        let ranges = findRanges(of: "sse", in: text)
+        XCTAssertEqual(ranges.map(\.location), findOccurrences(of: "sse", in: text))
+        for r in ranges {
+            XCTAssertLessThanOrEqual(r.location + r.length, (text as NSString).length)
+            XCTAssertNotNil(Range(r, in: text))
+        }
+        XCTAssertEqual(findRanges(of: "API", in: "api and Api").map(\.length), [3, 3])
+        XCTAssertEqual(findRanges(of: "", in: "anything"), [])
+    }
 }

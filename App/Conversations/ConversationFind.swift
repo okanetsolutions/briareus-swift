@@ -95,19 +95,20 @@ extension EnvironmentValues {
 }
 
 extension AttributedString {
-    /// The text with every place `query` occurs marked, found as the search finds them (Core's `findOccurrences`).
+    /// The text with every place `query` occurs marked, found as the search finds them (Core's `findRanges`).
     func marking(_ query: String) -> AttributedString {
         guard !query.isEmpty else { return self }
         let plain = String(characters)
-        let found = findOccurrences(of: query, in: plain)
+        let found = findRanges(of: query, in: plain)
         guard !found.isEmpty else { return self }
         var out = self
-        let length = (query as NSString).length
-        for start in found {
-            let from = plain.distance(from: plain.startIndex, to: String.Index(utf16Offset: start, in: plain))
-            let to = plain.distance(from: plain.startIndex, to: String.Index(utf16Offset: start + length, in: plain))
+        for range in found {
+            // The range the search matched, which folding case can make shorter or longer than the query.
+            guard let match = Range(range, in: plain) else { continue }
+            let from = plain.distance(from: plain.startIndex, to: match.lowerBound)
+            let count = plain.distance(from: match.lowerBound, to: match.upperBound)
             let lower = out.index(out.startIndex, offsetByCharacters: from)
-            out[lower..<out.index(lower, offsetByCharacters: to - from)].backgroundColor = Theme.warn.opacity(0.35)
+            out[lower..<out.index(lower, offsetByCharacters: count)].backgroundColor = Theme.warn.opacity(0.35)
         }
         return out
     }

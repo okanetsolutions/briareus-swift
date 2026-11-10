@@ -415,15 +415,19 @@ func markdownFindPieces(_ source: String?) -> [String] {
 }
 
 /// Where each occurrence of `query` starts in `text`, in UTF-16 units, ignoring case; occurrences do not overlap.
-func findOccurrences(of query: String, in text: String) -> [Int] {
+func findOccurrences(of query: String, in text: String) -> [Int] { findRanges(of: query, in: text).map(\.location) }
+
+/// Each occurrence of `query` in `text` as the range it covers, in UTF-16 units. Ignoring case folds letters, so an
+/// occurrence is not always as long as the query: "ss" finds the one "ß" of "Straße".
+func findRanges(of query: String, in text: String) -> [NSRange] {
     guard !query.isEmpty else { return [] }
     let s = text as NSString
-    var out: [Int] = []
+    var out: [NSRange] = []
     var from = 0
     while from < s.length {
         let r = s.range(of: query, options: [.caseInsensitive], range: NSRange(location: from, length: s.length - from))
         if r.location == NSNotFound { break }
-        out.append(r.location)
+        out.append(r)
         from = r.location + max(r.length, 1)
     }
     return out
