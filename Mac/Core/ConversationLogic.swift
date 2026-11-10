@@ -394,6 +394,11 @@ func transcriptFindPieces(_ block: TranscriptBlock, open: Bool) -> [String] {
     }
 }
 
+/// Every block's seq and searchable pieces, in reading order: what `TranscriptFind` searches, on both apps.
+func transcriptFindBlocks(_ blocks: TranscriptRows, expanded: Set<Int>) -> [(seq: Int, pieces: [String])] {
+    blocks.map { ($0.seq, transcriptFindPieces($0, open: expanded.contains($0.seq))) }
+}
+
 /// A reply's pieces as MarkdownView draws them: a paragraph, heading, list item or quote each, a code block whole, a
 /// table cell by cell, row by row.
 func markdownFindPieces(_ source: String?) -> [String] {
@@ -410,15 +415,19 @@ func markdownFindPieces(_ source: String?) -> [String] {
 }
 
 /// Where each occurrence of `query` starts in `text`, in UTF-16 units, ignoring case; occurrences do not overlap.
-func findOccurrences(of query: String, in text: String) -> [Int] {
+func findOccurrences(of query: String, in text: String) -> [Int] { findRanges(of: query, in: text).map(\.location) }
+
+/// Each occurrence of `query` in `text` as the range it covers, in UTF-16 units. Ignoring case folds letters, so an
+/// occurrence is not always as long as the query: "ss" finds the one "ß" of "Straße".
+func findRanges(of query: String, in text: String) -> [NSRange] {
     guard !query.isEmpty else { return [] }
     let s = text as NSString
-    var out: [Int] = []
+    var out: [NSRange] = []
     var from = 0
     while from < s.length {
         let r = s.range(of: query, options: [.caseInsensitive], range: NSRange(location: from, length: s.length - from))
         if r.location == NSNotFound { break }
-        out.append(r.location)
+        out.append(r)
         from = r.location + max(r.length, 1)
     }
     return out

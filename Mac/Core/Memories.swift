@@ -86,10 +86,4 @@ enum MemoryLogic {
 }
 
 /// An ISO-8601 time, with or without fractions.
-func memoryDate(_ s: String) -> Date? {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let d = f.date(from: s) { return d }
-    f.formatOptions = [.withInternetDateTime]
-    return f.date(from: s)
-}
+func memoryDate(_ s: String) -> Date? { attentionDate(s) }

@@ -20,6 +20,7 @@ struct ConversationScreen: View {
     @State private var showingDetails = false
     @State private var showingBrowser = false
     @State private var atBottom = true
+    @StateObject private var find = ConversationFindModel()
 
     init(sessionID: String, initial: JSON?) {
         self.sessionID = sessionID
@@ -91,6 +92,7 @@ struct ConversationScreen: View {
                     .frame(maxWidth: 820).frame(maxWidth: .infinity)
             }
             .conversationStartsAtBottom()
+            .environment(\.findHighlight, find.highlight)
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.canvas)
             // Pulling down reads the whole transcript again, in case the saved one drifted from the server's.
@@ -106,11 +108,15 @@ struct ConversationScreen: View {
                             if atBottom { break }
                         }
                     }
-                } else if atBottom { scrollToBottom(proxy) }
+                } else if atBottom {
+                    // Lines arrive in bursts while an agent works; an animation per line overlapped the last one.
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
             }
             .onChange(of: session.isActive) { _, _ in if atBottom { scrollToBottom(proxy) } }
             .onChange(of: session.queued.count) { _, _ in if atBottom { scrollToBottom(proxy) } }
             .onChange(of: model.scrollToEnd) { _, _ in scrollToBottom(proxy) }
+            .task(id: find.jump) { await proxy.reveal(find.target) }
             .overlay(alignment: .bottom) {
                 if !atBottom && !model.blocks.isEmpty {
                     Button { scrollToBottom(proxy) } label: {
@@ -125,7 +131,9 @@ struct ConversationScreen: View {
                 }
             }
             .animation(.snappy, value: atBottom)
-            .safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { strip; browserLine } }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) { ConversationFindBar(find: find, blocks: model.blocks, expanded: model.expanded); strip; browserLine }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 ConversationComposer(model: model, draft: model.draft, files: model.files, focused: $composerFocused,
                                      stop: { asked = "cancel" }, reopen: { asked = "reopen" })
@@ -214,6 +222,7 @@ struct ConversationScreen: View {
         return Menu {
             Section {
                 Button("Details", systemImage: "info.circle") { showingDetails = true }
+                Button("Find in Conversation", systemImage: "magnifyingglass") { find.open() }
                 if let openInWindow {
                     Button("Open in New Window", systemImage: "plus.rectangle.on.rectangle") {
                         openInWindow(.conversation(id: sessionID, session: s.raw))

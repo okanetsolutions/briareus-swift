@@ -81,14 +81,29 @@ final class SavedSessionLists {
     /// A full list as read from the server.
     func save(_ list: [Session], repo: String) {
         lists[repo] = list
+        unsaved.remove(repo)
         cache.store(Session.json(list), key(repo))
     }
+    /// The projects whose list live records changed since it was last saved.
+    private var unsaved: Set<String> = []
     /// A live record updates a saved full list; it cannot establish that every session has been read. Nil when there is
-    /// no saved list or nothing changed.
+    /// no saved list or nothing changed. Only the list held here changes: the stream opens with every session and sends
+    /// a working one's record at every step of its turn, and saving the project's whole list for each one cost the main
+    /// thread the list per record. `saveChanges` saves them, once per burst.
     func upsert(_ session: Session, repo: String) -> [Session]? {
         guard let list = list(repo)?.upserting(session) else { return nil }
-        save(list, repo: repo)
+        lists[repo] = list
+        unsaved.insert(repo)
         return list
+    }
+    /// Saves the lists live records changed, unless the cache dropped theirs meanwhile.
+    func saveChanges() {
+        let repos = unsaved
+        unsaved = []
+        for repo in repos {
+            guard let list = lists[repo], cache.contains(key(repo)) else { continue }
+            cache.store(Session.json(list), key(repo))
+        }
     }
     /// A deletion updates a saved full list; live-only rows cannot establish a complete cache.
     func remove(_ id: String, repo: String) -> [Session]? {
@@ -97,7 +112,7 @@ final class SavedSessionLists {
         return list
     }
     /// Signing out: what was read goes with the cache.
-    func reset() { lists = [:] }
+    func reset() { lists = [:]; unsaved = [] }
 }
 
 // MARK: - One conversation

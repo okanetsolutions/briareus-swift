@@ -27,6 +27,8 @@ final class Media: ObservableObject {
     @Published private(set) var state = State()
     private var task: Task<Void, Never>?
     private let queue = DispatchQueue(label: "briareus.media")
+    /// Each player's state script, compiled; touched only on `queue`.
+    private nonisolated(unsafe) var scripts: [String: NSAppleScript] = [:]
 
     private static let players = [("com.spotify.client", "Spotify"), ("com.apple.Music", "Music")]
 
@@ -58,9 +60,12 @@ final class Media: ObservableObject {
         end tell
         """
         let result: String? = await withCheckedContinuation { cont in
-            queue.async {
+            queue.async { [self] in
+                // Compiled once per player and kept: this runs every second, and compiling cost more than asking.
+                let compiled = scripts[player.id] ?? NSAppleScript(source: script)
+                scripts[player.id] = compiled
                 var error: NSDictionary?
-                let out = NSAppleScript(source: script)?.executeAndReturnError(&error).stringValue
+                let out = compiled?.executeAndReturnError(&error).stringValue
                 cont.resume(returning: error == nil ? out : nil)
             }
         }

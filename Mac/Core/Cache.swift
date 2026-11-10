@@ -106,6 +106,11 @@ final class DiskCache: @unchecked Sendable {
         guard let data = try? Data(contentsOf: url(key)) else { return [] }
         return data.split(separator: UInt8(ascii: "\n")).compactMap { JSON.parse(Data($0)) }
     }
+    /// `lines`, read and parsed off the caller's actor: a long conversation's saved transcript is megabytes of lines, and
+    /// reading it where it was asked for held the main thread while the conversation opened.
+    func readLines(_ key: String) async -> [JSON] {
+        await Task.detached(priority: .userInitiated) { self.lines(key) }.value
+    }
     @discardableResult
     func append(_ values: [JSON], _ key: String) -> Bool {
         guard !values.isEmpty else { return true }

@@ -52,8 +52,26 @@ struct MdSpan: Equatable, Sendable {
 }
 
 enum Markdown {
-    /// The blocks of a reply.
-    static func parse(_ source: String?) -> [MdBlock] { MdParser.parse(Array((source ?? "").utf8)) }
+    /// The blocks of a reply. A reply is parsed once and kept: a transcript's lazy rows are made again each time they
+    /// scroll back into view, and each asked for its blocks again.
+    static func parse(_ source: String?) -> [MdBlock] {
+        guard let source, !source.isEmpty else { return [] }
+        let key = source as NSString
+        if let known = parsed.object(forKey: key) { return known.blocks }
+        let blocks = MdParser.parse(Array(source.utf8))
+        parsed.setObject(Parsed(blocks), forKey: key, cost: source.utf8.count)
+        return blocks
+    }
+    private final class Parsed {
+        let blocks: [MdBlock]
+        init(_ blocks: [MdBlock]) { self.blocks = blocks }
+    }
+    /// Parsed replies by their source, up to about 4 MB of source text; the system empties it under memory pressure.
+    private static let parsed: NSCache<NSString, Parsed> = {
+        let cache = NSCache<NSString, Parsed>()
+        cache.totalCostLimit = 4 * 1024 * 1024
+        return cache
+    }()
 
     /// Inline syntax: `code`, **bold**, *italic*, ~~strike~~, [text](url), ![alt](url), <url>, bare URLs and HTML entities. Newlines stay in the text.
     static func inline(_ text: String?) -> [MdSpan] {

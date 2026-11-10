@@ -62,4 +62,35 @@ final class TranscriptFindTests: XCTestCase {
         XCTAssertEqual(transcriptFindPieces(prep, open: false), [])
         XCTAssertEqual(transcriptFindPieces(prep, open: true), ["$ composer install"])
     }
+
+    func testATranscriptsBlocksAreSearchedInOrderWithOpenStepsOnly() throws {
+        let builder = TranscriptBlockBuilder()
+        let events: [JSON] = [["seq": 3, "kind": "cmd", "text": "composer install"],
+                              ["seq": 4, "kind": "text", "text": "Installed **composer** packages."]]
+        builder.append(events.compactMap { Event($0) }[...])
+        let rows = builder.blocks
+        let folded = try XCTUnwrap(rows.first { if case .preparation = $0 { return true } else { return false } })
+
+        let closed = transcriptFindBlocks(rows, expanded: [])
+        XCTAssertEqual(closed.map(\.seq), rows.map(\.seq))
+        var f = TranscriptFind()
+        f.search("composer", in: closed)
+        XCTAssertEqual(f.matches.map(\.block), [4])
+
+        f.search("composer", in: transcriptFindBlocks(rows, expanded: [folded.seq]))
+        XCTAssertEqual(f.matches.map(\.block), [folded.seq, 4])
+    }
+
+    func testAnOccurrencesRangeIsWhatMatchedNotTheQuerysLength() {
+        // Ignoring case folds "ß" to "ss": the occurrence is one unit long and ends inside the text.
+        let text = "Straße"
+        let ranges = findRanges(of: "sse", in: text)
+        XCTAssertEqual(ranges.map(\.location), findOccurrences(of: "sse", in: text))
+        for r in ranges {
+            XCTAssertLessThanOrEqual(r.location + r.length, (text as NSString).length)
+            XCTAssertNotNil(Range(r, in: text))
+        }
+        XCTAssertEqual(findRanges(of: "API", in: "api and Api").map(\.length), [3, 3])
+        XCTAssertEqual(findRanges(of: "", in: "anything"), [])
+    }
 }

@@ -80,7 +80,9 @@ struct SidebarScreenFrame<Content: View>: View {
 struct SidebarScroll<Content: View>: View {
     @ViewBuilder var content: () -> Content
     @State private var contentHeight: CGFloat = 0
-    @State private var offset: CGFloat = 0
+    /// Where the rows are scrolled to, read only by the thumb: kept as this view's own state, every scrolled point made
+    /// every row again.
+    @State private var position = SidebarScrollPosition()
     private let space = "sidebarScroll"
 
     var body: some View {
@@ -103,20 +105,34 @@ struct SidebarScroll<Content: View>: View {
             .scrollIndicators(.never)
             .onPreferenceChange(SidebarScrollMetrics.self) { r in
                 if abs(r.height - contentHeight) > 0.5 { contentHeight = r.height }
-                if abs(-r.minY - offset) > 0.5 { offset = -r.minY }
+                if abs(-r.minY - position.offset) > 0.5 { position.offset = -r.minY }
             }
             .overlay(alignment: .topTrailing) {
-                if overflows {
-                    let total = contentHeight, maxScroll = max(total - visible, 1)
-                    let thumb = max(28, visible * visible / max(total, 1))
-                    let y = (visible - thumb) * min(max(offset, 0), maxScroll) / maxScroll
-                    RoundedRectangle(cornerRadius: 6).fill(Theme.thumb)
-                        .frame(width: 10, height: thumb)
-                        .offset(y: y)
-                        .allowsHitTesting(false)
-                }
+                if overflows { SidebarScrollThumb(position: position, visible: visible, total: contentHeight) }
             }
         }
+    }
+}
+
+/// How far the sidebar's rows are scrolled.
+private final class SidebarScrollPosition: ObservableObject {
+    @Published var offset: CGFloat = 0
+}
+
+/// The sidebar's own scrollbar thumb, the only view that follows the scrolling.
+private struct SidebarScrollThumb: View {
+    @ObservedObject var position: SidebarScrollPosition
+    let visible: CGFloat
+    let total: CGFloat
+
+    var body: some View {
+        let maxScroll = max(total - visible, 1)
+        let thumb = max(28, visible * visible / max(total, 1))
+        let y = (visible - thumb) * min(max(position.offset, 0), maxScroll) / maxScroll
+        RoundedRectangle(cornerRadius: 6).fill(Theme.thumb)
+            .frame(width: 10, height: thumb)
+            .offset(y: y)
+            .allowsHitTesting(false)
     }
 }
 

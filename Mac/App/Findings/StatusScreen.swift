@@ -14,7 +14,7 @@ final class StatusQuestions: ObservableObject {
     func load(_ s: Session) async {
         guard s.state == .waiting, Store.shared.supports("session") else { questions[s.id] = nil; return }
         var transcript = Transcript()
-        transcript.append(.array(Store.shared.cache.lines("transcript:\(s.id)")))
+        transcript.append(.array(await Store.shared.cache.readLines("transcript:\(s.id)")))
         do {
             let answer = try await Store.shared.call("session", ["sessionId": .string(s.id), "since": JSON(transcript.cursor)])
             transcript.append(answer["events"])

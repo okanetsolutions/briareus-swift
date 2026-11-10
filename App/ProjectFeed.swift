@@ -68,7 +68,7 @@ final class ProjectFeed: ObservableObject {
     func adopt(_ list: [Session]) {
         let gone = Set(sessions.map(\.id)).subtracting(list.map(\.id))
         if list != sessions { sessions = list }
-        sessionsLoaded = true
+        if !sessionsLoaded { sessionsLoaded = true }
         Store.shared.cache.store(Session.json(list), "sessions:\(repo)")
         unsaved = false
         for id in gone { Store.shared.cache.remove("transcript:\(id)") }
@@ -221,9 +221,10 @@ final class ProjectsModel: ObservableObject {
 
     private func adopt(_ answer: JSON) {
         guard let list = Project.parseList(answer) else { return }
-        raw = answer
+        // A poll that changed nothing publishes nothing: the tabs, the lists and Status all observe this.
+        if answer != raw { raw = answer }
         if list != projects { projects = list }
-        loaded = true
+        if !loaded { loaded = true }
         recount()
     }
     private func reset() {
@@ -271,7 +272,7 @@ final class ProjectsModel: ObservableObject {
         }
         guard mine == generation else { return }
         adopt(answer)
-        error = nil
+        if error != nil { error = nil }
         Store.shared.cache.store(answer, "projects")
         guard Store.shared.supports("sessions") else {
             sessionsError = SessionOverview.unavailableMessage
