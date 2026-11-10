@@ -92,6 +92,7 @@ struct ConversationScreen: View {
                     .frame(maxWidth: 820).frame(maxWidth: .infinity)
             }
             .conversationStartsAtBottom()
+            .environment(\.findHighlight, find.highlight)
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.canvas)
             // Pulling down reads the whole transcript again, in case the saved one drifted from the server's.
@@ -115,7 +116,7 @@ struct ConversationScreen: View {
             .onChange(of: session.isActive) { _, _ in if atBottom { scrollToBottom(proxy) } }
             .onChange(of: session.queued.count) { _, _ in if atBottom { scrollToBottom(proxy) } }
             .onChange(of: model.scrollToEnd) { _, _ in scrollToBottom(proxy) }
-            .onChange(of: find.jump) { _, _ in if let seq = find.target { withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(seq, anchor: .center) } } }
+            .task(id: find.jump) { await proxy.reveal(find.target) }
             .overlay(alignment: .bottom) {
                 if !atBottom && !model.blocks.isEmpty {
                     Button { scrollToBottom(proxy) } label: {

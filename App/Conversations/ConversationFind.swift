@@ -1,5 +1,8 @@
 // Find in a conversation, as the Mac's find bar (⌘F there): a field over the transcript, how many places match and
 // which one is shown, and the steps between them. The search is Core's `TranscriptFind`, over the text each block draws.
+// Every place the query occurs is marked in the messages and replies, and a step brings the current match's block into
+// view; the Mac also marks which occurrence is the current one, which its own text view can and SwiftUI's Text cannot
+// scroll to.
 import SwiftUI
 
 /// The find bar's state: the query, its matches and the block to bring into view.
@@ -13,6 +16,8 @@ final class ConversationFindModel: ObservableObject {
 
     /// The block holding the current match.
     var target: Int? { find.currentMatch?.block }
+    /// What the transcript marks: the query searched for, while the bar is up.
+    var highlight: String { showing ? find.query : "" }
 
     func open() { showing = true }
     func close() {
@@ -22,7 +27,7 @@ final class ConversationFindModel: ObservableObject {
     }
     /// A new query: its matches, from the first.
     func search(_ blocks: TranscriptRows, expanded: Set<Int>) {
-        find.search(query.trimmingCharacters(in: .whitespacesAndNewlines), in: transcriptFindBlocks(blocks, expanded: expanded))
+        find.search(query, in: transcriptFindBlocks(blocks, expanded: expanded))
         if target != nil { jump += 1 }
     }
     /// The transcript changed under an open bar: the matches again, the current one kept where it was.
@@ -73,5 +78,57 @@ struct ConversationFindBar: View {
             .onChange(of: blocks) { _, now in find.refresh(now, expanded: expanded) }
             .onChange(of: expanded) { _, now in find.refresh(blocks, expanded: now) }
         }
+    }
+}
+
+// MARK: - Marking the matches
+
+private struct FindHighlightKey: EnvironmentKey {
+    static let defaultValue = ""
+}
+extension EnvironmentValues {
+    /// What a find bar over these views is looking for; empty when none is.
+    var findHighlight: String {
+        get { self[FindHighlightKey.self] }
+        set { self[FindHighlightKey.self] = newValue }
+    }
+}
+
+extension AttributedString {
+    /// The text with every place `query` occurs marked, found as the search finds them (Core's `findOccurrences`).
+    func marking(_ query: String) -> AttributedString {
+        guard !query.isEmpty else { return self }
+        let plain = String(characters)
+        let found = findOccurrences(of: query, in: plain)
+        guard !found.isEmpty else { return self }
+        var out = self
+        let length = (query as NSString).length
+        for start in found {
+            let from = plain.distance(from: plain.startIndex, to: String.Index(utf16Offset: start, in: plain))
+            let to = plain.distance(from: plain.startIndex, to: String.Index(utf16Offset: start + length, in: plain))
+            let lower = out.index(out.startIndex, offsetByCharacters: from)
+            out[lower..<out.index(lower, offsetByCharacters: to - from)].backgroundColor = Theme.warn.opacity(0.35)
+        }
+        return out
+    }
+}
+
+/// Plain text that marks what the find bar over it is looking for.
+struct FindMarkedText: View {
+    let text: String
+    @Environment(\.findHighlight) private var finding
+    var body: some View {
+        if finding.isEmpty { Text(text) } else { Text(AttributedString(text).marking(finding)) }
+    }
+}
+
+extension ScrollViewProxy {
+    /// Brings a transcript block into view. Rows far away are not laid out yet and their heights are estimates, so one
+    /// jump can land short; a second, once they are, settles on it unless another step was taken meanwhile.
+    @MainActor func reveal(_ seq: Int?) async {
+        guard let seq else { return }
+        withAnimation(.easeOut(duration: 0.25)) { scrollTo(seq, anchor: .center) }
+        guard (try? await Task.sleep(for: .milliseconds(350))) != nil else { return }
+        scrollTo(seq, anchor: .center)
     }
 }

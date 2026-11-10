@@ -113,15 +113,18 @@ struct ErrorNotice: View {
 /// boxes, quotes, code, rules and tables. Equal sources draw the same, so a screen redrawn around a reply leaves it be.
 struct MarkdownText: View, Equatable {
     let source: String
+    /// What a find bar over it is looking for, marked where it occurs.
+    @Environment(\.findHighlight) private var finding
     init(_ source: String) { self.source = source }
+    static func == (a: MarkdownText, b: MarkdownText) -> Bool { a.source == b.source }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(Markdown.parse(source).enumerated()), id: \.offset) { _, block in
                 switch block.kind {
                 case .paragraph:
-                    Text(inlineMarkdown(block.text))
+                    Text(inlineMarkdown(block.text).marking(finding))
                 case .heading:
-                    Text(inlineMarkdown(block.text)).font(block.level == 1 ? .title3.bold() : block.level == 2 ? .headline : .subheadline.bold())
+                    Text(inlineMarkdown(block.text).marking(finding)).font(block.level == 1 ? .title3.bold() : block.level == 2 ? .headline : .subheadline.bold())
                         .padding(.top, 4)
                 case .bullet:
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -130,10 +133,10 @@ struct MarkdownText: View, Equatable {
                         case .unchecked: Image(systemName: "square").foregroundStyle(.secondary).accessibilityLabel("Not done")
                         case .checked: Image(systemName: "checkmark.square.fill").foregroundStyle(Theme.accent).accessibilityLabel("Done")
                         }
-                        Text(inlineMarkdown(block.text))
+                        Text(inlineMarkdown(block.text).marking(finding))
                     }.padding(.leading, CGFloat(block.indent) * 16)
                 case .quote:
-                    Text(inlineMarkdown(block.text)).foregroundStyle(.secondary)
+                    Text(inlineMarkdown(block.text).marking(finding)).foregroundStyle(.secondary)
                         .padding(.leading, 12)
                         .overlay(alignment: .leading) { Capsule().fill(Theme.line).frame(width: 3) }
                 case .code:
