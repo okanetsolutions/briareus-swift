@@ -117,18 +117,20 @@ struct PullSnapshot {
     var pr: JSON
     /// The `code_reviews` answer's list, as read.
     var codeReviews: JSON
+    /// Its review outcome and rounds, as `ReviewOutcome.state(_:over:)` keeps them; null before a server sends them.
+    var reviewState: JSON
     var row: PullSummary?
     var stack: StackPosition?
     var body: String?
     var bodyAuthor: String?
 
-    init(pr: JSON, codeReviews: JSON, row: PullSummary?, stack: StackPosition?, body: String?, bodyAuthor: String?) {
-        self.pr = pr; self.codeReviews = codeReviews; self.row = row; self.stack = stack; self.body = body; self.bodyAuthor = bodyAuthor
+    init(pr: JSON, codeReviews: JSON, reviewState: JSON = .null, row: PullSummary?, stack: StackPosition?, body: String?, bodyAuthor: String?) {
+        self.pr = pr; self.codeReviews = codeReviews; self.reviewState = reviewState; self.row = row; self.stack = stack; self.body = body; self.bodyAuthor = bodyAuthor
     }
     /// What `json` saved; nil for nothing saved.
     init?(_ saved: JSON?) {
         guard let saved, saved.isObject else { return nil }
-        pr = saved["pr"]; codeReviews = saved["codeReviews"]
+        pr = saved["pr"]; codeReviews = saved["codeReviews"]; reviewState = saved["reviewState"]
         row = PullSummary(saved["row"]); stack = StackPosition(restoring: saved["stack"])
         body = saved["body"].string; bodyAuthor = saved["bodyAuthor"].string
     }
@@ -136,6 +138,7 @@ struct PullSnapshot {
     var json: JSON? {
         guard !pr.isNull else { return nil }
         var saved: JSON = ["pr": pr, "codeReviews": codeReviews, "row": row?.raw ?? .null, "stack": stack?.json ?? .null]
+        if !reviewState.isNull { saved["reviewState"] = reviewState }
         if let body { saved["body"] = .string(body) }
         if let bodyAuthor { saved["bodyAuthor"] = .string(bodyAuthor) }
         return saved

@@ -11,6 +11,10 @@ final class CodeReviewsModel: ObservableObject {
     /// The stored code reviews, newest first, and the `code_reviews` list they were read from (saved with the snapshot).
     @Published private(set) var reviews: [CodeReview] = []
     private(set) var raw: JSON = []
+    /// What the reviews amount to (`ReviewOutcome`), and the outcome and rounds it was read from, saved with the
+    /// pull request; nil before a server sends one.
+    @Published private(set) var outcome: ReviewOutcome?
+    private(set) var outcomeRaw: JSON = .null
     /// Whether the reviews have been read, or restored from the last visit: until then the tab is loading.
     @Published private(set) var read = false
     @Published private(set) var error: String?
@@ -49,13 +53,20 @@ final class CodeReviewsModel: ObservableObject {
 
     /// The list as read or restored; anything but an array reads as none. A read that began at a `writes` mark since
     /// passed is dropped. Taking the list clears what the last read or handling save said went wrong.
-    func take(_ list: JSON, readAt mark: Int? = nil) {
+    func take(_ list: JSON, answer: JSON? = nil, readAt mark: Int? = nil) {
         guard writes.holds(mark) else { return }
         raw = list.isArray ? list : []
+        if let answer { takeOutcome(answer, from: .read) }
         let parsed = CodeReview.parse(["codeReviews": raw])
         if parsed != reviews { reviews = parsed }
         read = true
         error = nil; saveError = nil
+    }
+    /// The outcome and rounds `answer` carries (a read, a restored snapshot or a save's answer), over the ones kept.
+    private func takeOutcome(_ answer: JSON, from source: ReviewOutcome.Source) {
+        outcomeRaw = ReviewOutcome.state(answer, from: source, over: outcomeRaw)
+        let parsed = ReviewOutcome(outcomeRaw)
+        if parsed != outcome { outcome = parsed }
     }
     func failed(_ message: String) { error = message; read = true }
     /// The pull request itself could not be read: there is nothing more to wait for.
@@ -103,6 +114,7 @@ final class CodeReviewsModel: ObservableObject {
         do {
             let answer = try await Store.shared.call(call, args)
             take(fold(answer, raw))
+            takeOutcome(answer, from: call == "update_code_review_finding" ? .verdict : .other)
             changed()
             return true
         } catch {
