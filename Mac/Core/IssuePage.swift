@@ -20,6 +20,10 @@ enum IssuePageState: Equatable, Sendable {
     var isClosed: Bool { self == .closed || self == .closedAside }
 }
 
+/// Whether the board's answer lists every open issue, so one missing from it is no longer open: not when GitHub refused
+/// its issues, nor when it stopped short (the rest are read on Load more, IssuePages.swift).
+func boardListsEveryIssue(_ board: JSON) -> Bool { !board["issuesError"].isSet && !board["issuesTruncated"].is(true) }
+
 /// The pull requests still open among those linked to it; the full read lists merged and closed ones too.
 func issueOpenPulls(_ issue: IssueSummary) -> Int { issue.pulls.filter { $0.state == nil || $0.state == "open" }.count }
 

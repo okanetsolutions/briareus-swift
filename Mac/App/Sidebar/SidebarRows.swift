@@ -85,6 +85,11 @@ struct SidebarSessionRow: View {
     var selectMode: Bool
     var picked: Bool
     var projectTitle: String? = nil
+    /// How deep it sits under orchestrators: a worker is drawn indented under the one that ordered it.
+    var depth = 0
+    /// Whether its workers are hidden; nil for a conversation with none on the list.
+    var folded: Bool? = nil
+    var fold: () -> Void = {}
     var action: () -> Void
     @State private var hovered = false
 
@@ -94,7 +99,8 @@ struct SidebarSessionRow: View {
                 if selectMode {
                     CheckBox(on: picked).padding(.top, 4).padding(.trailing, 8)
                 }
-                Color.clear.frame(width: 16, height: 1)   // the fold gutter and the gap after it
+                if depth > 0 { Color.clear.frame(width: CGFloat(min(depth, 4)) * 14, height: 1) }
+                FoldGutter(folded: folded, fold: fold)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 7) {
                         mark
@@ -139,6 +145,25 @@ struct SidebarSessionRow: View {
     @ViewBuilder private func metaText(_ text: String) -> some View {
         if text.isEmpty { Color.clear.frame(width: 0, height: 0) }
         else { Text(text).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1).fixedSize() }
+    }
+}
+
+/// The 16px gutter before a conversation's mark: an orchestrator's chevron, which hides or shows its workers.
+private struct FoldGutter: View {
+    var folded: Bool?
+    var fold: () -> Void
+    var body: some View {
+        if let folded {
+            Button(action: fold) {
+                Image(systemName: folded ? "chevron.right" : "chevron.down").font(Theme.caption2).foregroundStyle(Theme.muted)
+                    .frame(width: 16, height: 23).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(folded ? "Show workers" : "Hide workers")
+            .accessibilityLabel(folded ? "Show workers" : "Hide workers")
+        } else {
+            Color.clear.frame(width: 16, height: 1)
+        }
     }
 }
 

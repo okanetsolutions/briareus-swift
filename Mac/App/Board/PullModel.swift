@@ -110,13 +110,13 @@ final class PullModel: ObservableObject {
 
     private var key: String { PullSnapshot.key(repo: repo, number: number) }
     private func save() {
-        let snapshot = PullSnapshot(pr: pr, codeReviews: codeReviews.raw, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
+        let snapshot = PullSnapshot(pr: pr, codeReviews: codeReviews.raw, reviewState: codeReviews.outcomeRaw, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
         if let saved = snapshot.json { Store.shared.cache.store(saved, key) }
     }
     private func restore() {
         if let saved = PullSnapshot(Store.shared.cache.value(key)) {
             pr = saved.pr
-            codeReviews.take(saved.codeReviews)
+            codeReviews.take(saved.codeReviews, answer: saved.reviewState)
             if descriptionBody == nil { descriptionBody = saved.body }
             if descriptionAuthor == nil { descriptionAuthor = saved.bodyAuthor }
             if row == nil { row = saved.row }
@@ -162,7 +162,7 @@ final class PullModel: ObservableObject {
                 let c = await boardCall("code_reviews", args)
                 guard gen == pullGen else { return nil }
                 switch c {
-                case .success(let v): codeReviews.take(v["codeReviews"], readAt: mark)
+                case .success(let v): codeReviews.take(v["codeReviews"], answer: v, readAt: mark)
                 case .failure(let e): if e.kind != .cancelled { codeReviews.failed(e.description) }
                 }
             }

@@ -1,5 +1,5 @@
 // A project's conversations in the sidebar, as screen_projects.c's SessionsScreen holds them: the list (saved first, then
-// the server's), ☑ Select's picks, and the bulk ⏻ Close or 🗑 Delete that works through them one at a time.
+// the server's) with each orchestrator's workers under it, ☑ Select's picks, and the bulk ⏻ Close or 🗑 Delete that works through them one at a time.
 import Combine
 import Foundation
 
@@ -16,6 +16,8 @@ final class SidebarSessions: ObservableObject {
     @Published private(set) var bulkRunning = false
     @Published private(set) var bulkDelete = false
     @Published private(set) var bulkError: String?
+    /// The orchestrators whose workers are hidden, by conversation id.
+    @Published private(set) var folded: Set<String> = []
 
     private var generation = 0
 
@@ -67,6 +69,12 @@ final class SidebarSessions: ObservableObject {
 
     /// The conversation leaves the list on screen at once (sessions_forget).
     func drop(_ id: String) { sessions.removeAll { $0.id == id } }
+
+    // MARK: Workers
+
+    /// The list as drawn: each orchestrator's workers under it, a folded one's left out.
+    var rows: [SessionNode] { sessionsFolded(sessionsNested(sessions), sessions, folded: folded) }
+    func toggleFold(_ id: String) { if folded.remove(id) == nil { folded.insert(id) } }
 
     // MARK: Select
 
