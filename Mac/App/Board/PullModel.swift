@@ -298,37 +298,6 @@ final class PullModel: ObservableObject {
         return boardRow?.raw["comments"].number.map { Int($0) }
     }
 
-    // MARK: Errands
-
-    func startAction(_ action: BoardAction, input: String?) {
-        guard !busy, !uncertain, pr["headRef"].string != nil else { return }
-        busy = true
-        let args = action.arguments(repo: repo, number: number, input: input)
-        Task {
-            let r = await boardCall(action.operation, args, timeout: action.timeoutMs.map { TimeInterval($0) / 1000 })
-            busy = false
-            switch r {
-            case .success:
-                writeError = nil
-                // The pull request stays shown; the new session joins its runs.
-                post(.sessionsChanged, ["repo": repo])
-                if Store.shared.supports("sessions") { await loadSessions() }
-            case .failure(let e):
-                writeError = e.description
-                // A refusal is definite; anything else may have started the session.
-                if !e.isRefusal { uncertain = true }
-            }
-        }
-    }
-    func act(_ action: BoardAction) {
-        afterThisEvent { [self] in
-            dialogOpen = true
-            let answer = actionPrompt(action, repo: repo, number: number)
-            dialogOpen = false
-            if let input = answer { startAction(action, input: input) }
-        }
-    }
-
     // MARK: Merge
 
     var canMerge: Bool { Store.shared.supports("merge_pull") && record.mergeable }

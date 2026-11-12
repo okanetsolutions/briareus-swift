@@ -126,6 +126,12 @@ struct AttentionSection: View {
                     Button("Open the conversation") { Navigator.shared.push(.conversation(id: sid, session: nil)) }
                         .buttonStyle(.plain).font(Theme.footnote).foregroundStyle(Theme.accent)
                 }
+                if let pull = item.pull {
+                    Button("Open pull request #\(pull.number)") {
+                        Navigator.shared.push(.pull(repo: pull.repo, number: pull.number, stack: nil, summary: nil))
+                    }
+                    .buttonStyle(.plain).font(Theme.footnote).foregroundStyle(Theme.accent)
+                }
                 if let r = model.results[item.id] { Text(r).font(Theme.caption).foregroundStyle(Theme.muted) }
             }
         }
