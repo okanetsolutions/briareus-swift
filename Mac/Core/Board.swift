@@ -441,14 +441,24 @@ struct BoardAction: Equatable, Sendable {
     /// Run answers only once the workspace is prepared and serving, which takes longer than a request is given. Nil = default.
     var timeoutMs: Int? { id == "run" ? 170_000 : nil }
     /// Every errand looks the pull request up by number. Input is sent trimmed, and only to an errand that asks for it.
-    func arguments(repo: String, number: Int, input: String? = nil) -> JSON {
+    /// `continueReview` asks a code review refused at the round limit for one more round on purpose; only a review sends it.
+    func arguments(repo: String, number: Int, input: String? = nil, continueReview: Bool = false) -> JSON {
         var args: JSON = ["repo": .string(repo), "prNumber": JSON(number)]
         if id != "run" { args["action"] = .string(id) }
+        if continueReview && id == "review" { args["continueReview"] = true }
         if self.input != nil, let input {
             let trimmed = input.cTrimmed
             if !trimmed.isEmpty { args["input"] = .string(trimmed) }
         }
         return args
+    }
+
+    /// What a person is asked when a code review is refused at the round limit: the server's account of what is unresolved,
+    /// then the one more round it would cost. Both apps ask it before sending the review again.
+    static func anotherRoundQuestion(_ refusal: APIError) -> String {
+        let said = refusal.message?.cTrimmed ?? ""
+        let lead = said.isEmpty ? "This pull request has used its review rounds." : said
+        return lead + " Run one more round on purpose? It starts a paid session."
     }
 
     /// The board's errands, in the order the Windows client shows them.

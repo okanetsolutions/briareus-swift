@@ -28,12 +28,16 @@ enum CodeReviewVerdict: String, Equatable, Sendable, CaseIterable {
     static func choiceTitle(_ verdict: CodeReviewVerdict?) -> String { verdict?.title ?? "None" }
 }
 
-/// Whether an independent check reproduced a finding, or it is only likely.
-enum CodeReviewVerification: String, Equatable, Sendable {
+/// Whether an independent check reproduced a finding, or it is only likely. The server's review outcome counts an
+/// Optional verdict only with one of these and a Dismissed one only when it is `confirmed`.
+enum CodeReviewVerification: String, Equatable, Sendable, CaseIterable {
     case confirmed, plausible
 
     var title: String { self == .confirmed ? "Confirmed" : "Plausible" }
     var tone: RowTone { self == .confirmed ? .ok : .warn }
+    /// What an evidence picker offers, in the same order on both apps; nil leaves it unstated.
+    static let choices: [CodeReviewVerification?] = allCases.map(Optional.some) + [nil]
+    static func choiceTitle(_ verification: CodeReviewVerification?) -> String { verification?.title ?? "None" }
 }
 
 /// One finding a code review registered.
@@ -233,8 +237,11 @@ struct CodeReviewFindingEdit: Equatable, Sendable, Identifiable {
     var verdict: CodeReviewVerdict?
     /// Why the verdict is what it is; empty clears it.
     var reason: String
+    /// How well the verdict is established; nil clears it.
+    var verification: CodeReviewVerification?
     private let savedVerdict: CodeReviewVerdict?
     private let savedReason: String
+    private let savedVerification: CodeReviewVerification?
 
     init(_ finding: CodeReviewFinding, review reviewID: Int) {
         self.reviewID = reviewID
@@ -242,11 +249,13 @@ struct CodeReviewFindingEdit: Equatable, Sendable, Identifiable {
         title = finding.title
         verdict = finding.verdict
         reason = finding.comments ?? ""
+        verification = finding.verification
         savedVerdict = finding.verdict
         savedReason = (finding.comments ?? "").cTrimmed
+        savedVerification = finding.verification
     }
 
-    var isDirty: Bool { verdict != savedVerdict || reason.cTrimmed != savedReason }
+    var isDirty: Bool { verdict != savedVerdict || reason.cTrimmed != savedReason || verification != savedVerification }
     /// Not fixing a finding has to say why.
     var needsReason: Bool { verdict == .optional || verdict == .dismiss }
     /// A reason is given, and one of its own once the verdict changed: the saved one argued for the old verdict (the
@@ -255,20 +264,35 @@ struct CodeReviewFindingEdit: Equatable, Sendable, Identifiable {
         let said = reason.cTrimmed
         return !said.isEmpty && (verdict == savedVerdict || said != savedReason)
     }
-    var canSave: Bool { isDirty && (!needsReason || hasReason) }
+    /// The evidence is what the server's review outcome asks of the verdict: any for Optional, Confirmed for Dismissed,
+    /// none for Fix or no verdict. Without it the pull request's review stays incomplete, so Save waits for it.
+    var hasVerification: Bool {
+        switch verdict {
+        case .optional: return verification != nil
+        case .dismiss: return verification == .confirmed
+        case .fix, nil: return true
+        }
+    }
+    var canSave: Bool { isDirty && (!needsReason || hasReason) && hasVerification }
     /// What the reason box asks for: why it will not be fixed, once that is the verdict.
     var reasonPrompt: String { needsReason ? "Why it will not be fixed" : "Why the verdict is what it is" }
     /// The line under the reason box while the verdict needs a reason; nil when it does not.
     var reasonHint: String? { needsReason ? "A finding left unfixed says why." : nil }
+    /// The line under the evidence picker while the verdict lacks the evidence it needs; nil once it has it.
+    var verificationHint: String? {
+        guard !hasVerification else { return nil }
+        return verdict == .dismiss ? "A dismissed finding has to be confirmed refuted." : "Say how well it is established."
+    }
     /// The SF Symbol of Change verdict, the button that opens the editor.
     static let symbol = "pencil"
 
-    /// The verdict and reason that changed, with the review and finding they belong to; null clears either.
+    /// The verdict, reason and evidence that changed, with the review and finding they belong to; null clears any.
     func arguments(repo: String, number: Int) -> JSON {
         var a: JSON = ["repo": .string(repo), "pr": JSON(number), "reviewId": JSON(reviewID), "findingId": JSON(findingID)]
         if verdict != savedVerdict { a["shouldFix"] = verdict.map { JSON.string($0.rawValue) } ?? .null }
         let said = reason.cTrimmed
         if said != savedReason { a["comments"] = said.isEmpty ? .null : .string(said) }
+        if verification != savedVerification { a["verification"] = verification.map { JSON.string($0.rawValue) } ?? .null }
         return a
     }
 }

@@ -476,6 +476,18 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(asks.arguments(repo: "o/r", number: 9).count, 3)
         XCTAssertEqual(asks.arguments(repo: "o/r", number: 9, input: "line one\nline two")["input"].string, "line one\nline two")
     }
+    func testOnlyAReviewAsksForAnotherRound() {
+        XCTAssertNil(known("review")!.arguments(repo: "o/r", number: 9).object?["continueReview"])
+        XCTAssertEqual(known("review")!.arguments(repo: "o/r", number: 9, continueReview: true)["continueReview"], true)
+        // Any other errand would be refused with it.
+        XCTAssertNil(known("fix-checks")!.arguments(repo: "o/r", number: 9, continueReview: true).object?["continueReview"])
+    }
+
+    func testTheAnotherRoundQuestionKeepsWhatTheServerSaid() {
+        XCTAssertTrue(BoardAction.anotherRoundQuestion(APIError(.http, status: 409, message: "2 fixes unresolved.")).hasPrefix("2 fixes unresolved."))
+        XCTAssertFalse(BoardAction.anotherRoundQuestion(APIError(.http, status: 409)).isEmpty)
+    }
+
     func testErrandsAreOfferedForTheStateAPullRequestIsIn() {
         let always = "run,review,test-sheet,test-run,pr-body-summary,delete-self-comments"
         XCTAssertEqual(offered(nil, #"{"number":1,"mergeable":"mergeable","checks":"success"}"#, 0), always)
