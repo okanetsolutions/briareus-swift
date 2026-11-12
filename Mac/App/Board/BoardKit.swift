@@ -11,7 +11,7 @@ import SwiftUI
 /// keeps its state for when it is back on top, as the Windows client's screens stay alive in the pane's stack.
 @MainActor
 enum BoardModels {
-    private static var models: [String: AnyObject] = [:]
+    private(set) static var models: [String: AnyObject] = [:]
 
     static func model<T: AnyObject>(_ id: String, make: () -> T) -> T {
         // Screens the stack no longer holds (replaced while further down it) go now.

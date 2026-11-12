@@ -220,6 +220,8 @@ struct APIRoute: Sendable {
         // The repository at a commit as a gzipped tarball, downloaded to a file (`APIClient.download`) for the local index.
         .init(name: "repo_archive", method: "GET", path: "repo/archive"),
         // Issues
+        // The board's open issues a page at a time past the 100 it lists (`offset`, `limit`; IssuePages.swift).
+        .init(name: "issues", method: "GET", path: "issues"),
         .init(name: "issue", method: "GET", path: "issues/{issue}"),
         .init(name: "issue_timeline", method: "GET", path: "issues/{issue}/timeline"),   // comments and events, 100 a `page`, oldest first
         .init(name: "close_issue", method: "POST", path: "issues/{issue}/close"),   // `reason` completed or not_planned, and an optional `comment`

@@ -1,4 +1,4 @@
-// A conversation's row in the project's list, drawn from Core's ConversationRow, and the mark beside its title that the
+// A conversation's row in the project's list, drawn from Core's ConversationRow with an orchestrator's fold button, and the mark beside its title that the
 // conversation's strip draws too.
 import SwiftUI
 
@@ -6,6 +6,10 @@ import SwiftUI
 /// values, so a live update redraws only the rows that changed.
 struct ConversationRowLabel: View, Equatable {
     let row: ConversationRow
+    /// Whether an orchestrator's workers are hidden; nil for a conversation with none on the list.
+    var folded: Bool? = nil
+    var fold: () -> Void = {}
+    static func == (a: Self, b: Self) -> Bool { a.row == b.row && a.folded == b.folded }
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             ConversationMark(dot: row.dot, tone: row.markTone).frame(width: 16)
@@ -16,6 +20,14 @@ struct ConversationRowLabel: View, Equatable {
             }
             Spacer(minLength: 0)
             if row.pinned { Image(systemName: "pin.fill").font(.caption).accessibilityLabel("Pinned") }
+            if let folded {
+                Button(action: fold) {
+                    Image(systemName: folded ? "chevron.right.circle" : "chevron.down.circle").font(.body)
+                        .foregroundStyle(.secondary).frame(minWidth: 28, minHeight: 28).contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(folded ? "Show workers" : "Hide workers")
+            }
         }
         .padding(.vertical, 3)
         .accessibilityElement(children: .combine)
