@@ -8,6 +8,12 @@ final class IssuePageTests: XCTestCase {
         timelineEventWords(j(text), repo: repo).map { $0.parts.map(\.text).joined() }
     }
 
+    func testOnlyAWholeBoardSaysAnIssueMissingFromItIsGone() {
+        XCTAssertTrue(boardListsEveryIssue(j(#"{"issues":[],"issuesTruncated":false}"#)))
+        XCTAssertFalse(boardListsEveryIssue(j(#"{"issues":[],"issuesTruncated":true}"#)))
+        XCTAssertFalse(boardListsEveryIssue(j(#"{"issues":[],"issuesError":"Resource not accessible"}"#)))
+    }
+
     func testTheStatePillFollowsTheIssuesOwnRead() {
         XCTAssertEqual(IssuePageState(detail: .null, closedHere: false, closedReason: nil, gone: false), .open)
         // Off the board and not read on its own: it may well be closed.

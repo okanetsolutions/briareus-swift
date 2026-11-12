@@ -177,9 +177,9 @@ struct IssueScreen: View {
     private var row: IssueSummary {
         model.summary ?? boardIssues.first { $0.summary.number == number }?.summary ?? IssueSummary(issue) ?? IssueSummary(["number": JSON(max(number, 1))])!
     }
-    /// The board was read and this issue is not on it; a board GitHub refused the issues of says nothing about it.
+    /// The board was read and this issue is not on it; a board GitHub refused the issues of, or one cut short, says nothing.
     private var gone: Bool {
-        boardRead && closedReason == nil && !feed.board["issuesError"].isSet && !boardIssues.contains { $0.summary.number == number }
+        boardRead && closedReason == nil && boardListsEveryIssue(feed.board) && !boardIssues.contains { $0.summary.number == number }
     }
     private var state: IssuePageState { IssuePageState(detail: model.detail, closedHere: closedReason != nil, closedReason: closedReason, gone: gone) }
     private var runs: [Session] { feed.sessions.filter { issueRunMatches($0, issue: row, repo: repo) } }
@@ -644,9 +644,9 @@ struct IssueScreen: View {
         if let comment { args["comment"] = .string(comment) }
         do {
             let v = try await store.call("close_issue", args)
-            closedReason = v["issue"]["stateReason"].string ?? reason.rawValue
-            comment = nil
-            // The board drops it; reading it again keeps the epic's counts and its siblings true.
+            closedReason = v["issue"]["stateReason"].string ?? reason.rawValue; comment = nil
+            // The board drops it, and the pages read past it drop it now; reading it again keeps the epic's counts true.
+            feed.issuePages?.drop(number)
             model.reset()
             _ = await reading { try await load(fresh: true) }
         } catch {
