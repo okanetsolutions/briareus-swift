@@ -102,6 +102,11 @@ final class PullRecordTests: XCTestCase {
         XCTAssertEqual(back?.row?.number, 4)
         XCTAssertEqual(back?.body, "B")
         XCTAssertEqual(back?.bodyAuthor, "ann")
+        XCTAssertTrue(back?.reviewState.isNull ?? false)
         XCTAssertNil(PullSnapshot(nil))
+        // The review outcome and rounds are kept beside the reviews.
+        let state = j(#"{"reviewOutcome":{"outcome":"passed"},"reviewRounds":{"used":1}}"#)
+        let kept = PullSnapshot(pr: openPull, codeReviews: [], reviewState: state, row: nil, stack: nil, body: nil, bodyAuthor: nil)
+        XCTAssertEqual(PullSnapshot(kept.json)?.reviewState, state)
     }
 }

@@ -11,6 +11,10 @@ final class CodeReviewsModel: ObservableObject {
     /// The stored code reviews, newest first, and the `code_reviews` list as read, which is saved with the pull request.
     @Published private(set) var reviews: [CodeReview] = []
     private(set) var raw: JSON = []
+    /// What the reviews amount to (`ReviewOutcome`), and the outcome and rounds it was read from, saved with the
+    /// pull request; nil before a server sends one.
+    @Published private(set) var outcome: ReviewOutcome?
+    private(set) var outcomeRaw: JSON = .null
     /// The code reviews have been read (or restored) once, and why the last read failed.
     @Published private(set) var read = false
     @Published private(set) var error: String?
@@ -54,13 +58,20 @@ final class CodeReviewsModel: ObservableObject {
 
     /// The list as read or restored; an answer that is not a list leaves the reviews as they were. A read that began at
     /// a `writes` mark since passed is dropped. Taking the list clears what the last read or handling save said went wrong.
-    func take(_ list: JSON, readAt mark: Int? = nil) {
+    func take(_ list: JSON, answer: JSON? = nil, readAt mark: Int? = nil) {
         guard list.isArray, writes.holds(mark) else { return }
         raw = list
+        if let answer { takeOutcome(answer) }
         read = true
         error = nil; saveError = nil
         let parsed = CodeReview.parse(["codeReviews": list])
         if parsed != reviews { reviews = parsed }
+    }
+    /// The outcome and rounds `answer` carries (a read, a restored snapshot or a save's answer), over the ones kept.
+    private func takeOutcome(_ answer: JSON) {
+        outcomeRaw = ReviewOutcome.state(answer, over: outcomeRaw)
+        let parsed = ReviewOutcome(outcomeRaw)
+        if parsed != outcome { outcome = parsed }
     }
     func failed(_ message: String) { error = message; read = true }
     /// The pull request itself could not be read: there is nothing more to wait for.
@@ -111,7 +122,7 @@ final class CodeReviewsModel: ObservableObject {
         defer { saving = nil; writes.end() }
         switch await boardCall(call, args) {
         case .success(let answer):
-            take(fold(answer, raw))
+            take(fold(answer, raw), answer: answer)
             changed()
             return true
         case .failure(let e):

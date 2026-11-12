@@ -1,7 +1,8 @@
-// The pull request's Code reviews tab (`GET /pulls/{number}/code-reviews`): every code review Briareus ran on it, newest
-// first, each a card with how it ended, whether it was handled, when, what it ran on and cost, its verdict counts, its
-// session and summary, then its findings with their verdicts. A token that may write marks a stopped review handled or
-// reopens it, and overrules a finding's verdict in CodeReviewFindingEditor, under the finding.
+// The pull request's Code reviews tab (`GET /pulls/{number}/code-reviews`): what the review amounts to
+// (ReviewOutcomeCard), then every code review Briareus ran on it, newest first, each a card with how it ended, whether
+// it was handled, when, what it ran on and cost, its verdict counts, its session and summary, then its findings with
+// their verdicts. A token that may write marks a stopped review handled or reopens it, and overrules a finding's
+// verdict in CodeReviewFindingEditor, under the finding.
 import SwiftUI
 
 struct PullCodeReviewsTab: View {
@@ -16,6 +17,7 @@ struct PullCodeReviewsTab: View {
             } else if model.reviews.isEmpty && model.error == nil {
                 EmptyNote(title: "No code reviews yet", detail: "A code review started from this pull request's errands is stored here with its findings.")
             }
+            if let outcome = model.outcome { ReviewOutcomeCard(outcome: outcome) }
             ForEach(model.reviews) { review in
                 CodeReviewCard(review: review, model: model, openSession: openSession)
             }
