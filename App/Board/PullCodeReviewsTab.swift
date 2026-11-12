@@ -1,7 +1,8 @@
-// A pull request's Code reviews tab (`GET /pulls/{n}/code-reviews`), as the Mac's: every stored review, newest first, a
-// section each with its status, whether it was handled, when it ran, what it ran on and its counts, the conversation that
-// ran it, its summary, then its findings with their verdicts. A token that may write marks a stopped review handled or
-// reopens it, and overrules a finding's verdict in CodeReviewFindingEditor. The words and tones are CodeReviewLogic's.
+// A pull request's Code reviews tab (`GET /pulls/{n}/code-reviews`), as the Mac's: what the review amounts to
+// (ReviewOutcomeSection), then every stored review, newest first, a section each with its status, whether it was
+// handled, when it ran, what it ran on and its counts, the conversation that ran it, its summary, then its findings
+// with their verdicts. A token that may write marks a stopped review handled or reopens it, and overrules a finding's
+// verdict in CodeReviewFindingEditor. The words and tones are CodeReviewLogic's.
 import SwiftUI
 
 /// The reviews as sections of the pull request's list.
@@ -13,6 +14,7 @@ struct PullCodeReviewsTab: View {
         if let message = model.notice {
             Section { ErrorNotice(message: message) }.listRowBackground(Theme.row)
         }
+        if let outcome = model.outcome { ReviewOutcomeSection(outcome: outcome) }
         if reviews.isEmpty {
             if !model.read && error == nil {
                 ProgressView().frame(maxWidth: .infinity).listRowBackground(Color.clear)

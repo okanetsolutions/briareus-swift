@@ -169,13 +169,13 @@ final class PullScreenModel: ObservableObject {
 
     private var key: String { PullSnapshot.key(repo: repo, number: number) }
     private func save() {
-        let snapshot = PullSnapshot(pr: pr, codeReviews: codeReviews.raw, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
+        let snapshot = PullSnapshot(pr: pr, codeReviews: codeReviews.raw, reviewState: codeReviews.outcomeRaw, row: boardRow, stack: stack, body: descriptionBody, bodyAuthor: descriptionAuthor)
         if let saved = snapshot.json { Store.shared.cache.store(saved, key) }
     }
     private func restore() {
         guard let saved = PullSnapshot(Store.shared.cache.value(key)) else { return }
         pr = saved.pr
-        if saved.codeReviews.isArray { codeReviews.take(saved.codeReviews) }
+        if saved.codeReviews.isArray { codeReviews.take(saved.codeReviews, answer: saved.reviewState) }
         descriptionBody = saved.body
         descriptionAuthor = saved.bodyAuthor
         savedRow = saved.row
@@ -220,7 +220,7 @@ final class PullScreenModel: ObservableObject {
                 let mark = codeReviews.writes.mark
                 let f = try await store.call("code_reviews", args)
                 guard gen == pullGen else { return }
-                codeReviews.take(f["codeReviews"], readAt: mark)
+                codeReviews.take(f["codeReviews"], answer: f, readAt: mark)
             } catch {
                 if gen == pullGen, let said = failure(error) { codeReviews.failed(said) }
             }
