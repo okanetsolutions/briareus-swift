@@ -350,8 +350,15 @@ final class CodeReviewLogicTests: XCTestCase {
     func testChangingOnlyTheEvidenceIsAnEditOfItsOwn() {
         let saved = finding(#"{"id":5,"shouldFix":"dismiss","verification":"plausible","comments":"Refuted."}"#)!
         var e = CodeReviewFindingEdit(saved, review: 1)
-        // A dismissal stored as only plausible cannot be saved again as it stands.
-        XCTAssertFalse(e.isDirty); XCTAssertFalse(e.hasVerification)
+        // A dismissal stored as only plausible lacks the evidence, but its reason may still be reworded as it stands.
+        XCTAssertFalse(e.isDirty); XCTAssertFalse(e.hasVerification); XCTAssertNotNil(e.verificationHint)
+        e.reason = "Refuted by the guard on line 4."
+        XCTAssertTrue(e.canSave)
+        XCTAssertNil(e.arguments(repo: "o/r", number: 9).object?["verification"])
+        // Changing the ruling to something still short of the evidence is held back.
+        e.verdict = .optional; e.verification = nil
+        XCTAssertFalse(e.canSave)
+        e.verdict = .dismiss; e.reason = "Refuted."
         e.verification = .confirmed
         XCTAssertTrue(e.isDirty); XCTAssertTrue(e.canSave)
         let a = e.arguments(repo: "o/r", number: 9)

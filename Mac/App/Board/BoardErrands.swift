@@ -1,6 +1,6 @@
 // The board's errands as a row and the pull request screen draw them: the glyph before each errand's label (emoji that
-// mirror the Windows client), the label itself, which errands a row offers, and the run-loop hop a dialog-opening errand
-// starts through.
+// mirror the Windows client), the label itself, which errands a row offers, the run-loop hop a dialog-opening errand
+// starts through, and the one more round both errand-starting models offer a code review refused at the round limit.
 import SwiftUI
 
 /// The glyph before an errand's label.
@@ -45,4 +45,22 @@ func rowActions(catalog: JSON, pull: PullSummary?, failedChecks: Int) -> [BoardA
 @MainActor
 func afterThisEvent(_ body: @escaping @MainActor () -> Void) {
     RunLoop.main.perform { MainActor.assumeIsolated(body) }
+}
+/// A screen model that opens modal dialogs over its screen and says so while one is up.
+@MainActor
+protocol ErrandDialogHost: AnyObject {
+    var dialogOpen: Bool { get set }
+}
+extension ErrandDialogHost {
+    /// After a code review refused at the project's round limit, asks from the run loop whether to run one more round and
+    /// calls `again` on a yes. Asks nothing for any other failure, or when this already was the extra round.
+    func offerAnotherRound(after refusal: APIError, continued: Bool, again: @escaping @MainActor () -> Void) {
+        guard !continued, refusal.isReviewRoundLimit else { return }
+        afterThisEvent { [self] in
+            dialogOpen = true
+            let yes = Dialogs.confirmAnotherRound(refusal)
+            dialogOpen = false
+            if yes { again() }
+        }
+    }
 }

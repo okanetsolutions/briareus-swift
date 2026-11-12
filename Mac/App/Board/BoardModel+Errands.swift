@@ -2,7 +2,7 @@
 // take one and start a paid session, and a code review refused at the project's round limit is offered once more on purpose.
 import Foundation
 
-extension BoardModel {
+extension BoardModel: ErrandDialogHost {
     func start(_ pull: PullSummary, _ action: BoardAction, input: String?, continueReview: Bool = false) {
         guard !busy, !uncertain, !pull.branch.isEmpty else { return }
         busy = true; startingNumber = pull.number; startingID = action.id
@@ -20,12 +20,7 @@ extension BoardModel {
                 writeError = e.description
                 // A refusal is definite; anything else may have started the session.
                 if !e.isRefusal { uncertain = true }
-                if !continueReview, e.isReviewRoundLimit {
-                    dialogOpen = true
-                    let again = Dialogs.confirmAnotherRound(e)
-                    dialogOpen = false
-                    if again { start(pull, action, input: input, continueReview: true) }
-                }
+                offerAnotherRound(after: e, continued: continueReview) { [self] in start(pull, action, input: input, continueReview: true) }
             }
         }
     }

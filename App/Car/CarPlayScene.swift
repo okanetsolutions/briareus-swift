@@ -352,7 +352,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
         }
     }
     /// The project's conversations read again, so the phone's lists show what the car did.
-    private func resync(_ repo: String?) async {
+    func resync(_ repo: String?) async {
         guard let repo, store.supports("sessions") else { return }
         try? await store.feed(repo).loadSessions(fresh: true)
     }
@@ -521,24 +521,6 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
         if feed.sessionsLoaded { runs = feed.sessions.filter { $0.pullNumber == number } }
         if store.supports("code_reviews"), let found = try? await store.call("code_reviews", args), case .pull(number) = focus {
             codeReviews = CodeReview.parse(found)
-        }
-    }
-    /// The errands worth offering on the pull request in hand: an open one with a branch, to a token that may start them.
-    var offered: [BoardAction] {
-        guard case .pull = focus, store.canManage, pull["headRef"].string != nil, pull["state"].string == "open" else { return [] }
-        return BoardAction.offered(catalog: catalog, pull: row, failedChecks: pull["checks"]["failed"].truncatedInt ?? 0)
-            .filter { store.supports($0.operation) }
-    }
-    func run(_ action: BoardAction, input: String? = nil) {
-        guard case .pull(let number) = focus, let project, pull["headRef"].string != nil else { return }
-        let args = action.arguments(repo: project.repo, number: number, input: input)
-        perform { [weak self] in
-            guard let self else { return nil }
-            let answer = try await self.store.call(action.operation, args, timeout: action.timeoutMs.map { TimeInterval($0) / 1000 })
-            await self.resync(project.repo)
-            guard let started = Session(answer["session"]) else { return "\(action.label) started" }
-            self.open(started)
-            return nil
         }
     }
     func merge(_ method: String) {

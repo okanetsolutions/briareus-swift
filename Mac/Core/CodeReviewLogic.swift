@@ -265,7 +265,8 @@ struct CodeReviewFindingEdit: Equatable, Sendable, Identifiable {
         return !said.isEmpty && (verdict == savedVerdict || said != savedReason)
     }
     /// The evidence is what the server's review outcome asks of the verdict: any for Optional, Confirmed for Dismissed,
-    /// none for Fix or no verdict. Without it the pull request's review stays incomplete, so Save waits for it.
+    /// none for Fix or no verdict. Without it the pull request's review stays incomplete, so Save waits for it once the
+    /// verdict or the evidence is changed.
     var hasVerification: Bool {
         switch verdict {
         case .optional: return verification != nil
@@ -273,7 +274,10 @@ struct CodeReviewFindingEdit: Equatable, Sendable, Identifiable {
         case .fix, nil: return true
         }
     }
-    var canSave: Bool { isDirty && (!needsReason || hasReason) && hasVerification }
+    /// The verdict and evidence as they were saved: rewording the reason of a ruling stored before evidence was asked keeps
+    /// it as it was, neither better nor worse, so that edit is not held back.
+    private var rulingUnchanged: Bool { verdict == savedVerdict && verification == savedVerification }
+    var canSave: Bool { isDirty && (!needsReason || hasReason) && (hasVerification || rulingUnchanged) }
     /// What the reason box asks for: why it will not be fixed, once that is the verdict.
     var reasonPrompt: String { needsReason ? "Why it will not be fixed" : "Why the verdict is what it is" }
     /// The line under the reason box while the verdict needs a reason; nil when it does not.
