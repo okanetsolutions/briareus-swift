@@ -225,10 +225,14 @@ private struct SidebarSessionsScreen: View {
                 Notice(message: error).padding(.horizontal, 8)
                 Color.clear.frame(height: 8)
             }
-            ForEach(model.sessions, id: \.id) { s in
+            let list = model.sessions
+            ForEach(model.rows, id: \.index) { row in
+                let s = list[row.index]
                 SidebarSessionRow(session: s,
                                     lit: model.selectMode ? model.isPicked(s.id) : selected == "conversation:\(s.id)",
-                                    selectMode: model.selectMode, picked: model.isPicked(s.id)) { open(s) }
+                                    selectMode: model.selectMode, picked: model.isPicked(s.id), depth: row.depth,
+                                    folded: row.workers > 0 ? model.folded.contains(s.id) : nil,
+                                    fold: { model.toggleFold(s.id) }) { open(s) }
             }
             if model.loaded && model.sessions.isEmpty { SidebarNote(text: "No conversations here yet.") }
             if !model.loaded { LoadingNote() }
