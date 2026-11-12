@@ -1,5 +1,6 @@
 // The sheet that overrules one code review finding's verdict (the Mac's inline CodeReviewFindingEditor): Fix, Optional,
-// Dismissed or none, and why. Not fixing a finding needs the reason, so Save waits for one (CodeReviewFindingEdit).
+// Dismissed or none, how well it is established, and why. Not fixing a finding needs the reason and the evidence the
+// review outcome asks, so Save waits for them (CodeReviewFindingEdit).
 import SwiftUI
 
 extension View {
@@ -30,6 +31,17 @@ private struct CodeReviewFindingEditor: View {
                     .pickerStyle(.segmented)
                 } header: {
                     Text("Verdict")
+                }
+                .listRowBackground(Theme.row)
+                Section {
+                    Picker("Evidence", selection: $edit.verification) {
+                        ForEach(CodeReviewVerification.choices, id: \.self) { Text(CodeReviewVerification.choiceTitle($0)).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Evidence")
+                } footer: {
+                    if let hint = edit.verificationHint { Text(hint) }
                 }
                 .listRowBackground(Theme.row)
                 Section {

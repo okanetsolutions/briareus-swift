@@ -294,7 +294,6 @@ struct ProjectSettingsScreen: View {
                 Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
             }
             runtimeRow(.review)
-            check(.babysit)
             // The test sheet and test run errands run on the PR actions' runtime unless they name one; a run switched off has none.
             runtimeRow(.testSheet)
             check(.testRun)

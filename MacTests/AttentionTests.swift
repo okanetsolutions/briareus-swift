@@ -26,4 +26,16 @@ final class AttentionTests: XCTestCase {
         XCTAssertNotEqual(list[0].detail, AttentionItem.parse(j(#"{"items":[{"id":"ssh:r2","kind":"ssh","title":"web-1","request":{"id":"r2","username":"deploy","host":"h"}}]}"#))[0].detail)
         XCTAssertFalse(list[1].elevated)
     }
+
+    func testAReviewItemWithoutASessionOpensItsPullRequest() {
+        let list = AttentionItem.parse(j(#"{"items":[{"id":"review-limit:o/r#7","kind":"review-limit","repo":"o/r","prNumber":7,"sessionId":null,"taskId":null,"title":"PR #7","summary":"3 of 3 rounds used"},{"id":"review-approval:o/r#8","kind":"review-approval","repo":"o/r","prNumber":8,"title":"PR #8"},{"id":"s3:question","kind":"question","repo":"o/r","prNumber":9,"sessionId":"s3","title":"Implement"},{"id":"review-status:x#1","kind":"review-status","prNumber":1,"title":"PR #1"}]}"#))
+        XCTAssertEqual(list.count, 4)
+        XCTAssertEqual(list[0].pull?.repo, "o/r"); XCTAssertEqual(list[0].pull?.number, 7); XCTAssertNil(list[0].sessionID)
+        XCTAssertEqual(list[1].pull?.number, 8)
+        // An item with a session opens the session; one without a project cannot open a pull request.
+        XCTAssertNil(list[2].pull)
+        XCTAssertNil(list[3].pull)
+        // Each review kind has a word of its own, not the raw kind.
+        for item in [list[0], list[1], list[3]] { XCTAssertNotEqual(item.label, item.kind); XCTAssertFalse(item.isApproval) }
+    }
 }
