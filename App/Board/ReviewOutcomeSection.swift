@@ -24,6 +24,9 @@ struct ReviewOutcomeSection: View {
             }
             if let security = outcome.security, security.shown {
                 LabeledContent("Security") { Text(security.line).foregroundStyle(Theme.color(security.tone)) }
+                ForEach(security.listedReasons) { reason in
+                    Text(reason.message).font(.footnote).foregroundStyle(reason.isNote ? .secondary : Theme.color(reason.tone))
+                }
             }
             if let approvals = outcome.approvals, approvals.shown {
                 LabeledContent("Approvals") { Text(approvals.line).foregroundStyle(Theme.color(approvals.tone)) }

@@ -12,12 +12,12 @@ struct PullCodeReviewsTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let e = model.notice { Notice(message: e) }
+            if let outcome = model.outcome { ReviewOutcomeCard(outcome: outcome) }
             if !model.read {
                 LoadingNote(text: "Loading code reviews\u{2026}")
             } else if model.reviews.isEmpty && model.error == nil {
                 EmptyNote(title: "No code reviews yet", detail: "A code review started from this pull request's errands is stored here with its findings.")
             }
-            if let outcome = model.outcome { ReviewOutcomeCard(outcome: outcome) }
             ForEach(model.reviews) { review in
                 CodeReviewCard(review: review, model: model, openSession: openSession)
             }

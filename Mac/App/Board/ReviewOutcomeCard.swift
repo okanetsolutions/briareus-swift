@@ -34,13 +34,18 @@ struct ReviewOutcomeCard: View {
     }
 }
 
-/// The security pass and the approvals, each on its own line when the project asks for it.
+/// The security pass with its own reasons and the approvals, each on its own line when the project asks for it.
 private struct ReviewOutcomeFacts: View {
     var outcome: ReviewOutcome
 
     var body: some View {
         if let security = outcome.security, security.shown {
             fact("Security", security.line, Theme.color(security.tone))
+            ForEach(security.listedReasons) { reason in
+                Text(reason.message).font(Theme.footnote).padding(.top, 2)
+                    .foregroundStyle(reason.isNote ? Theme.muted : Theme.color(reason.tone))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         if let approvals = outcome.approvals, approvals.shown {
             fact("Approvals", approvals.line, Theme.color(approvals.tone))

@@ -92,8 +92,11 @@ struct ReviewSecurity: Equatable, Sendable {
         case "incomplete": said = "Incomplete"
         default: said = "Pending"
         }
-        return policy == "required" || blocking ? "\(said) \u{00B7} required" : "\(said) \u{00B7} advisory"
+        let held = policy == "required" || blocking ? "required" : policy == "off" ? "off" : "advisory"
+        return "\(said) \u{00B7} \(held)"
     }
+    /// Why the pass stands as it does, for showing under it: an advisory pass's reasons reach no outcome reason.
+    var listedReasons: [ReviewReason] { reasons.filter { !$0.isNote } + reasons.filter(\.isNote) }
     var tone: RowTone {
         switch result {
         case "passed": return .ok
@@ -174,6 +177,9 @@ struct ReviewOutcome: Equatable, Sendable {
     /// The project publishes the outcome as a commit status (`enforceReviewOutcome`), and whether GitHub carries it yet.
     var enforced: Bool
     var published: Bool
+    /// Why GitHub refused the commit status the last time, and whether it is tried again by itself.
+    var statusError: String?
+    var statusRetried: Bool
     var security: ReviewSecurity?
     var approvals: ReviewApprovals?
     var rounds: ReviewRounds?
@@ -188,28 +194,55 @@ struct ReviewOutcome: Equatable, Sendable {
         ready = o["ready"].is(true)
         enforced = o["enforced"].is(true)
         published = o["status"]["published"].is(true)
+        statusError = o["status"]["error"].nonEmpty
+        statusRetried = !o["status"]["retryAt"].isNull
         security = ReviewSecurity(o["security"])
         approvals = ReviewApprovals(o["approvals"])
         rounds = ReviewRounds(state["reviewRounds"])
     }
 
-    /// The outcome and rounds to keep from an answer: each that `answer` carries, else the one `previous` kept. A verdict
-    /// save answers a fresh outcome without the rounds, and a handling save neither.
-    static func state(_ answer: JSON, over previous: JSON = .null) -> JSON {
+    /// Which answer the outcome is taken from, and so what it replaces.
+    enum Source: Sendable {
+        /// A read of the reviews, or the snapshot one left: it replaces both, and lacking one means there is none.
+        case read
+        /// A verdict save: its outcome replaces the kept one, and without one (the server could not compute it) the kept
+        /// one no longer holds; the rounds are kept.
+        case verdict
+        /// Any other save, which answers neither: both are kept.
+        case other
+    }
+
+    /// The outcome and rounds to keep after `answer` from `source`, over what `previous` kept.
+    static func state(_ answer: JSON, from source: Source = .read, over previous: JSON = .null) -> JSON {
+        func object(_ j: JSON) -> JSON { j.isObject ? j : .null }
         var kept: JSON = [:]
-        for key in ["reviewOutcome", "reviewRounds"] {
-            let fresh = answer[key]
-            kept[key] = fresh.isObject ? fresh : previous[key]
+        switch source {
+        case .read: kept["reviewOutcome"] = object(answer["reviewOutcome"]); kept["reviewRounds"] = object(answer["reviewRounds"])
+        case .verdict: kept["reviewOutcome"] = object(answer["reviewOutcome"]); kept["reviewRounds"] = previous["reviewRounds"]
+        case .other: return previous
         }
         return kept["reviewOutcome"].isObject || kept["reviewRounds"].isObject ? kept : .null
     }
 
     /// What blocks or explains the outcome, the blocking ones first; the notes, which only inform, after them.
     var listedReasons: [ReviewReason] { reasons.filter { !$0.isNote } + reasons.filter(\.isNote) }
-    /// Why the outcome is out of date, when it is.
-    var staleNote: String? { stale ? "The pull request moved on from the reviewed revision; its next review is still to come." : nil }
-    /// A project that enforces the outcome on GitHub, whose commit status GitHub does not carry yet.
-    var statusNote: String? { enforced && !published ? "Not yet published to GitHub as the briareus/code-review status." : nil }
+    /// Why the outcome is out of date, when it is: past the round limit no review of the new revision runs until a person
+    /// grants one more round.
+    var staleNote: String? {
+        guard stale else { return nil }
+        if rounds?.limitReached == true {
+            return "The pull request moved on from the reviewed revision, and its review rounds are used: no review runs until one more round is granted."
+        }
+        return "The pull request moved on from the reviewed revision."
+    }
+    /// A project that enforces the outcome on GitHub, whose commit status GitHub does not carry: not yet, being retried
+    /// after a refusal, or refused for good.
+    var statusNote: String? {
+        guard enforced, !published else { return nil }
+        guard let statusError else { return "Not yet published to GitHub as the briareus/code-review status." }
+        return statusRetried ? "Publishing the briareus/code-review status failed and is being retried: \(statusError)"
+                             : "GitHub refused the briareus/code-review status, and it is not retried: \(statusError)"
+    }
     /// Said once the review passed and the approvals it needs are in; CI and GitHub's own rules still apply to the merge.
     var readyNote: String? { ready ? "Review passed and the approvals it needs are in." : nil }
 }

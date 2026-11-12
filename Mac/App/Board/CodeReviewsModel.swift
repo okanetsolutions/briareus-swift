@@ -61,15 +61,15 @@ final class CodeReviewsModel: ObservableObject {
     func take(_ list: JSON, answer: JSON? = nil, readAt mark: Int? = nil) {
         guard list.isArray, writes.holds(mark) else { return }
         raw = list
-        if let answer { takeOutcome(answer) }
+        if let answer { takeOutcome(answer, from: .read) }
         read = true
         error = nil; saveError = nil
         let parsed = CodeReview.parse(["codeReviews": list])
         if parsed != reviews { reviews = parsed }
     }
     /// The outcome and rounds `answer` carries (a read, a restored snapshot or a save's answer), over the ones kept.
-    private func takeOutcome(_ answer: JSON) {
-        outcomeRaw = ReviewOutcome.state(answer, over: outcomeRaw)
+    private func takeOutcome(_ answer: JSON, from source: ReviewOutcome.Source) {
+        outcomeRaw = ReviewOutcome.state(answer, from: source, over: outcomeRaw)
         let parsed = ReviewOutcome(outcomeRaw)
         if parsed != outcome { outcome = parsed }
     }
@@ -122,7 +122,8 @@ final class CodeReviewsModel: ObservableObject {
         defer { saving = nil; writes.end() }
         switch await boardCall(call, args) {
         case .success(let answer):
-            take(fold(answer, raw), answer: answer)
+            take(fold(answer, raw))
+            takeOutcome(answer, from: call == "update_code_review_finding" ? .verdict : .other)
             changed()
             return true
         case .failure(let e):
