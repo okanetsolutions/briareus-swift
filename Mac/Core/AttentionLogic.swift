@@ -4,7 +4,8 @@ import Foundation
 // MARK: - Waiting on the operator
 
 /// One thing the server says is waiting on the operator (`GET /attention`): a question, a session that failed or was
-/// interrupted, a QA loop that stopped, a paused webhook, or an SSH command or Slack message an agent asks approval for.
+/// interrupted, a QA loop that stopped, a paused webhook, an SSH command or Slack message an agent asks approval for, or a
+/// pull request whose code review waits on a person (`review-limit`, `review-status`, `review-approval`).
 struct AttentionItem: Equatable, Sendable, Identifiable {
     var id: String
     var kind: String
@@ -13,6 +14,8 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
     var repo: String?
     var sessionID: String?
     var sessionTitle: String?
+    /// The pull request a review item is about; those have no session.
+    var prNumber: Int?
     var at: Date?
     /// An approval's request: its id, and for SSH the server, host and how long it may run; for Slack where it goes.
     var request: JSON
@@ -25,11 +28,17 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
         repo = j["repo"].nonEmpty
         sessionID = j["sessionId"].nonEmpty
         sessionTitle = j["sessionTitle"].nonEmpty
+        prNumber = j["prNumber"].truncatedInt
         at = j["at"].string.flatMap { attentionDate($0) }
         request = j["request"]
     }
 
     var isApproval: Bool { kind == "ssh" || kind == "slack" }
+    /// The pull request to open for an item that has no session of its own, with its project; nil otherwise.
+    var pull: (repo: String, number: Int)? {
+        guard sessionID == nil, let repo, let prNumber else { return nil }
+        return (repo, prNumber)
+    }
     /// The approval's own id, which the decision names.
     var requestID: String? { request["id"].nonEmpty }
     var expiresAt: Date? { request["expiresAt"].number.map { Date(timeIntervalSince1970: $0 / 1000) } }
@@ -46,6 +55,9 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
         case "webhook-paused": return "Webhook paused"
         case "ssh": return "SSH approval"
         case "slack": return "Slack approval"
+        case "review-limit": return "Review rounds used"
+        case "review-status": return "Review status unpublished"
+        case "review-approval": return "Approval needed"
         default: return kind
         }
     }
@@ -68,10 +80,16 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
 }
 
 /// An ISO-8601 time, with or without fractions.
-func attentionDate(_ s: String) -> Date? {
+func attentionDate(_ s: String) -> Date? { isoFractional.date(from: s) ?? isoWhole.date(from: s) }
+/// Made once: every item of a list parsed asks, and making a formatter costs far more than using one. Never changed
+/// after this, so reading from several threads is safe.
+private let isoFractional: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let d = f.date(from: s) { return d }
+    return f
+}()
+private let isoWhole: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime]
-    return f.date(from: s)
-}
+    return f
+}()

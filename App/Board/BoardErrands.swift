@@ -55,6 +55,8 @@ struct PendingErrand: Identifiable {
     var action: BoardAction
     var number: Int
     var input: String?
+    /// A code review sent again past the project's round limit, on purpose.
+    var continueReview = false
     var id: String { "\(number):\(action.id)" }
 }
 
@@ -69,6 +71,8 @@ final class ErrandRunner: ObservableObject {
     @Published private(set) var starting: PendingErrand?
     @Published var uncertain = false
     @Published var writeError: String?
+    /// A code review refused at the round limit, and what to ask before sending it again with `continueReview`.
+    @Published var anotherRound: (errand: PendingErrand, question: String)?
 
     init(repo: String) { self.repo = repo }
 
@@ -84,7 +88,7 @@ final class ErrandRunner: ObservableObject {
         guard !busy, !uncertain else { return nil }
         busy = true; starting = p
         defer { busy = false; starting = nil }
-        let args = p.action.arguments(repo: repo, number: p.number, input: p.input)
+        let args = p.action.arguments(repo: repo, number: p.number, input: p.input, continueReview: p.continueReview)
         do {
             let v = try await Store.shared.call(p.action.operation, args, timeout: p.action.timeoutMs.map { TimeInterval($0) / 1000 })
             writeError = nil
@@ -94,7 +98,13 @@ final class ErrandRunner: ObservableObject {
             guard let said = failure(error) else { return nil }
             writeError = said
             // A refusal is definite; anything else may have started the session.
-            if (error as? APIError)?.isRefusal != true { uncertain = true }
+            let refusal = error as? APIError
+            if refusal?.isRefusal != true { uncertain = true }
+            if let refusal, refusal.isReviewRoundLimit, !p.continueReview {
+                var again = p
+                again.continueReview = true
+                anotherRound = (again, BoardAction.anotherRoundQuestion(refusal))
+            }
             return nil
         }
     }
@@ -120,6 +130,14 @@ private struct ErrandPrompts: ViewModifier {
                 Button("Cancel", role: .cancel) {}
             } message: { p in
                 Text(paidNote(p))
+            }
+            .alert("Review round limit reached",
+                   isPresented: Binding(get: { runner.anotherRound != nil }, set: { if !$0 { runner.anotherRound = nil } }),
+                   presenting: runner.anotherRound) { round in
+                Button("Run one more round") { start(round.errand) }
+                Button("Cancel", role: .cancel) {}
+            } message: { round in
+                Text(round.question)
             }
             .sheet(item: $runner.asking) { p in
                 ErrandInputSheet(pending: p, repo: runner.repo) { text in

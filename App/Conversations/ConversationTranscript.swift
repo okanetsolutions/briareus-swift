@@ -169,7 +169,7 @@ private struct TranscriptEventView: View, Equatable {
             HStack {
                 Spacer(minLength: 48)
                 VStack(alignment: .trailing, spacing: 6) {
-                    Text(event.text ?? "").textSelection(.enabled)
+                    FindMarkedText(text: event.text ?? "").textSelection(.enabled)
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(Theme.raise, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.line, lineWidth: 0.5))

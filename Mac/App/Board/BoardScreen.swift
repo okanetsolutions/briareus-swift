@@ -171,39 +171,6 @@ final class BoardModel: ObservableObject {
     /// The Review List tab's rows (reviewList).
     var reviewPulls: [PullSummary] { reviewList(pulls, stacks: board["stacks"], me: reviewer) }
 
-    // MARK: Errands
-
-    func start(_ pull: PullSummary, _ action: BoardAction, input: String?) {
-        guard !busy, !uncertain, !pull.branch.isEmpty else { return }
-        busy = true; startingNumber = pull.number; startingID = action.id
-        let args = action.arguments(repo: repo, number: pull.number, input: input)
-        Task {
-            let r = await boardCall(action.operation, args, timeout: action.timeoutMs.map { TimeInterval($0) / 1000 })
-            busy = false
-            switch r {
-            case .success:
-                writeError = nil
-                // The list stays shown; the new session joins the runs counted on its pull request.
-                post(.sessionsChanged, ["repo": repo])
-                if Store.shared.supports("sessions") { await loadRuns() }
-            case .failure(let e):
-                writeError = e.description
-                // A refusal is definite; anything else may have started the session.
-                if !e.isRefusal { uncertain = true }
-            }
-        }
-    }
-    func act(_ pull: PullSummary, _ action: BoardAction) {
-        guard !busy, !uncertain else { return }
-        if action.id == "run" { openRun(pull); return }
-        afterThisEvent { [self] in
-            dialogOpen = true
-            let answer = actionPrompt(action, repo: repo, number: pull.number)
-            dialogOpen = false
-            if let input = answer { start(pull, action, input: input) }
-        }
-    }
-
     // MARK: Merge
 
     /// The permission and capability rules every pull request row on the board follows.

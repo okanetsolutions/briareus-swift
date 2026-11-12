@@ -8,17 +8,20 @@ final class Store: ObservableObject {
     static let shared = Store()
 
     @Published private(set) var client: APIClient?
-    @Published private(set) var device: Device?
+    @Published private(set) var device: Device? { didSet { supported = [:] } }
     /// What the server lists in its OpenAPI document.
-    @Published private(set) var routes: [Route] = []
+    @Published private(set) var routes: [Route] = [] { didSet { supported = [:] } }
     /// nil from a server that predates voice notes.
     @Published private(set) var transcribes: Bool?
     @Published private(set) var connecting = false
     @Published var connectionError: String?
     /// The origin shown in the pairing field.
     @Published var server: String
-    /// The app is in front of its user (a window or the car's screen); polling pauses otherwise.
-    @Published var active = true
+    /// The app is in front of its user (a window or the car's screen); polling pauses otherwise. Leaving the front,
+    /// from a window or the car's screen, saves the feeds' lists that live records changed.
+    @Published var active = true {
+        didSet { if oldValue && !active { saveFeeds() } }
+    }
 
     let cache: DiskCache
     private static let originKey = "serverOrigin"
@@ -45,11 +48,19 @@ final class Store: ObservableObject {
     /// The microphone shows for any device allowed to write the message a note becomes.
     var canTranscribe: Bool { canManage }
 
+    /// `supports`' answers by call, kept until the routes or the device change: screens ask on every redraw, and each
+    /// answer walks the server's whole route catalog.
+    private var supported: [String: Bool] = [:]
     /// Whether the server has the route a call is made on and this token may call it.
     func supports(_ call: String) -> Bool {
-        guard let route = APIRoute.named(call), let device else { return false }
-        return Route.allow(routes, method: route.method, path: route.path, permission: device.permission)
-            && Route.supportsBodyField(routes, route: route)
+        if let known = supported[call] { return known }
+        var answer = false
+        if let route = APIRoute.named(call), let device {
+            answer = Route.allow(routes, method: route.method, path: route.path, permission: device.permission)
+                && Route.supportsBodyField(routes, route: route)
+        }
+        supported[call] = answer
+        return answer
     }
     /// Files can go with a message (`message`, or `start_session` for a session's first prompt): the server takes uploads
     /// and that call, and this token may write.
@@ -66,13 +77,15 @@ final class Store: ObservableObject {
     /// A project's saved conversations as its feed holds them, without making a feed (and reading its saved board) to
     /// ask. Nil while the feed has no full list saved.
     func loadedSessions(_ repo: String) -> [Session]? { feeds[repo]?.savedSessions }
+    /// Saves the feeds' lists that live records changed: those change only the lists in memory.
+    func saveFeeds() { for feed in feeds.values { feed.saveChanges() } }
 
     // MARK: Pairing
 
     private func adopt(_ connection: Connection) {
         device = connection.device; routes = connection.routes; transcribes = connection.transcribe
     }
-    private func dropClient() { client = nil; device = nil; routes = []; transcribes = nil; feeds = [:] }
+    private func dropClient() { saveFeeds(); client = nil; device = nil; routes = []; transcribes = nil; feeds = [:] }
     private func saveConnection(_ connection: Connection) { cache.store(connection.json, "connection") }
 
     private static func pair(_ client: APIClient) async throws -> Connection {

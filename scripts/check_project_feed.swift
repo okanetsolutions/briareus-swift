@@ -6,6 +6,7 @@ import Foundation
 final class Store: ObservableObject {
     static let shared = Store()
     @Published var client: APIClient?
+    var active = true
     let cache = DiskCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
     var read: (JSON) async throws -> JSON = { _ in [:] }
     func supports(_ operation: String) -> Bool { true }
@@ -136,8 +137,20 @@ struct ProjectFeedChecks {
                      "Live events must not restore a wiped full-list cache")
         feed.adopt([added, running, second])
         feed.upsert(first)
+        precondition(feed.sessions == [added, first, second], "Live events must keep changing the list after a full read")
+        precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, running, second],
+                     "Live events must leave the saved full read for the next read to replace")
+        feed.saveChanges()
         precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, first, second],
-                     "Live events must keep updating the cache after a full read")
+                     "Leaving the front must save the live records since the full read")
+        feed.remove("s2")
+        precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, first],
+                     "A deletion must save the list held, with the live records since the full read")
+        store.active = false
+        defer { store.active = true }
+        feed.upsert(running)
+        precondition(store.cache.value("sessions:\(repo)").flatMap(Session.parseList) == [added, running],
+                     "A live record landing after the app left the front must be saved, as no later save comes")
     }
 
     @MainActor

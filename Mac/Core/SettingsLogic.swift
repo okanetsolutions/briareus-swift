@@ -81,7 +81,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
     case repo, label, enabled, localDir, localLimit, board
     case setup, php, printing
     case dbName, dbExt, dbPool, dbRestore
-    case prAuthor, babysit, testRun, qaNotes, sheetSteps
+    case prAuthor, testRun, qaNotes, sheetSteps
     case budget, isSelf
     case env
     case run, profiles
@@ -110,7 +110,6 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .dbRestore: return SettingsField(key: "dbRestoreSql", kind: .text, label: "Restore from .sql", cue: "/home/you/dumps/my_app.sql",
             hint: "A dump on this machine, piped into the database every time a server is claimed, right after it is created, before the setup steps run. Leave empty to skip. The servers themselves are added under Database pool in the sidebar.", mono: true)
         case .prAuthor: return SettingsField(key: "prAuthor", kind: .text, label: "PR author", cue: "github-username", mono: true)
-        case .babysit: return SettingsField(key: "babysitPrs", kind: .bool, label: "Babysit pull requests: resolve conflicts and failing checks")
         case .testRun: return SettingsField(key: "qaTestRun", kind: .bool, label: "Execute the test sheet and record a video of each scenario")
         case .qaNotes: return SettingsField(key: "qaNotes", kind: .area, label: "QA notes",
             hint: "Appended to the test sheet and test run prompts: logins, tenants, URLs, whatever a tester needs that the repository does not say.", rows: 4)
@@ -133,8 +132,6 @@ enum ProjectField: Int, CaseIterable, Sendable {
         switch self {
         case .enabled where !on:
             return "Inactive: no session can be started on it and it is left out of the project lists; its settings are kept for when it is switched back on."
-        case .babysit where on:
-            return "Every 15 minutes the server starts, once per head commit, 🔀 Solve conflicts or 🧪 Fix failing checks on each open non-draft pull request that needs one. It runs on the PR actions' runtime and skips pull requests labelled blocked or do-not-merge and those with a session open. With a PR author set, only that author’s pull requests are fixed. No review or feedback agents run."
         case .isSelf:
             return "Tick it on the repository whose code is running right now, and on no other. An orchestrator on any project that finds a flaw in the tooling running it (a briefing, a worker tool, a loop) can then send a fix worker here and merge its pull request once its checks are green. The running server keeps its code until you redeploy."
         default:
@@ -146,7 +143,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
         switch self {
         case .repo, .label, .enabled, .localDir, .localLimit, .board, .setup, .php, .printing: return .project
         case .dbName, .dbExt, .dbPool, .dbRestore: return .database
-        case .prAuthor, .babysit, .testRun, .qaNotes, .sheetSteps: return .review
+        case .prAuthor, .testRun, .qaNotes, .sheetSteps: return .review
         case .budget, .isSelf: return .orchestrator
         case .env: return .env
         case .run, .profiles: return .run

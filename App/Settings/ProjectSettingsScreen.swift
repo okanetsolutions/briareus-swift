@@ -311,7 +311,6 @@ struct ProjectSettingsScreen: View {
             if state.offered(.review) {
                 Section { runtime(.review) } header: { Text("Runtime") }.listRowBackground(Theme.row)
             }
-            checkSection(.babysit)
             // Each step runs as a turn of its own, on the PR actions' runtime unless it names one; a step switched off has none.
             if state.offered(.testSheet) {
                 Section { runtime(.testSheet) } header: { Text("Test sheet") }.listRowBackground(Theme.row)

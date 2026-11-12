@@ -15,15 +15,20 @@ struct APIError: Error, Equatable, Sendable {
     var message: String?
     /// Seconds to wait; nil without a Retry-After header.
     var retryAfter: Double?
+    /// The refusal's machine-readable `code` when the server gave one (`review_round_limit`, say); nil otherwise.
+    var code: String?
 
-    init(_ kind: Kind, status: Int = 0, message: String? = nil, retryAfter: Double? = nil) {
-        self.kind = kind; self.status = status; self.message = message; self.retryAfter = retryAfter
+    init(_ kind: Kind, status: Int = 0, message: String? = nil, retryAfter: Double? = nil, code: String? = nil) {
+        self.kind = kind; self.status = status; self.message = message; self.retryAfter = retryAfter; self.code = code
     }
     static func refused(_ message: String) -> APIError { APIError(.http, status: 403, message: message) }
 
     var unauthorized: Bool { kind == .http && status == 401 }
     /// A 4xx is a definite refusal; anything else may have gone through.
     var isRefusal: Bool { kind == .http && status >= 400 && status < 500 }
+    /// A code review refused because the pull request has used the project's `reviewRoundLimit` rounds: nothing started,
+    /// and sending it again with `continueReview` runs exactly one more (`BoardAction.arguments(continueReview:)`).
+    var isReviewRoundLimit: Bool { kind == .http && status == 409 && code == "review_round_limit" }
 
     /// What the user is told.
     var description: String {
@@ -565,7 +570,7 @@ final class APIClient: @unchecked Sendable {
         if r.status < 200 || r.status >= 300 {
             let payload = isJSON ? JSON.parse(r.body) : nil
             throw APIError(.http, status: r.status, message: payload?["error"].nonEmpty ?? APIError.statusText(r.status),
-                           retryAfter: retryAfterSeconds(r.retryAfter))
+                           retryAfter: retryAfterSeconds(r.retryAfter), code: payload?["code"].nonEmpty)
         }
         guard isJSON, let json = JSON.parse(r.body) else { throw APIError(.nonJSON, status: r.status) }
         return json
@@ -682,7 +687,7 @@ final class APIClient: @unchecked Sendable {
         if r.status >= 300 && r.status < 400 { throw APIError(.redirected, status: r.status) }
         let payload = (try? Data(contentsOf: file)).flatMap { JSON.parse($0) }
         throw APIError(.http, status: r.status, message: payload?["error"].nonEmpty ?? APIError.statusText(r.status),
-                       retryAfter: retryAfterSeconds(r.retryAfter))
+                       retryAfter: retryAfterSeconds(r.retryAfter), code: payload?["code"].nonEmpty)
     }
 
     /// The text of a recorded voice note, sent with the content type it was recorded in.

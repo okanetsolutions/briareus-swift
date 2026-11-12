@@ -26,7 +26,7 @@ View (`App/**`, `Mac/App/**`) -> Model (`@MainActor ObservableObject`, `*Model.s
 | Feature | iPhone (`App/`) | Mac (`Mac/App/`) | Core |
 | --- | --- | --- | --- |
 | Projects, conversations | `Conversations/` | `Sidebar/`, `Conversation/` | `ConversationLogic.swift`, `PhoneConversations.swift`, `SessionOverview.swift`, `LiveEvents.swift`, `EventStream.swift`, `WebhookLogic.swift`, `MailWakeLogic.swift` (Mac only: the iPhone app has no mail) |
-| Board, pull requests, issues | `Board/` | `Board/` | `Board.swift`, `BoardLogic.swift`, `BoardEdits.swift`, `ProjectBoard.swift`, `IssuePage.swift`, `IssuePages.swift`, `PullFiles.swift`, `Diff.swift` |
+| Board, pull requests, issues | `Board/` | `Board/` | `Board.swift`, `BoardAction.swift` (errands), `BoardLogic.swift`, `BoardEdits.swift`, `ProjectBoard.swift`, `IssuePage.swift`, `IssuePages.swift`, `PullFiles.swift`, `Diff.swift` |
 | Status, Usage | `Status/` (Status), `Findings/` (Usage) | `Findings/` | `AttentionLogic.swift`, `PhoneUsage.swift`, `UsageLogic.swift` |
 | Code reviews (a pull request's tab) | `Board/` | `Board/` | `CodeReviewLogic.swift` |
 | Server resources, SSH monitoring, CI/CD | `Stats/` | `Stats/` | `StatsLogic.swift`, `SSHMonitoringLogic.swift`, `CILogic.swift` |

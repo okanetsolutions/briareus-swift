@@ -55,7 +55,11 @@ final class ServerStatsModel: ObservableObject {
     var error: String? { tab.error(server: serverError, sessions: sessionsError) }
     private var requests: [String: UUID] = [:]
     private var sessionsHost: HostStats?
-    private var known: KnownSessions { KnownSessions(repos: ProjectsModel.shared.projects.map(\.repo), cache: Store.shared.cache) }
+    /// Each project's conversations as its feed holds them, else as saved: a session started since the last full read
+    /// is named too.
+    private var known: KnownSessions {
+        KnownSessions(repos: ProjectsModel.shared.projects.map(\.repo), held: { Store.shared.loadedSessions($0) }, cache: Store.shared.cache)
+    }
 
     /// Only the selected panel reads; a slow or failed session list cannot block the overview.
     func load() async {

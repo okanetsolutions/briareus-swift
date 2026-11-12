@@ -5,10 +5,11 @@ private final class Recorder: HTTPTransport, @unchecked Sendable {
     var url: URL?, body: Data?
     let response: String
     let date: String?
-    init(response: String = "{}", date: String? = nil) { self.response = response; self.date = date }
+    let status: Int
+    init(response: String = "{}", date: String? = nil, status: Int = 200) { self.response = response; self.date = date; self.status = status }
     func send(method: String, url: URL, headers: [String: String], body: Data?, timeout: TimeInterval) async throws -> HTTPResponse {
         self.url = url; self.body = body
-        return HTTPResponse(status: 200, contentType: "application/json", retryAfter: nil, body: Data(response.utf8), date: date)
+        return HTTPResponse(status: status, contentType: "application/json", retryAfter: nil, body: Data(response.utf8), date: date)
     }
 }
 
@@ -48,6 +49,25 @@ final class RouteQueryTests: XCTestCase {
             XCTAssertEqual(error.status, 413)
         }
         XCTAssertNil(rec.url)
+    }
+
+    func testARefusalCarriesTheServersCode() async throws {
+        let rec = Recorder(response: #"{"error":"Out of rounds.","code":"review_round_limit","reviewRounds":{"used":3}}"#, status: 409)
+        let client = try APIClient(address: ServerAddress("https://example.com")!, token: "brm_" + String(repeating: "a", count: 43), transport: rec)
+        do {
+            _ = try await client.call("action", ["repo": "o/r", "action": "review", "prNumber": 9])
+            XCTFail("a 409 is thrown")
+        } catch let e as APIError {
+            XCTAssertEqual(e.status, 409); XCTAssertEqual(e.code, "review_round_limit"); XCTAssertEqual(e.message, "Out of rounds.")
+            XCTAssertTrue(e.isReviewRoundLimit)
+        }
+    }
+
+    func testOnlyTheRoundLimitRefusalOffersAnotherRound() {
+        XCTAssertTrue(APIError(.http, status: 409, code: "review_round_limit").isReviewRoundLimit)
+        XCTAssertFalse(APIError(.http, status: 409, code: "review_round_in_progress").isReviewRoundLimit)
+        XCTAssertFalse(APIError(.http, status: 409).isReviewRoundLimit)
+        XCTAssertFalse(APIError(.http, status: 400, code: "review_round_limit").isReviewRoundLimit)
     }
 
     func testAWritesQueryArgumentsGoInItsAddress() async throws {

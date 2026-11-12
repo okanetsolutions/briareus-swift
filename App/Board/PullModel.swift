@@ -210,8 +210,8 @@ final class PullScreenModel: ObservableObject {
             throw error
         }
         guard gen == pullGen else { return }
-        pr = v["pr"]
-        error = nil
+        if v["pr"] != pr { pr = v["pr"] }
+        if error != nil { error = nil }
         issueProjects.load()
         // The description is its own read, once per visit and on refresh.
         if pr["body"].string == nil && !bodyRead && !readingBody && store.supports("pull_description") { Task { await loadBody() } }

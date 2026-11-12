@@ -144,7 +144,7 @@ struct PullFilesView: View {
             let treeH = min(26 + CGFloat(rows.count) * 27, max(viewHeight - 24, 120))
             let stick = max(0, min(-frame.minY, frame.height - treeH))
             HStack(alignment: .top, spacing: 16) {
-                ScrollView(.vertical) { treeList(tree, rows) }
+                ScrollView(.vertical) { treeList(tree, rows, selected: model.selected) }
                     .frame(width: treeW, height: treeH)
                     .offset(y: stick)
                 diff.frame(maxWidth: .infinity, alignment: .leading)
@@ -152,20 +152,20 @@ struct PullFilesView: View {
             .frame(minHeight: treeH, alignment: .top)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(pullScrollSpace)) } action: { frame = $0 }
         } else {
-            treeList(tree, rows)
+            treeList(tree, rows, selected: model.selected)
             Spacer().frame(height: 12)
             diff
         }
     }
 
-    private func treeList(_ tree: FileTree, _ rows: [FileTree.Row]) -> some View {
+    private func treeList(_ tree: FileTree, _ rows: [FileTree.Row], selected: Int?) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(verbatim: "\(model.list.files.count) file\(model.list.files.count == 1 ? "" : "s")").font(Theme.captionSemibold).foregroundStyle(Theme.muted)
                 .lineLimit(1).padding(.horizontal, 6).padding(.bottom, 5)
             ForEach(rows, id: \.node) { row in
                 let node = tree.nodes[row.node]
                 TreeRow(node: node, indent: row.indent, open: !model.collapsed.contains(node.path),
-                        selected: node.file != nil && node.file == model.selected,
+                        selected: node.file != nil && node.file == selected,
                         file: node.file.map { model.list.files[$0] }) {
                     if let f = node.file { model.selectedPath = model.list.files[f].filename } else { model.toggle(node.path) }
                 }

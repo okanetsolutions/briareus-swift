@@ -77,7 +77,7 @@ final class ConversationScreenModel: ObservableObject {
         if !restored {
             // Saved events show at once and move the cursor, so only what happened since is downloaded.
             restored = true
-            let saved = Store.shared.cache.lines(cacheKey)
+            let saved = await Store.shared.cache.readLines(cacheKey)
             if !saved.isEmpty { append(.array(saved)) }
         }
         // A transcript saved before messages showed their time has none; it is read again once to get them.

@@ -25,6 +25,10 @@ enum Dialogs {
         let r = alert.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
         return r >= 0 && r < choices.count ? r : nil
     }
+    /// A code review refused at the project's round limit: whether to run one more round on purpose, a paid session.
+    static func confirmAnotherRound(_ refusal: APIError) -> Bool {
+        confirm("Review round limit reached", BoardAction.anotherRoundQuestion(refusal), continueLabel: "Run one more round")
+    }
     static func alert(_ title: String, _ message: String? = nil) {
         let alert = NSAlert()
         alert.messageText = title

@@ -54,6 +54,10 @@ final class LiveEventsTests: XCTestCase {
         XCTAssertEqual(saved.upsert(session("s2"), repo: repo)?.map(\.id), ["s2", "s1"])
         XCTAssertEqual(saved.upsert(session("s1", "running"), repo: repo)?.map(\.status), ["idle", "running"])
         XCTAssertNil(saved.upsert(session("s1", "running"), repo: repo))
+        // Live records change the list held, not the file, until they are saved together.
+        XCTAssertEqual(cache.value(key).flatMap(Session.parseList), [])
+        XCTAssertEqual(saved.list(repo)?.map(\.id), ["s2", "s1"])
+        saved.saveChanges()
         cache.flush()
         let reopened = DiskCache(directory: directory, protection: [])
         XCTAssertEqual(try XCTUnwrap(reopened.value(key).flatMap(Session.parseList)).map(\.id), ["s2", "s1"])
@@ -100,6 +104,8 @@ final class LiveEventsTests: XCTestCase {
         XCTAssertEqual(saved.upsert(session("s3"), repo: repo)?.map(\.id), ["s3", "s2", "s1"])
         // A cache emptied under it (a new device or repository list) leaves no list behind to be saved again.
         cache.removeAll()
+        saved.saveChanges()
+        XCTAssertNil(cache.value("sessions:\(repo)"))
         XCTAssertNil(saved.list(repo))
         XCTAssertNil(saved.upsert(session("s4"), repo: repo))
         XCTAssertNil(cache.value("sessions:\(repo)"))

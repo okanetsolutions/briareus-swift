@@ -275,12 +275,14 @@ final class CodeReviewLogicTests: XCTestCase {
         XCTAssertEqual(a["shouldFix"].string, "optional")
         XCTAssertNil(a.object?["comments"])
         e.reason = " Not worth it here. \n"
+        e.verification = .plausible
         XCTAssertTrue(e.canSave)
         a = e.arguments(repo: "o/r", number: 9)
-        XCTAssertEqual(a.count, 6); XCTAssertEqual(a["comments"].string, "Not worth it here.")
+        XCTAssertEqual(a.count, 7); XCTAssertEqual(a["comments"].string, "Not worth it here.")
+        XCTAssertEqual(a["verification"].string, "plausible")
         let (path, rest) = try APIClient.resolve(try XCTUnwrap(APIRoute.named("update_code_review_finding")), a)
         XCTAssertEqual(path, "pulls/9/code-reviews/2/findings/21")
-        XCTAssertEqual(Set(rest.keys), ["repo", "shouldFix", "comments"])
+        XCTAssertEqual(Set(rest.keys), ["repo", "shouldFix", "comments", "verification"])
     }
 
     func testEveryVerdictIsAChoiceAndNoneComesLast() {
@@ -290,6 +292,7 @@ final class CodeReviewLogicTests: XCTestCase {
 
     func testNotFixingAFindingNeedsAReason() {
         var e = CodeReviewFindingEdit(finding(#"{"id":1,"shouldFix":"fix"}"#)!, review: 1)
+        e.verification = .confirmed
         for verdict in [CodeReviewVerdict.optional, .dismiss] {
             e.verdict = verdict; e.reason = " "
             XCTAssertTrue(e.needsReason); XCTAssertFalse(e.canSave)
@@ -303,7 +306,7 @@ final class CodeReviewLogicTests: XCTestCase {
     }
 
     func testANewVerdictNotToFixNeedsAReasonOfItsOwn() {
-        let saved = finding(#"{"id":1,"shouldFix":"optional","comments":"Not worth it."}"#)!
+        let saved = finding(#"{"id":1,"shouldFix":"optional","verification":"confirmed","comments":"Not worth it."}"#)!
         var e = CodeReviewFindingEdit(saved, review: 1)
         XCTAssertNil(CodeReviewFindingEdit(finding(#"{"id":1,"shouldFix":"fix"}"#)!, review: 1).reasonHint)
         XCTAssertNotNil(e.reasonHint)
@@ -318,6 +321,49 @@ final class CodeReviewLogicTests: XCTestCase {
         // Back to Fix, the saved reason may stay.
         e.verdict = .fix; e.reason = "Not worth it."
         XCTAssertTrue(e.canSave)
+    }
+
+    func testEveryVerificationIsAChoiceAndNoneComesLast() {
+        XCTAssertEqual(CodeReviewVerification.choices, [.confirmed, .plausible, nil])
+        XCTAssertEqual(Set(CodeReviewVerification.choices.map(CodeReviewVerification.choiceTitle)).count, CodeReviewVerification.choices.count)
+    }
+
+    func testAVerdictNotToFixNeedsTheEvidenceTheReviewOutcomeAsks() {
+        var e = CodeReviewFindingEdit(finding(#"{"id":1,"shouldFix":"fix"}"#)!, review: 1)
+        e.reason = "Refuted by the guard on line 4."
+        // Optional takes either level of evidence.
+        e.verdict = .optional
+        XCTAssertFalse(e.hasVerification); XCTAssertFalse(e.canSave); XCTAssertNotNil(e.verificationHint)
+        e.verification = .plausible
+        XCTAssertTrue(e.canSave); XCTAssertNil(e.verificationHint)
+        // Dismissed takes only Confirmed.
+        e.verdict = .dismiss
+        XCTAssertFalse(e.canSave); XCTAssertNotNil(e.verificationHint)
+        e.verification = .confirmed
+        XCTAssertTrue(e.canSave)
+        // Fix and no verdict need none.
+        e.verification = nil
+        e.verdict = .fix; XCTAssertTrue(e.hasVerification)
+        e.verdict = nil; XCTAssertTrue(e.hasVerification)
+    }
+
+    func testChangingOnlyTheEvidenceIsAnEditOfItsOwn() {
+        let saved = finding(#"{"id":5,"shouldFix":"dismiss","verification":"plausible","comments":"Refuted."}"#)!
+        var e = CodeReviewFindingEdit(saved, review: 1)
+        // A dismissal stored as only plausible lacks the evidence, but its reason may still be reworded as it stands.
+        XCTAssertFalse(e.isDirty); XCTAssertFalse(e.hasVerification); XCTAssertNotNil(e.verificationHint)
+        e.reason = "Refuted by the guard on line 4."
+        XCTAssertTrue(e.canSave)
+        XCTAssertNil(e.arguments(repo: "o/r", number: 9).object?["verification"])
+        // Changing the ruling to something still short of the evidence is held back.
+        e.verdict = .optional; e.verification = nil
+        XCTAssertFalse(e.canSave)
+        e.verdict = .dismiss; e.reason = "Refuted."
+        e.verification = .confirmed
+        XCTAssertTrue(e.isDirty); XCTAssertTrue(e.canSave)
+        let a = e.arguments(repo: "o/r", number: 9)
+        XCTAssertEqual(a["verification"].string, "confirmed")
+        XCTAssertNil(a.object?["shouldFix"]); XCTAssertNil(a.object?["comments"])
     }
 
     func testAReadHoldsOnlyWhenNoWriteBeganOrEndedSinceItStarted() {
@@ -350,9 +396,11 @@ final class CodeReviewLogicTests: XCTestCase {
     func testClearingAVerdictOrAReasonSendsNull() {
         var e = CodeReviewFindingEdit(finding(#"{"id":3,"shouldFix":"dismiss","comments":"Refuted."}"#)!, review: 1)
         e.verdict = nil; e.reason = ""
+        e.verification = nil
         let a = e.arguments(repo: "o/r", number: 9)
         XCTAssertEqual(a.object?["shouldFix"], JSON.null)
         XCTAssertEqual(a.object?["comments"], JSON.null)
+        XCTAssertNil(a.object?["verification"])
     }
 }
 

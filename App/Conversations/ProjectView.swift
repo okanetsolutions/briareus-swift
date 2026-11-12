@@ -1,7 +1,8 @@
-// A project's conversations, as the Mac sidebar's second screen (SidebarSessions, SidebarRows): found by their title, the
-// closed ones on request, those at work first; each row marked by its pull request where it has one. Above them the
-// project's board and a new conversation, and ▶ Run on its default branch; a swipe closes, reopens,
-// renames or deletes one, and Select closes or deletes several, as ☑ Select does. The menu also opens the project's Laravel Forge.
+// A project's conversations, as plainly as a phone can draw them: one list, the pinned first and then the newest, found
+// by their title and the closed ones on request, each row marked by its pull request where it has one. The toolbar opens
+// the project's board and a new conversation, and its menu ▶ Run on the default branch and the project's Laravel Forge.
+// Renaming, pinning, closing, reopening and deleting a conversation are on its own screen; on an iPad, holding a row
+// offers Open in New Window.
 import SwiftUI
 
 struct ProjectView: View {
@@ -12,28 +13,10 @@ struct ProjectView: View {
     @WindowOpener private var openInWindow
     @State private var search = ""
     @State private var showClosed = false
-    /// How many recent conversations are drawn; Show more adds a page.
+    /// How many conversations are drawn; Show more adds a page.
     @State private var limit = conversationPageSize
     @State private var composing = false
     @State private var error: String?
-    @State private var actionError: String?
-    @State private var editMode: EditMode = .inactive
-    @State private var picked: Set<String> = []
-    /// The bulk action waiting for its confirmation: true for Delete, false for Close.
-    @State private var bulkAsked: Bool?
-    @State private var bulkRunning = false
-    /// A row's action waiting for its confirmation.
-    @State private var asked: RowAction?
-    @State private var renaming: Session?
-    @State private var newTitle = ""
-    /// Rows with an action under way.
-    @State private var working: Set<String> = []
-
-    private struct RowAction: Identifiable {
-        var session: Session
-        var action: String
-        var id: String { "\(session.id):\(action)" }
-    }
 
     init(repo: String) {
         self.repo = repo
@@ -42,256 +25,95 @@ struct ProjectView: View {
 
     /// Read, not observed: the projects model changes with every live update, and redrawing the list for each was slow.
     private var title: String { ProjectsModel.shared.project(repo)?.title ?? repo }
-    private var editing: Bool { editMode.isEditing }
-    private var shown: [Session] { conversationsShown(feed.sessions, search: search, showClosed: showClosed) }
-    private var canSelect: Bool { store.canManage && (store.supports("close") || store.supports("delete")) && !feed.sessions.isEmpty }
 
     var body: some View {
-        dialogs(chrome(List(selection: editing ? $picked : nil) { sections }))
-            // A pick a live update, search or the closed switch moves out of sight is dropped, so a bulk action never reaches it.
-            .onChange(of: ConversationGroups(shown, limit: limit).drawnIDs) { _, drawn in picked.formIntersection(drawn) }
-            .refreshable { _ = await load(fresh: true) }
-            .task { await poll(every: ProjectFeed.sessionsEvery) { await load() } }
-    }
-
-    @ViewBuilder private var sections: some View {
-        if let message = actionError ?? error {
-            Section { ErrorNotice(message: message) }.listRowBackground(Theme.row)
-        }
-        if BranchRunModel.offered && !editing && search.isEmpty {
+        List {
+            if let error {
+                Section { ErrorNotice(message: error) }.listRowBackground(Theme.row)
+            }
             Section {
-                DestinationLink(destination: .branchRun(repo: repo)) { Label("Run default branch", systemImage: "play.fill") }
-            } footer: {
-                Text("Serves the default branch in a fresh workspace with the project’s run commands, and opens it here.")
+                rows
+            } header: {
+                HStack {
+                    Text("Conversations")
+                    Spacer()
+                    Toggle("Show closed", isOn: $showClosed).toggleStyle(.button).buttonStyle(.borderless).controlSize(.mini)
+                        .font(.caption.weight(.medium)).textCase(nil)
+                }
             }
             .listRowBackground(Theme.row)
         }
-        let list = shown
-        let groups = ConversationGroups(list, limit: limit)
-        let active = groups.active
-        if !groups.pinned.isEmpty {
-            Section("Pinned") { ForEach(groups.pinned, id: \.id) { row($0) } }.listRowBackground(Theme.row)
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden).background(Theme.canvas)
+        .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $search, prompt: "Find a conversation")
+        .toolbar { toolbar }
+        .sheet(isPresented: $composing) {
+            NewConversationSheet(repo: repo) { started in navigate(.conversation(id: started.id, session: started.raw)) }
         }
-        if !active.isEmpty {
-            Section("Active") { ForEach(active, id: \.id) { row($0) } }.listRowBackground(Theme.row)
-        }
-        Section {
-            ForEach(groups.recent, id: \.id) { row($0) }
-            if groups.hidden > 0 { ShowMoreRow(hidden: groups.hidden) { limit += conversationPageSize } }
-            if feed.sessionsLoaded && list.isEmpty {
-                Text(search.isEmpty ? (feed.sessions.isEmpty ? "No conversations here yet." : "No open conversations.") : "No matching conversations.")
-                    .foregroundStyle(.secondary)
-            }
-            if !feed.sessionsLoaded && error == nil { ProgressView().frame(maxWidth: .infinity) }
-        } header: {
-            HStack {
-                Text(active.isEmpty ? "Conversations" : "Recent")
-                Spacer()
-                Toggle("Show closed", isOn: $showClosed).toggleStyle(.button).buttonStyle(.borderless).controlSize(.mini)
-                    .font(.caption.weight(.medium)).textCase(nil)
-            }
-        }
-        .listRowBackground(Theme.row)
+        .refreshable { _ = await load(fresh: true) }
+        .task { await poll(every: ProjectFeed.sessionsEvery) { await load() } }
     }
 
-    /// The list's styling, search and toolbar, apart from `dialogs` so each part type-checks quickly.
-    private func chrome(_ list: some View) -> some View {
-        list
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden).background(Theme.canvas)
-            .environment(\.editMode, $editMode)
-            .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $search, prompt: "Find a conversation")
-            .toolbar { toolbar }
-            .safeAreaInset(edge: .bottom, spacing: 0) { if editing { bulkBar } }
+    /// A page of rows, Show more under it, and the empty and loading states.
+    @ViewBuilder private var rows: some View {
+        let shown = conversationsShown(feed.sessions, search: search, showClosed: showClosed)
+        let page = conversationPage(shown, limit: limit)
+        let now = Date()
+        ForEach(page.rows, id: \.id) { row($0, now: now) }
+        if page.hidden > 0 { ShowMoreRow(hidden: page.hidden) { limit += conversationPageSize } }
+        if feed.sessionsLoaded && shown.isEmpty {
+            Text(search.isEmpty ? (feed.sessions.isEmpty ? "No conversations here yet." : "No open conversations.") : "No matching conversations.")
+                .foregroundStyle(.secondary)
+        }
+        if !feed.sessionsLoaded && error == nil { ProgressView().frame(maxWidth: .infinity) }
     }
 
-    /// The new conversation sheet, the confirmations and the rename alert.
-    private func dialogs(_ view: some View) -> some View {
-        view
-            .sheet(isPresented: $composing) {
-                NewConversationSheet(repo: repo) { started in navigate(.conversation(id: started.id, session: started.raw)) }
-            }
-            .alert(asked.flatMap { conversationActionQuestion($0.action) } ?? "",
-                   isPresented: Binding(get: { asked != nil }, set: { if !$0 { asked = nil } }), presenting: asked) { a in
-                Button(a.action == "delete" ? "Delete" : a.action == "close" ? "Close" : "Confirm", role: a.action == "delete" ? .destructive : nil) {
-                    perform(a.action, on: a.session)
+    /// A link to the conversation. On an iPad, holding it offers Open in New Window, which opens the conversation in a
+    /// window of its own without reading it in the column first; a phone has no menu on its rows.
+    @ViewBuilder private func row(_ s: Session, now: Date) -> some View {
+        let link = DestinationLink(destination: .conversation(id: s.id, session: s.raw)) {
+            ConversationRowLabel(row: ConversationRow(s, now: now)).equatable()
+        }
+        if let openInWindow {
+            link.contextMenu {
+                Button("Open in New Window", systemImage: "plus.rectangle.on.rectangle") {
+                    openInWindow(.conversation(id: s.id, session: s.raw))
                 }
-                Button("Cancel", role: .cancel) {}
             }
-            .alert(bulkAsked.map { question($0).title } ?? "",
-                   isPresented: Binding(get: { bulkAsked != nil }, set: { if !$0 { bulkAsked = nil } }), presenting: bulkAsked) { delete in
-                Button(delete ? "Delete" : "Close", role: delete ? .destructive : nil) { runBulk(delete: delete) }
-                Button("Cancel", role: .cancel) {}
-            } message: { delete in Text(question(delete).message) }
-            .alert("Rename conversation", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-                TextField("Title", text: $newTitle)
-                Button("Save") {
-                    if let s = renaming, !newTitle.cTrimmed.isEmpty { perform("rename", on: s, extra: ["title": .string(newTitle)]) }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
+        } else {
+            link
+        }
     }
-
-    // MARK: Toolbar
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
-            if editing {
-                Button("Done") { leaveSelect() }.bold()
-            } else {
-                if store.supports("pulls") {
-                    Button { navigate(.board(repo: repo)) } label: { Image(systemName: "arrow.triangle.pull") }
-                        .accessibilityLabel("Pull requests and issues")
-                }
-                if store.supports("start_session") {
-                    Button { composing = true } label: { Image(systemName: "square.and.pencil") }
-                        .accessibilityLabel("New conversation")
-                }
-                // Selecting and the project's Laravel Forge (an Admin token's) in the menu.
-                if canSelect || ProjectForgeModel.offered {
-                    Menu {
-                        if canSelect {
-                            Button("Select Conversations", systemImage: "checkmark.circle") { withAnimation { editMode = .active } }
-                        }
-                        if ProjectForgeModel.offered {
-                            Button("Forge Servers and Sites", systemImage: "server.rack") { navigate(.forge(repo: repo)) }
-                        }
-                    } label: { Image(systemName: "ellipsis.circle") }
-                    .accessibilityLabel("More")
-                }
+            if store.supports("pulls") {
+                Button { navigate(.board(repo: repo)) } label: { Image(systemName: "arrow.triangle.pull") }
+                    .accessibilityLabel("Pull requests and issues")
             }
-        }
-    }
-
-    /// While selecting: Select All, and Close and Delete for the picked conversations.
-    private var bulkBar: some View {
-        let closable = bulkConversationTargets(feed.sessions, picked: picked, delete: false).count
-        let all = ConversationGroups(shown, limit: limit).drawnIDs
-        return HStack(spacing: 16) {
-            Button(picked.isSuperset(of: all) && !all.isEmpty ? "Deselect All" : "Select All") {
-                if picked.isSuperset(of: all) { picked.subtract(all) } else { picked.formUnion(all) }
+            if store.supports("start_session") {
+                Button { composing = true } label: { Image(systemName: "square.and.pencil") }
+                    .accessibilityLabel("New conversation")
             }
-            .disabled(bulkRunning || all.isEmpty)
-            Spacer(minLength: 0)
-            if bulkRunning { ProgressView() }
-            if store.supports("close") {
-                Button("Close\(closable > 0 ? " (\(closable))" : "")") { bulkAsked = false }.disabled(bulkRunning || closable == 0)
-            }
-            if store.supports("delete") {
-                Button("Delete\(picked.isEmpty ? "" : " (\(picked.count))")", role: .destructive) { bulkAsked = true }
-                    .disabled(bulkRunning || picked.isEmpty)
-            }
-        }
-        .font(.body.weight(.medium))
-        .padding(.horizontal, 20).padding(.vertical, 12)
-        .background(.bar)
-        .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 0.5) }
-    }
-
-    // MARK: Rows
-
-    @ViewBuilder private func row(_ s: Session) -> some View {
-        if editing {
-            ConversationRowLabel(session: s).tag(s.id)
-        } else {
-            DestinationLink(destination: .conversation(id: s.id, session: s.raw)) {
-                ConversationRowLabel(session: s, working: working.contains(s.id))
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                if store.supports("delete") {
-                    Button("Delete", systemImage: "trash", role: .destructive) { asked = RowAction(session: s, action: "delete") }
-                }
-                if s.isClosed {
-                    if store.supports("reopen") {
-                        Button("Reopen", systemImage: "arrow.uturn.backward") { asked = RowAction(session: s, action: "reopen") }.tint(Theme.ok)
+            // ▶ Run on the default branch, and the project's Laravel Forge (an Admin token's).
+            if BranchRunModel.offered || ProjectForgeModel.offered {
+                Menu {
+                    if BranchRunModel.offered {
+                        Button("Run Default Branch", systemImage: "play.fill") { navigate(.branchRun(repo: repo)) }
                     }
-                } else if store.supports("close") {
-                    Button("Close", systemImage: "archivebox") { asked = RowAction(session: s, action: "close") }.tint(Theme.warn)
-                }
-            }
-            .swipeActions(edge: .leading) {
-                if store.supports("rename") {
-                    Button("Rename", systemImage: "pencil") { startRename(s) }.tint(Theme.accent)
-                }
-            }
-            .contextMenu { menu(s) }
-        }
-    }
-
-    @ViewBuilder private func menu(_ s: Session) -> some View {
-        if let openInWindow {
-            Button("Open in New Window", systemImage: "plus.rectangle.on.rectangle") {
-                openInWindow(.conversation(id: s.id, session: s.raw))
+                    if ProjectForgeModel.offered {
+                        Button("Forge Servers and Sites", systemImage: "server.rack") { navigate(.forge(repo: repo)) }
+                    }
+                } label: { Image(systemName: "ellipsis.circle") }
+                .accessibilityLabel("More")
             }
         }
-        if store.supports("rename") { Button("Rename", systemImage: "pencil") { startRename(s) } }
-        if s.isClosed {
-            if store.supports("reopen") { Button("Reopen", systemImage: "arrow.uturn.backward") { asked = RowAction(session: s, action: "reopen") } }
-        } else if store.supports("close") {
-            Button("Close", systemImage: "archivebox") { asked = RowAction(session: s, action: "close") }
-        }
-        if store.supports("delete") {
-            Button("Delete", systemImage: "trash", role: .destructive) { asked = RowAction(session: s, action: "delete") }
-        }
     }
-
-    private func startRename(_ s: Session) {
-        newTitle = s.displayTitle
-        renaming = s
-    }
-
-    private func question(_ delete: Bool) -> (title: String, message: String) {
-        bulkConversationQuestion(count: bulkConversationTargets(feed.sessions, picked: picked, delete: delete).count, delete: delete)
-    }
-
-    // MARK: Reading and writing
 
     private func load(fresh: Bool = false) async -> APIError? {
         let failed = await reading { try await feed.loadSessions(fresh: fresh) }
         if let failed { if let said = failure(failed) { error = said } } else { error = nil }
         return failed
-    }
-
-    private func perform(_ action: String, on s: Session, extra: JSON = [:]) {
-        guard !working.contains(s.id) else { return }
-        working.insert(s.id); actionError = nil
-        var args: JSON = ["sessionId": .string(s.id)]
-        args.merge(extra)
-        Task {
-            do {
-                try await store.call(action, args)
-                if action == "delete" { feed.drop(s.id) }
-            } catch {
-                if let said = failure(error) { actionError = said }
-            }
-            working.remove(s.id)
-            _ = await load(fresh: true)
-        }
-    }
-
-    private func runBulk(delete: Bool) {
-        let ids = bulkConversationTargets(feed.sessions, picked: picked, delete: delete)
-        guard !ids.isEmpty, !bulkRunning else { return }
-        bulkRunning = true; actionError = nil
-        Task {
-            // One at a time, as the Mac's ☑ Select works through them; a refusal leaves the rest to go on.
-            for id in ids {
-                do {
-                    try await store.call(delete ? "delete" : "close", ["sessionId": .string(id)])
-                    if delete { feed.drop(id) }
-                } catch {
-                    if let said = failure(error) { actionError = said }
-                }
-            }
-            bulkRunning = false
-            leaveSelect()
-            _ = await load(fresh: true)
-        }
-    }
-
-    private func leaveSelect() {
-        withAnimation { editMode = .inactive }
-        picked = []
     }
 }
