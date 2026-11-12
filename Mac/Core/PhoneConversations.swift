@@ -90,9 +90,9 @@ func conversationsShown(_ sessions: [Session], search: String, showClosed: Bool)
 let conversationPageSize = 50
 
 /// The first `limit` rows of a list, and how many it leaves for Show more.
-func conversationPage(_ sessions: [Session], limit: Int) -> (rows: ArraySlice<Session>, hidden: Int) {
-    let rows = sessions.prefix(max(0, limit))
-    return (rows, sessions.count - rows.count)
+func conversationPage<Row>(_ rows: [Row], limit: Int) -> (rows: ArraySlice<Row>, hidden: Int) {
+    let page = rows.prefix(max(0, limit))
+    return (page, rows.count - page.count)
 }
 
 // MARK: - The conversation

@@ -1,5 +1,5 @@
-// A project's conversations, as plainly as a phone can draw them: one list, the pinned first and then the newest, found
-// by their title and the closed ones on request, each row marked by its pull request where it has one. The toolbar opens
+// A project's conversations, as plainly as a phone can draw them: one list, the pinned first and then the newest, each
+// orchestrator's workers under it, found by their title and the closed ones on request, each row marked by its pull request where it has one. The toolbar opens
 // the project's board and a new conversation, and its menu ▶ Run on the default branch and the project's Laravel Forge.
 // Renaming, pinning, closing, reopening and deleting a conversation are on its own screen; on an iPad, holding a row
 // offers Open in New Window.
@@ -13,6 +13,8 @@ struct ProjectView: View {
     @WindowOpener private var openInWindow
     @State private var search = ""
     @State private var showClosed = false
+    /// The orchestrators whose workers are hidden, by conversation id.
+    @State private var folded: Set<String> = []
     /// How many conversations are drawn; Show more adds a page.
     @State private var limit = conversationPageSize
     @State private var composing = false
@@ -58,9 +60,9 @@ struct ProjectView: View {
     /// A page of rows, Show more under it, and the empty and loading states.
     @ViewBuilder private var rows: some View {
         let shown = conversationsShown(feed.sessions, search: search, showClosed: showClosed)
-        let page = conversationPage(shown, limit: limit)
+        let page = conversationPage(sessionsFolded(sessionsNested(shown), shown, folded: folded), limit: limit)
         let now = Date()
-        ForEach(page.rows, id: \.id) { row($0, now: now) }
+        ForEach(page.rows, id: \.index) { node in row(shown[node.index], node: node, now: now) }
         if page.hidden > 0 { ShowMoreRow(hidden: page.hidden) { limit += conversationPageSize } }
         if feed.sessionsLoaded && shown.isEmpty {
             Text(search.isEmpty ? (feed.sessions.isEmpty ? "No conversations here yet." : "No open conversations.") : "No matching conversations.")
@@ -71,9 +73,13 @@ struct ProjectView: View {
 
     /// A link to the conversation. On an iPad, holding it offers Open in New Window, which opens the conversation in a
     /// window of its own without reading it in the column first; a phone has no menu on its rows.
-    @ViewBuilder private func row(_ s: Session, now: Date) -> some View {
+    @ViewBuilder private func row(_ s: Session, node: SessionNode, now: Date) -> some View {
+        let id = s.id
         let link = DestinationLink(destination: .conversation(id: s.id, session: s.raw)) {
-            ConversationRowLabel(row: ConversationRow(s, now: now)).equatable()
+            ConversationRowLabel(row: ConversationRow(s, now: now), folded: node.workers > 0 ? folded.contains(id) : nil,
+                                 fold: { withAnimation { if folded.remove(id) == nil { folded.insert(id) } } })
+                .equatable()
+                .padding(.leading, CGFloat(min(node.depth, 4)) * 14)
         }
         if let openInWindow {
             link.contextMenu {
