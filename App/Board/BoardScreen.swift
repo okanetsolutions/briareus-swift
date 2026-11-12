@@ -1,5 +1,5 @@
-// A project's board on a phone (the Mac's BoardScreen): open pull requests and issues behind a segmented control, then
-// the Review List; the GitHub Projects board stays on the Mac. The author, reviewer (pull requests),
+// A project's board on a phone (the Mac's BoardScreen): open pull requests and issues (past the 100 a board lists on Load
+// more) behind a segmented control, then the Review List; the GitHub Projects board stays on the Mac. The author, reviewer (pull requests),
 // assignee (issues, No assignee among them) and label pickers in the toolbar's filter menu, kept per repository. Each pull
 // request row names the errand its state asks for and offers the errands in its context menu, and its linked issues end
 // with their project Status, and a swipe to its right merges it, once confirmed with what stands in the way. The Mac's
@@ -16,6 +16,8 @@ struct BoardScreen: View {
     @StateObject private var filters: BoardFilters
     @StateObject private var pullActions: BoardPullActionsModel
     @StateObject private var issueStatus: IssueStatusReader
+    /// The issues past the 100 a board lists, read on Load more.
+    @StateObject private var issuePages: IssuePagesModel
     @State private var tab = Tab.pulls
     /// The epics whose sub-issues the Issues tab hides, by number.
     @State private var foldedEpics: Set<Int> = []
@@ -29,11 +31,12 @@ struct BoardScreen: View {
         _filters = StateObject(wrappedValue: BoardFilters(repo: repo))
         _pullActions = StateObject(wrappedValue: BoardPullActionsModel(repo: repo))
         _issueStatus = StateObject(wrappedValue: IssueStatusReader(repo: repo))
+        _issuePages = StateObject(wrappedValue: IssuePagesModel(repo: repo))
     }
 
     private var board: JSON { feed.board }
     private var pulls: [PullSummary] { feed.pulls }
-    private var issues: [(summary: IssueSummary, raw: JSON)] { feed.issues }
+    private var issues: [(summary: IssueSummary, raw: JSON)] { issuePages.issues(after: feed.issues, board: board) }
     private var loaded: Bool { feed.boardLoaded || error != nil }
     private var filter: Binding<BoardFilter> { tab == .pulls ? $filters.pulls : $filters.issues }
     /// Whose review the Review List waits on: the saved GitHub login, else the project's author.
@@ -90,6 +93,7 @@ struct BoardScreen: View {
             // Pulling down is how an uncertain start is checked: its conversation shows on its pull request if it began.
             pullActions.checked()
             issueStatus.reset()
+            issuePages.reset()
             async let sessions: Void? = store.supports("sessions") ? try? feed.loadSessions(fresh: true) : nil
             await read(fresh: true)
             _ = await sessions
@@ -182,8 +186,9 @@ struct BoardScreen: View {
                         }
                     }
                 }
+                BoardIssuesMore(model: issuePages, board: board)
             } footer: {
-                if board["issuesTruncated"].is(true) { Text("This repository has more open issues; only the most recently updated are listed.") }
+                if issuePages.cutShort(board: board) { Text("This repository has more open issues; only the most recently updated are listed.") }
             }
             if !boardShowsLoading(loaded: loaded, refreshing: feed.boardRefreshing) && visible.isEmpty && error == nil {
                 ContentUnavailableView(issues.isEmpty ? "No open issues" : "No issues match the filters", systemImage: "smallcircle.filled.circle")
