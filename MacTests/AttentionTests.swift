@@ -63,6 +63,8 @@ final class AttentionTests: XCTestCase {
         XCTAssertTrue(list[1].confirmsFirst(approve: true))
         XCTAssertFalse(list[1].confirmsFirst(approve: false))
         XCTAssertFalse(list[0].confirmsFirst(approve: true))
+        // Running a command and sending a message are offered under words of their own.
+        XCTAssertNotEqual(list[0].approveLabel, list[1].approveLabel)
     }
 
     func testADecisionResultCarriesTheRequestStatusAndItsError() {

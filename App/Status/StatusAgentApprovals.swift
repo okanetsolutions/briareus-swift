@@ -49,7 +49,7 @@ private struct AgentApprovalRow: View {
             if let result = model.results[item.id] { Text(result).font(.caption).foregroundStyle(.secondary) }
         }
         .padding(.vertical, 4)
-        .alert("Send this Slack message as you?", isPresented: $confirming) {
+        .alert(AttentionItem.sendConfirmTitle, isPresented: $confirming) {
             Button("Send") { model.decide(item, approve: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -61,7 +61,7 @@ private struct AgentApprovalRow: View {
     private var decision: some View {
         let busy = model.deciding.contains(item.id)
         return HStack(spacing: 10) {
-            Button(item.kind == "ssh" ? "Run it" : "Send it") {
+            Button(item.approveLabel) {
                 if item.confirmsFirst(approve: true) { confirming = true } else { model.decide(item, approve: true) }
             }
             .buttonStyle(.borderedProminent)

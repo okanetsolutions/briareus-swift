@@ -60,7 +60,7 @@ final class AttentionModel: ObservableObject {
         guard let op = item.decisionOperation, let args = item.decisionArguments(approve: approve), Store.shared.supports(op),
               !deciding.contains(item.id) else { return }
         if item.confirmsFirst(approve: approve) {
-            guard Dialogs.confirm("Send this Slack message as you?", item.summary, continueLabel: "Send") else { return }
+            guard Dialogs.confirm(AttentionItem.sendConfirmTitle, item.summary, continueLabel: "Send") else { return }
         }
         deciding.insert(item.id)
         let mine = generation
@@ -118,7 +118,7 @@ struct AttentionSection: View {
                 if item.isApproval {
                     let op = item.decisionOperation ?? ""
                     let busy = model.deciding.contains(item.id)
-                    Button(item.kind == "ssh" ? "Run it" : "Send it") { model.decide(item, approve: true) }
+                    Button(item.approveLabel) { model.decide(item, approve: true) }
                         .dashButton(.prominent).disabled(busy || !store.supports(op))
                     Button("Deny") { model.decide(item, approve: false) }.dashButton(.destructive).disabled(busy || !store.supports(op))
                     if let exp = item.expiresAt { Text("expires \(formatEventTime(exp))").font(Theme.caption).foregroundStyle(Theme.muted) }

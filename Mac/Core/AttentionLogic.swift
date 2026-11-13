@@ -59,6 +59,10 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
     }
     /// Sending a Slack message as you is confirmed first; running a command or denying either is not.
     func confirmsFirst(approve: Bool) -> Bool { approve && kind == "slack" }
+    /// The approve button's word for what approving does: the command runs, or the message goes out.
+    var approveLabel: String { kind == "ssh" ? "Run it" : "Send it" }
+    /// What the confirmation asks before a message goes out as you.
+    static let sendConfirmTitle = "Send this Slack message as you?"
     /// What a decision came back with: the request's status (or the decision when it names none), with its error.
     static func decisionResult(_ answer: JSON, approve: Bool) -> String {
         let status = answer["request"]["status"].string ?? (approve ? "approved" : "denied")
