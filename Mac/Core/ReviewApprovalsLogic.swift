@@ -63,6 +63,8 @@ struct ReviewApproval: Equatable, Sendable, Identifiable {
     }
     /// Why its approver withdrew it, in their words, for showing under its own note.
     var withdrawLine: String? { withdrawNote.map { "Withdrawn: \($0)" } }
+    /// What withdrawing means, said before it is sent.
+    static let withdrawConsequence = "It stays on record and no longer counts."
     /// Only its approver withdraws one recorded here; one read from GitHub is dismissed there. Without the token's user
     /// (an older server) every approval recorded here is offered, and the server refuses another person's.
     func canWithdraw(me: Int?) -> Bool {
@@ -107,6 +109,12 @@ enum ReviewApprovalWrite {
     }
     /// The notes are kept to the server's 2000 characters.
     static let noteLimit = 2000
+    /// A refusal saying the kept requirement is out of date: the head moved on, or no ended review covers it (yet).
+    /// The outcome is read again, so Approve follows the head the server has instead of offering the old one again.
+    static func rereads(after code: String?) -> Bool {
+        guard let code else { return false }
+        return ["head_moved", "review_not_current", "review_running"].contains(code)
+    }
 }
 
 extension ReviewApprovals {
@@ -116,6 +124,11 @@ extension ReviewApprovals {
         guard enabled, result != "not_required", reviewCurrent, let headSha, !headSha.isEmpty else { return false }
         guard let me else { return true }
         return !approvals.contains { $0.counted && $0.userId == me && $0.headSha == headSha }
+    }
+    /// What approving means, said before it is sent: it counts for the reviewed head alone.
+    var approveConsequence: String {
+        let head = headSha.flatMap { $0.isEmpty ? nil : String($0.prefix(7)) } ?? "this head"
+        return "Your approval counts for \(head) only, and stops counting once the pull request moves on."
     }
     /// What the requirement says beyond its explanation: the pending reasons first, then the notes.
     var listedReasons: [ReviewReason] { reasons.filter { !$0.isNote } + reasons.filter(\.isNote) }

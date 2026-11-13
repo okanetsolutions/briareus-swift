@@ -121,4 +121,17 @@ final class ReviewApprovalsLogicTests: XCTestCase {
         """#)))
         XCTAssertFalse(off.shown)
     }
+
+    func testARefusalSayingTheHeadOrReviewMovedOnRereadsTheOutcome() {
+        XCTAssertTrue(ReviewApprovalWrite.rereads(after: "head_moved"))
+        XCTAssertTrue(ReviewApprovalWrite.rereads(after: "review_not_current"))
+        XCTAssertTrue(ReviewApprovalWrite.rereads(after: "review_running"))
+        XCTAssertFalse(ReviewApprovalWrite.rereads(after: "github_account_required"))
+        XCTAssertFalse(ReviewApprovalWrite.rereads(after: nil))
+    }
+
+    func testWhatApprovingMeansNamesTheReviewedHead() throws {
+        XCTAssertTrue(try approvals().approveConsequence.contains("abcdef1"))
+        XCTAssertFalse(try approvals().approveConsequence.contains("abcdef12"))
+    }
 }

@@ -33,8 +33,8 @@ struct ReviewApprovalsCard: View {
             }
             if !approvals.riskReasons.isEmpty { RiskReasonList(reasons: approvals.riskReasons, open: $showRisk).padding(.top, 8) }
             if form == "approve" {
-                ApprovalNoteForm(prompt: "Note (optional)", action: "Approve this revision", busy: model.isApproving,
-                                 destructive: false, disabled: model.busy) { note in
+                ApprovalNoteForm(prompt: "Note (optional)", consequence: approvals.approveConsequence, action: "Approve this revision",
+                                 busy: model.isApproving, destructive: false, disabled: model.busy) { note in
                     model.approve(note: note) { if $0 { form = nil } }
                 } cancel: { form = nil }
                 .padding(.top, 10)
@@ -55,8 +55,8 @@ struct ReviewApprovalsCard: View {
                     form = key
                 }
                 if form == key {
-                    ApprovalNoteForm(prompt: "Why (optional)", action: "Withdraw approval", busy: model.isWithdrawing(approval),
-                                     destructive: true, disabled: model.busy) { note in
+                    ApprovalNoteForm(prompt: "Why (optional)", consequence: ReviewApproval.withdrawConsequence, action: "Withdraw approval",
+                                     busy: model.isWithdrawing(approval), destructive: true, disabled: model.busy) { note in
                         model.withdraw(approval, note: note) { if $0 { form = nil } }
                     } cancel: { form = nil }
                     .padding(.leading, 22)
@@ -127,9 +127,11 @@ private struct ApprovalLine: View {
     }
 }
 
-/// An optional note and the button that sends it, for approving or withdrawing.
+/// An optional note, what sending it means, and the button that sends it, for approving or withdrawing.
 private struct ApprovalNoteForm: View {
     var prompt: String
+    /// What approving or withdrawing does, said before the button.
+    var consequence: String
     var action: String
     var busy: Bool
     var destructive: Bool
@@ -145,6 +147,7 @@ private struct ApprovalNoteForm: View {
             TextField(prompt, text: $note, axis: .vertical)
                 .lineLimit(1...4).focused($focused).dashField(focused: focused)
                 .onChange(of: note) { _, v in if v.count > ReviewApprovalWrite.noteLimit { note = String(v.prefix(ReviewApprovalWrite.noteLimit)) } }
+            Text(consequence).font(Theme.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Button(busy ? "Saving\u{2026}" : action) { send(note) }
                     .dashButton(destructive ? .destructive : .prominent).disabled(disabled)

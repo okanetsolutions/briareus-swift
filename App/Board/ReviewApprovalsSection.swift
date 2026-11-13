@@ -42,7 +42,7 @@ struct ReviewApprovalsSection: View {
             Button("Approve") { model.approve(note: String(note.prefix(ReviewApprovalWrite.noteLimit))) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your approval counts for \(approvals.headSha.map { String($0.prefix(7)) } ?? "this head") only, and stops counting once the pull request moves on.")
+            Text(approvals.approveConsequence)
         }
         .alert("Withdraw this approval?", isPresented: Binding(get: { withdrawing != nil }, set: { if !$0 { withdrawing = nil } }),
                presenting: withdrawing) { approval in
@@ -50,7 +50,7 @@ struct ReviewApprovalsSection: View {
             Button("Withdraw", role: .destructive) { model.withdraw(approval, note: String(note.prefix(ReviewApprovalWrite.noteLimit))) }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("It stays on record and no longer counts.")
+            Text(ReviewApproval.withdrawConsequence)
         }
     }
 

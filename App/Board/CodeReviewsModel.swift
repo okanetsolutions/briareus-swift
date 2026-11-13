@@ -131,20 +131,33 @@ final class CodeReviewsModel: ObservableObject {
                        fold: @escaping (JSON, JSON) -> JSON, done: @escaping @MainActor (Bool) -> Void = { _ in }) {
         saving = key; saveError = nil; editError = nil; approvalError = nil
         writes.begin()
-        Task { done(await send(call, args, failure: failure, fold: fold)) }
+        Task {
+            let sent = await send(call, args, failure: failure, fold: fold)
+            if ReviewApprovalWrite.rereads(after: sent.refusal) { await reread() }
+            done(sent.saved)
+        }
     }
+    /// The write and whether the server took it, with the refusal's code when it gave one.
     private func send(_ call: String, _ args: JSON, failure key: ReferenceWritableKeyPath<CodeReviewsModel, String?>,
-                      fold: (JSON, JSON) -> JSON) async -> Bool {
+                      fold: (JSON, JSON) -> JSON) async -> (saved: Bool, refusal: String?) {
         defer { saving = nil; writes.end() }
         do {
             let answer = try await Store.shared.call(call, args)
             take(fold(answer, raw))
             takeOutcome(answer, from: ReviewOutcome.source(after: call))
             changed()
-            return true
+            return (true, nil)
         } catch {
             if let said = failure(error) { self[keyPath: key] = SettingsWritePolicy.failureText(said, error) }
-            return false
+            return (false, (error as? APIError)?.code)
         }
+    }
+    /// Reads the reviews and outcome again after a refusal said the kept ones are out of date; the refusal stays shown.
+    private func reread() async {
+        guard Store.shared.supports("code_reviews") else { return }
+        let mark = writes.mark
+        guard let v = try? await Store.shared.call("code_reviews", ["repo": .string(repo), "pr": JSON(number)]) else { return }
+        take(v["codeReviews"], answer: v, readAt: mark)
+        changed()
     }
 }
