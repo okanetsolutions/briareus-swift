@@ -85,6 +85,64 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertNil(try old.body().get().object?["localSessionLimit"])
     }
 
+    func testReviewSettingsSitOnThePRActionsTab() throws {
+        var s = ProjectFormState(row: ["id": 4, "repo": "o/r", "reviewRoundLimit": 3, "securityReview": "off",
+                                       "enforceReviewOutcome": false, "reviewBenchmark": false])
+        for f in [ProjectField.roundLimit, .securityReview, .enforceOutcome, .benchmark] {
+            XCTAssertTrue(s.offered(f), "\(f)"); XCTAssertEqual(f.tab, .review, "\(f)")
+        }
+        XCTAssertEqual(s.text(.roundLimit), "3")
+        XCTAssertEqual(s.text(.securityReview), "off")
+        s.texts[.securityReview] = "required"
+        s.bools[.enforceOutcome] = true
+        let body = try s.body().get()
+        XCTAssertEqual(body["securityReview"], "required")
+        XCTAssertEqual(body["enforceReviewOutcome"], true)
+        XCTAssertEqual(body["reviewBenchmark"], false)
+        XCTAssertTrue(s.tabChanged(.review))
+        XCTAssertFalse(s.tabChanged(.project))
+        // A policy the field does not list is refused on its tab.
+        s.texts[.securityReview] = "strict"
+        if case .failure(let p) = s.body() { XCTAssertEqual(p.tab, ProjectTab.review.rawValue) } else { XCTFail("strict") }
+        // A server from before these settings neither shows nor gets them.
+        let old = ProjectFormState(row: ["repo": "o/r"])
+        for f in [ProjectField.roundLimit, .securityReview, .enforceOutcome, .benchmark] {
+            XCTAssertFalse(old.offered(f), "\(f)"); XCTAssertNil(try old.body().get().object?[f.key], "\(f)")
+        }
+    }
+
+    func testReviewRoundLimitIsAWholeNumberUpToTwenty() throws {
+        var s = ProjectFormState(row: ["id": 4, "repo": "o/r", "reviewRoundLimit": 3])
+        for (typed, sent) in [("0", 0), (" 20 ", 20), ("1", 1)] {
+            s.texts[.roundLimit] = typed
+            XCTAssertEqual(try s.body().get()["reviewRoundLimit"], JSON(sent), typed)
+        }
+        // Left empty it is sent as null, which the server reads as its default.
+        s.texts[.roundLimit] = ""
+        XCTAssertEqual(try s.body().get().object?["reviewRoundLimit"], .null)
+        for bad in ["21", "-1", "2.5", "many"] {
+            s.texts[.roundLimit] = bad
+            if case .failure(let p) = s.body() { XCTAssertEqual(p.tab, ProjectTab.review.rawValue, bad) } else { XCTFail(bad) }
+        }
+    }
+
+    func testTheRoundLimitFollowsThePRAuthorInTheTabOrder() {
+        let typed = ProjectField.allCases.filter { $0.tab == .review && $0.def.isTyped }
+        XCTAssertEqual(Array(typed.prefix(2)), [.prAuthor, .roundLimit])
+    }
+
+    func testAChoiceFieldNamesItsValues() {
+        let def = ProjectField.securityReview.def
+        XCTAssertEqual(def.kind, .choice)
+        XCTAssertEqual(def.choices.map(\.value), ["off", "advisory", "required"])
+        XCTAssertFalse(def.isTyped); XCTAssertTrue(def.isEdit)
+        XCTAssertEqual(def.choiceTitle("unknown"), "unknown")
+        XCTAssertTrue(ProjectField.roundLimit.def.isTyped)
+        XCTAssertNotNil(ProjectField.enforceOutcome.note(on: true))
+        XCTAssertNotNil(ProjectField.benchmark.note(on: true))
+        XCTAssertNil(ProjectField.benchmark.note(on: false))
+    }
+
     func testProjectSwitchNotesFollowTheirState() {
         XCTAssertNotNil(ProjectField.enabled.note(on: false))
         XCTAssertNil(ProjectField.enabled.note(on: true))

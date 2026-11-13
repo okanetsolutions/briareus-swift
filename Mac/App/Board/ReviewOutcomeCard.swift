@@ -1,6 +1,6 @@
 // What a pull request's code review amounts to, at the top of its Code reviews tab (the iPhone's ReviewOutcomeSection):
-// the outcome and the rounds used, whether it is ready, stale or still to reach GitHub, why, and the security pass and
-// the approvals the change's risk asks for. The words and tones are ReviewOutcomeLogic's.
+// the outcome and the rounds used, whether it is ready, stale or still to reach GitHub, why, and the security pass. The
+// approvals the change's risk asks for follow in ReviewApprovalsCard. The words and tones are ReviewOutcomeLogic's.
 import SwiftUI
 
 struct ReviewOutcomeCard: View {
@@ -34,7 +34,7 @@ struct ReviewOutcomeCard: View {
     }
 }
 
-/// The security pass with its own reasons and the approvals, each on its own line when the project asks for it.
+/// The security pass with its own reasons, when the project asks for it.
 private struct ReviewOutcomeFacts: View {
     var outcome: ReviewOutcome
 
@@ -44,13 +44,6 @@ private struct ReviewOutcomeFacts: View {
             ForEach(security.listedReasons) { reason in
                 Text(reason.message).font(Theme.footnote).padding(.top, 2)
                     .foregroundStyle(reason.isNote ? Theme.muted : Theme.color(reason.tone))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        if let approvals = outcome.approvals, approvals.shown {
-            fact("Approvals", approvals.line, Theme.color(approvals.tone))
-            if let explanation = approvals.explanation {
-                Text(explanation).font(Theme.footnote).foregroundStyle(Theme.muted).padding(.top, 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

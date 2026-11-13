@@ -5,8 +5,15 @@ import Foundation
 
 // MARK: - Shared
 
-/// `board`: the Projects board, edited as its address on GitHub and saved as the setting that names it.
-enum SettingsFieldKind: Sendable { case text, list, area, number, bool, board }
+/// `board`: the Projects board, edited as its address on GitHub and saved as the setting that names it. `choice`: one of
+/// the field's `choices`, kept as its value's text.
+enum SettingsFieldKind: Sendable { case text, list, area, number, bool, board, choice }
+
+/// One value a `choice` field may take, and what its picker says for it.
+struct SettingsChoice: Equatable, Sendable {
+    var value: String
+    var title: String
+}
 
 /// One of a form's fields: the key it edits (nil for one that is not part of the row), how, and the words around it.
 /// `rows` sizes a multi-line box.
@@ -19,8 +26,13 @@ struct SettingsField: Sendable {
     var rows: Int = 0
     var mono = false
     var secret = false
+    var choices: [SettingsChoice] = []
     var isMultiline: Bool { kind == .list || kind == .area }
     var isEdit: Bool { kind != .bool }
+    /// A box typed into, which Return moves on from: neither a switch nor a picker.
+    var isTyped: Bool { kind != .bool && kind != .choice }
+    /// What the picker says for `value`; the value itself for one the field does not list.
+    func choiceTitle(_ value: String) -> String { choices.first { $0.value == value }?.title ?? value }
 }
 
 /// Why a form cannot be sent as it stands, and the tab holding the field at fault.
@@ -81,7 +93,9 @@ enum ProjectField: Int, CaseIterable, Sendable {
     case repo, label, enabled, localDir, localLimit, board
     case setup, php, printing
     case dbName, dbExt, dbPool, dbRestore
-    case prAuthor, testRun, qaNotes, sheetSteps
+    // The round limit sits beside the PR author, so Return goes from one to the other.
+    case prAuthor, roundLimit, testRun, qaNotes, sheetSteps
+    case securityReview, enforceOutcome, benchmark
     case budget, isSelf
     case env
     case run, profiles
@@ -115,6 +129,13 @@ enum ProjectField: Int, CaseIterable, Sendable {
             hint: "Appended to the test sheet and test run prompts: logins, tenants, URLs, whatever a tester needs that the repository does not say.", rows: 4)
         case .sheetSteps: return SettingsField(key: "testSheetInstructions", kind: .area, label: "Test sheet closing steps",
             hint: "Appended to the end of the 📋 Test sheet prompt: what this project wants done once the sheet is on the pull request. Leave empty to add nothing.", rows: 4)
+        case .roundLimit: return SettingsField(key: "reviewRoundLimit", kind: .number, label: "Review rounds per pull request", cue: "3",
+            hint: "How many code review rounds a pull request gets across all its commits before a person has to grant one more, 1 to 20, or 0 for no limit. Leave empty for the server's default.")
+        case .securityReview: return SettingsField(key: "securityReview", kind: .choice, label: "Security review",
+            hint: "Whether every code review runs a security pass after discovery, one more turn on the review's runtime. Advisory shows its result; Required keeps the review outcome from passing until the pass has passed.",
+            choices: [SettingsChoice(value: "off", title: "Off"), SettingsChoice(value: "advisory", title: "Advisory"), SettingsChoice(value: "required", title: "Required")])
+        case .enforceOutcome: return SettingsField(key: "enforceReviewOutcome", kind: .bool, label: "Publish the review outcome to GitHub as commit statuses")
+        case .benchmark: return SettingsField(key: "reviewBenchmark", kind: .bool, label: "Use this repository for the review benchmark")
         case .budget: return SettingsField(key: "workerBudgetUsd", kind: .number, label: "Budget (USD)", cue: "no cap",
             hint: "What one orchestration may spend — the supervisor's turns plus every worker's — before it pauses and waits for you. Only turns whose provider reports a cost count. Leave empty for no cap.")
         case .isSelf: return SettingsField(key: "isSelf", kind: .bool, label: "This project is Briareus itself")
@@ -132,6 +153,12 @@ enum ProjectField: Int, CaseIterable, Sendable {
         switch self {
         case .enabled where !on:
             return "Inactive: no session can be started on it and it is left out of the project lists; its settings are kept for when it is switched back on."
+        case .enforceOutcome:
+            return on
+                ? "Each pull request's review outcome is written to its head as briareus/code-review, and its approvals as briareus/approvals, which branch protection can require. The server's GitHub token must be allowed to write commit statuses."
+                : "The outcome is still computed and shown here; nothing is written to GitHub."
+        case .benchmark where on:
+            return "A benchmark run opens pull requests and branches in this repository and closes them again: keep it for a repository nobody works in."
         case .isSelf:
             return "Tick it on the repository whose code is running right now, and on no other. An orchestrator on any project that finds a flaw in the tooling running it (a briefing, a worker tool, a loop) can then send a fix worker here and merge its pull request once its checks are green. The running server keeps its code until you redeploy."
         default:
@@ -143,7 +170,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
         switch self {
         case .repo, .label, .enabled, .localDir, .localLimit, .board, .setup, .php, .printing: return .project
         case .dbName, .dbExt, .dbPool, .dbRestore: return .database
-        case .prAuthor, .testRun, .qaNotes, .sheetSteps: return .review
+        case .prAuthor, .testRun, .qaNotes, .sheetSteps, .roundLimit, .securityReview, .enforceOutcome, .benchmark: return .review
         case .budget, .isSelf: return .orchestrator
         case .env: return .env
         case .run, .profiles: return .run
@@ -258,6 +285,14 @@ struct ProjectFormState: Equatable, Sendable {
             case .bool: body[key] = .bool(bool(f))
             case .text: body[key] = .string(text(f).cTrimmed)
             case .area: body[key] = .string(text(f))
+            case .choice:
+                // Left empty (a row from before the setting), the server keeps what it has.
+                let t = text(f)
+                if t.isEmpty { body.remove(key) }
+                else if f.def.choices.contains(where: { $0.value == t }) { body[key] = .string(t) }
+                else {
+                    return .failure(FormProblem(message: "Pick one of \(f.def.choices.map(\.title).joined(separator: ", ")) for \(f.def.label).", tab: f.tab.rawValue))
+                }
             case .list: body[key] = JSON(SettingsText.list(from: text(f)))
             case .board:
                 let t = text(f).cTrimmed
@@ -272,6 +307,14 @@ struct ProjectFormState: Equatable, Sendable {
                 else if let n = Int(t), (0...10).contains(n) { body[key] = JSON(n) }
                 else {
                     return .failure(FormProblem(message: "\(f.def.label) must be a whole number from 1 to 10, or 0 for no limit.", tab: f.tab.rawValue))
+                }
+            case .number where f == .roundLimit:
+                // A whole number from 0 (no limit) to 20; left empty, the server's default.
+                let t = text(f).cTrimmed
+                if t.isEmpty { body[key] = .null }
+                else if let n = Int(t), (0...20).contains(n) { body[key] = JSON(n) }
+                else {
+                    return .failure(FormProblem(message: "\(f.def.label) must be a whole number from 1 to 20, or 0 for no limit.", tab: f.tab.rawValue))
                 }
             case .number:
                 let t = text(f).cTrimmed

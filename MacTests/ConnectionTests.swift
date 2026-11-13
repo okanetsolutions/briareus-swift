@@ -39,6 +39,23 @@ final class ConnectionTests: XCTestCase {
         XCTAssertEqual(j.serialized(), #"{"a":[1,true,"x",null],"b":{"c":1.5}}"#)
         XCTAssertTrue(j["b"].isSet); XCTAssertFalse(j["z"].isSet)
     }
+    func testDeviceKeepsItsUserThroughASave() throws {
+        let d = try XCTUnwrap(Device(["id": "c1", "userId": 7, "label": "Phone", "permission": "manage", "repos": [], "expiresAt": 1]))
+        XCTAssertEqual(d.userId, 7)
+        XCTAssertEqual(Device(d.json)?.userId, 7)
+        // A saved connection from before the user was kept still opens, without one.
+        let old = try XCTUnwrap(Device(["id": "c1", "label": "Phone", "permission": "manage", "repos": [], "expiresAt": 1]))
+        XCTAssertNil(old.userId)
+        XCTAssertNil(old.json.object?["userId"])
+    }
+    func testApprovalRoutesNameTheirPullAndApproval() throws {
+        let approve = try APIClient.resolve(APIRoute.named("approve_pull")!, ["pr": 9, "repo": "o/r", "headSha": "abc"])
+        XCTAssertEqual(approve.path, "pulls/9/approvals")
+        XCTAssertEqual(approve.rest["headSha"], "abc")
+        let withdraw = try APIClient.resolve(APIRoute.named("withdraw_pull_approval")!, ["pr": 9, "approvalId": 4, "repo": "o/r"])
+        XCTAssertEqual(withdraw.path, "pulls/9/approvals/4/withdraw")
+        XCTAssertNil(withdraw.rest["approvalId"])
+    }
     func testToken() {
         XCTAssertTrue(apiTokenValid("brm_" + String(repeating: "a", count: 43)))
         XCTAssertFalse(apiTokenValid("brm_short"))
