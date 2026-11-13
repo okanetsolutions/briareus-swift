@@ -44,6 +44,26 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
     var approvalPull: (repo: String, number: Int)? { kind == "review-approval" ? pull : nil }
     /// The approval's own id, which the decision names.
     var requestID: String? { request["id"].nonEmpty }
+    /// The route that rules on an approval (`ssh_decision`, `slack_decision`); nil for an item that is not one.
+    var decisionOperation: String? {
+        switch kind {
+        case "ssh": return "ssh_decision"
+        case "slack": return "slack_decision"
+        default: return nil
+        }
+    }
+    /// The decision's body: the request it rules on and whether it is approved; nil without a request to name.
+    func decisionArguments(approve: Bool) -> JSON? {
+        guard decisionOperation != nil, let requestID else { return nil }
+        return ["id": .string(requestID), "decision": .string(approve ? "approve" : "deny")]
+    }
+    /// Sending a Slack message as you is confirmed first; running a command or denying either is not.
+    func confirmsFirst(approve: Bool) -> Bool { approve && kind == "slack" }
+    /// What a decision came back with: the request's status (or the decision when it names none), with its error.
+    static func decisionResult(_ answer: JSON, approve: Bool) -> String {
+        let status = answer["request"]["status"].string ?? (approve ? "approved" : "denied")
+        return answer["request"]["error"].nonEmpty.map { "\(status): \($0)" } ?? status
+    }
     var expiresAt: Date? { request["expiresAt"].number.map { Date(timeIntervalSince1970: $0 / 1000) } }
     /// An SSH command run as root with the server's stored sudo password; the command shown is the sudo wrapper around it.
     var elevated: Bool { kind == "ssh" && request["sudo"].is(true) }
@@ -80,8 +100,11 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
 
     /// The list, newest first as the server sends it.
     static func parse(_ answer: JSON) -> [AttentionItem] { answer["items"].items.compactMap(AttentionItem.init) }
-    /// The items waiting on a pull request's approval, in the server's order: the iPhone's Status lists these alone.
-    static func approvalPulls(_ items: [AttentionItem]) -> [AttentionItem] { items.filter { $0.approvalPull != nil } }
+    /// What the iPhone's Status rules on, in the server's order: the SSH and Slack approvals agents wait on, and the
+    /// pull requests waiting on a person's approval.
+    static func statusApprovals(_ items: [AttentionItem]) -> [AttentionItem] {
+        items.filter { $0.isApproval || $0.approvalPull != nil }
+    }
 }
 
 /// An ISO-8601 time, with or without fractions.

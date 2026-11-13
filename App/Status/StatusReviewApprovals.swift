@@ -8,8 +8,7 @@ struct StatusReviewApprovals: View {
     @ObservedObject var model: StatusApprovalsModel
 
     var body: some View {
-        if let error = model.error { ErrorNotice(message: error).listRowBackground(Theme.row) }
-        ForEach(model.items) { item in
+        ForEach(model.pulls) { item in
             if let pull = item.approvalPull { StatusPullApproval(repo: pull.repo, number: pull.number, title: item.title) }
         }
     }

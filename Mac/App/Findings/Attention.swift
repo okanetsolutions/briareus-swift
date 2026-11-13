@@ -57,21 +57,20 @@ final class AttentionModel: ObservableObject {
 
     /// Approves (the command runs, the message goes out) or denies an agent's request.
     func decide(_ item: AttentionItem, approve: Bool) {
-        let op = item.kind == "ssh" ? "ssh_decision" : "slack_decision"
-        guard let rid = item.requestID, Store.shared.supports(op), !deciding.contains(item.id) else { return }
-        if approve && item.kind == "slack" {
+        guard let op = item.decisionOperation, let args = item.decisionArguments(approve: approve), Store.shared.supports(op),
+              !deciding.contains(item.id) else { return }
+        if item.confirmsFirst(approve: approve) {
             guard Dialogs.confirm("Send this Slack message as you?", item.summary, continueLabel: "Send") else { return }
         }
         deciding.insert(item.id)
         let mine = generation
         Task {
-            let r = await boardCall(op, ["id": .string(rid), "decision": .string(approve ? "approve" : "deny")])
+            let r = await boardCall(op, args)
             guard mine == generation else { return }
             deciding.remove(item.id)
             switch r {
             case .success(let v):
-                let status = v["request"]["status"].string ?? (approve ? "approved" : "denied")
-                results[item.id] = v["request"]["error"].nonEmpty.map { "\(status): \($0)" } ?? status
+                results[item.id] = AttentionItem.decisionResult(v, approve: approve)
             case .failure(let e):
                 results[item.id] = e.description
             }
@@ -117,7 +116,7 @@ struct AttentionSection: View {
             if let pull = item.approvalPull { StatusReviewApproval(repo: pull.repo, number: pull.number) }
             HStack(spacing: 8) {
                 if item.isApproval {
-                    let op = item.kind == "ssh" ? "ssh_decision" : "slack_decision"
+                    let op = item.decisionOperation ?? ""
                     let busy = model.deciding.contains(item.id)
                     Button(item.kind == "ssh" ? "Run it" : "Send it") { model.decide(item, approve: true) }
                         .dashButton(.prominent).disabled(busy || !store.supports(op))

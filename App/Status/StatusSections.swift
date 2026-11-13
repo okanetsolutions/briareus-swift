@@ -1,8 +1,9 @@
 // ◉ Status, the Mac's Status screen laid out for a phone: how many conversations need you, are working and are ready,
-// then the pull requests waiting on your approval (StatusReviewApprovals), every conversation waiting for your answer,
-// with the agent's question, its options as buttons and a reply field, then what is working now. It reads the sessions
-// the projects' feeds already keep (the Status tab's own reading of every project), so it needs no loop of its own; only
-// a waiting conversation's question is read from its transcript.
+// then the SSH and Slack requests agents wait on (StatusAgentApprovals), the pull requests waiting on your approval
+// (StatusReviewApprovals), every conversation waiting for your answer, with the agent's question, its options as
+// buttons and a reply field, then what is working now. It reads the sessions the projects' feeds already keep (the
+// Status tab's own reading of every project), so it needs no loop of its own; only a waiting conversation's question is
+// read from its transcript.
 import SwiftUI
 
 /// The questions the waiting conversations left, read from each transcript: the saved lines and what came since.
@@ -42,6 +43,7 @@ struct StatusSections: View {
             }
             .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
         }
+        StatusAgentApprovals(model: StatusApprovalsModel.shared)
         StatusReviewApprovals(model: StatusApprovalsModel.shared)
         if !waiting.isEmpty {
             Section("Waiting for your answer") {

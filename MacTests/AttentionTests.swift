@@ -47,6 +47,29 @@ final class AttentionTests: XCTestCase {
         XCTAssertNil(list[2].approvalPull)
         XCTAssertNil(list[3].approvalPull)
         XCTAssertNil(list[4].approvalPull)
-        XCTAssertEqual(AttentionItem.approvalPulls(list).map(\.id), ["review-approval:o/r#8"])
+        XCTAssertEqual(AttentionItem.statusApprovals(list).map(\.id), ["review-approval:o/r#8", "ssh:r1"])
+    }
+
+    func testDecisionsNameTheirRouteAndRequest() {
+        let list = AttentionItem.parse(j(#"{"items":[{"id":"ssh:r1","kind":"ssh","title":"web-1","request":{"id":"r1"}},{"id":"slack:q1","kind":"slack","title":"Slack","request":{"id":"q1"}},{"id":"ssh:r2","kind":"ssh","title":"web-2"},{"id":"s3:question","kind":"question","title":"Implement","request":{"id":"x"}}]}"#))
+        XCTAssertEqual(list[0].decisionOperation, "ssh_decision")
+        XCTAssertEqual(list[0].decisionArguments(approve: true), j(#"{"id":"r1","decision":"approve"}"#))
+        XCTAssertEqual(list[1].decisionOperation, "slack_decision")
+        XCTAssertEqual(list[1].decisionArguments(approve: false), j(#"{"id":"q1","decision":"deny"}"#))
+        // Without a request there is nothing to name; a question is not decided at all.
+        XCTAssertNil(list[2].decisionArguments(approve: true))
+        XCTAssertNil(list[3].decisionOperation); XCTAssertNil(list[3].decisionArguments(approve: true))
+        // Only sending a Slack message as you asks first.
+        XCTAssertTrue(list[1].confirmsFirst(approve: true))
+        XCTAssertFalse(list[1].confirmsFirst(approve: false))
+        XCTAssertFalse(list[0].confirmsFirst(approve: true))
+    }
+
+    func testADecisionResultCarriesTheRequestStatusAndItsError() {
+        XCTAssertEqual(AttentionItem.decisionResult(j(#"{"request":{"status":"completed"}}"#), approve: true), "completed")
+        let failed = AttentionItem.decisionResult(j(#"{"request":{"status":"failed","error":"exit 1"}}"#), approve: true)
+        XCTAssertTrue(failed.hasPrefix("failed")); XCTAssertTrue(failed.contains("exit 1"))
+        // An answer without a status falls back to the decision made.
+        XCTAssertNotEqual(AttentionItem.decisionResult(j("{}"), approve: true), AttentionItem.decisionResult(j("{}"), approve: false))
     }
 }
