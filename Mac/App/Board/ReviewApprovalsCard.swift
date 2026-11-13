@@ -9,7 +9,13 @@ struct ReviewApprovalsCard: View {
     @ObservedObject var model: CodeReviewsModel
     /// The open note form: `approve`, or `approval:<id>` for a withdrawal; nil when none is open.
     @State private var form: String?
-    @State private var showRisk = false
+    @State private var showRisk: Bool
+
+    /// `riskOpen` starts with what set the risk shown, as ◉ Status does for the approval it asks for.
+    init(approvals: ReviewApprovals, model: CodeReviewsModel, riskOpen: Bool = false) {
+        self.approvals = approvals; self.model = model
+        _showRisk = State(initialValue: riskOpen)
+    }
 
     var body: some View {
         BoardBox(padding: 12, radius: BriareusRadius.lg) {

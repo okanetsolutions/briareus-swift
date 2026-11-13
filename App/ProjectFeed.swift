@@ -276,6 +276,10 @@ final class ProjectsModel: ObservableObject {
         adopt(answer)
         if error != nil { error = nil }
         Store.shared.cache.store(answer, "projects")
+        // What waits on your ruling (agents' SSH and Slack requests, pull requests to approve), which Status lists, as
+        // the Mac's ◉ reads its inbox here.
+        await StatusApprovalsModel.shared.load()
+        guard mine == generation else { return }
         guard Store.shared.supports("sessions") else {
             sessionsError = SessionOverview.unavailableMessage
             return

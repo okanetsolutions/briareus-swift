@@ -31,6 +31,13 @@ final class SessionFeed {
 @MainActor
 final class IssuePagesModel {}
 
+/// The Status tab's approvals inbox, which the projects' load reads after the projects; these checks read no inbox.
+@MainActor
+final class StatusApprovalsModel {
+    static let shared = StatusApprovalsModel()
+    func load() async {}
+}
+
 func errorText(_ error: Error) -> String { error.localizedDescription }
 extension Error {
     var isCancellation: Bool { (self as? APIError)?.kind == .cancelled || self is CancellationError }

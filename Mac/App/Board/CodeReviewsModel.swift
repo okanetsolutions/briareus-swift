@@ -34,7 +34,10 @@ final class CodeReviewsModel: ObservableObject {
     /// Called once a write changed the list, so the pull request's snapshot keeps it.
     var changed: @MainActor () -> Void = {}
 
-    init(repo: String, number: Int) { self.repo = repo; self.number = number }
+    /// `changed` is called once a write changed the list; the Status screens pass one that reads their inbox again.
+    init(repo: String, number: Int, changed: @escaping @MainActor () -> Void = {}) {
+        self.repo = repo; self.number = number; self.changed = changed
+    }
 
     /// The server offers each write and this token may make it.
     private var canHandle: Bool { Store.shared.supports("update_code_review") }
@@ -159,6 +162,15 @@ final class CodeReviewsModel: ObservableObject {
         case .failure(let e):
             if e.kind != .cancelled { self[keyPath: key] = SettingsWritePolicy.failureText(e.description, e) }
             return (false, e.code)
+        }
+    }
+    /// Reads the reviews and outcome on their own, for a screen that shows them without the pull request (◉ Status).
+    func load() async {
+        guard Store.shared.supports("code_reviews") else { gaveUp(); return }
+        let mark = writes.mark
+        switch await boardCall("code_reviews", ["repo": .string(repo), "pr": JSON(number)]) {
+        case .success(let v): take(v["codeReviews"], answer: v, readAt: mark)
+        case .failure(let e): if e.kind != .cancelled { failed(e.description) }
         }
     }
     /// Reads the reviews and outcome again after a refusal said the kept ones are out of date; the refusal stays shown.
