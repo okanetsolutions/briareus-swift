@@ -1,7 +1,8 @@
 // What a pull request's code review amounts to, as the server computes it (`reviewOutcome` and `reviewRounds` in the
 // `GET /pulls/{number}/code-reviews` answer, and `reviewOutcome` again in a verdict save's answer): the outcome and why,
 // whether it is stale or ready, the rounds used against the project's limit, the security pass and the approvals the
-// change's risk asks for. Both apps' Code reviews tab draw it above the reviews. No UI here.
+// change's risk asks for (with every approval on record, ReviewApprovalsLogic.swift). Both apps' Code reviews tab draw it
+// above the reviews. No UI here.
 import Foundation
 
 /// The outcome itself: never read from a label or an approval, only from the server's own records.
@@ -119,6 +120,13 @@ struct ReviewApprovals: Equatable, Sendable {
     var missing: Int
     /// The server's own account of the requirement, shown as it is.
     var explanation: String?
+    /// The head the requirement is for, which an approval names; and whether a review that has ended covers it.
+    var headSha: String?
+    var reviewCurrent: Bool
+    /// What set the tier (ReviewApprovalsLogic.swift), why the requirement stands as it does, and every approval on record.
+    var riskReasons: [RiskReason]
+    var reasons: [ReviewReason]
+    var approvals: [ReviewApproval]
 
     init?(_ j: JSON) {
         guard j.isObject, let result = j["result"].nonEmpty else { return nil }
@@ -129,16 +137,22 @@ struct ReviewApprovals: Equatable, Sendable {
         valid = j["valid"].truncatedInt ?? 0
         missing = j["missing"].truncatedInt ?? 0
         explanation = j["explanation"].nonEmpty
+        headSha = j["headSha"].nonEmpty
+        reviewCurrent = j["reviewCurrent"].is(true)
+        riskReasons = RiskReason.list(j["risk"]["reasons"])
+        reasons = ReviewReason.list(j["reasons"])
+        approvals = j["approvals"].items.compactMap(ReviewApproval.init)
     }
-    /// Shown only when a policy is on and the change's tier asks for approvals.
-    var shown: Bool { enabled && result != "not_required" }
-    /// "1 of 2 approvals · high risk".
+    /// Shown while a policy is on and the change's tier asks for approvals, or approvals are on record: a push that
+    /// lowered the tier leaves the earlier ones listed.
+    var shown: Bool { enabled && (result != "not_required" || !approvals.isEmpty) }
+    /// "1 of 2 approvals · high risk", or "None needed · low risk" when the tier asks for none.
     var line: String {
-        var parts = ["\(valid) of \(required) approval\(required == 1 ? "" : "s")"]
+        var parts = [result == "not_required" ? "None needed" : "\(valid) of \(required) approval\(required == 1 ? "" : "s")"]
         if let tier { parts.append("\(tier) risk") }
         return parts.joined(separator: " \u{00B7} ")
     }
-    var tone: RowTone { result == "satisfied" ? .ok : .warn }
+    var tone: RowTone { result == "satisfied" ? .ok : result == "not_required" ? .muted : .warn }
 }
 
 /// The pull request's review rounds against its project's `reviewRoundLimit`.
@@ -208,8 +222,20 @@ struct ReviewOutcome: Equatable, Sendable {
         /// A verdict save: its outcome replaces the kept one, and without one (the server could not compute it) the kept
         /// one no longer holds; the rounds are kept.
         case verdict
+        /// An approval recorded or withdrawn: its outcome replaces the kept one, or, without one, its requirement replaces
+        /// the kept outcome's approvals; the rounds are kept.
+        case approval
         /// Any other save, which answers neither: both are kept.
         case other
+    }
+
+    /// What the answer to the write named `call` replaces of the kept outcome and rounds.
+    static func source(after call: String) -> Source {
+        switch call {
+        case "update_code_review_finding": return .verdict
+        case "approve_pull", "withdraw_pull_approval": return .approval
+        default: return .other
+        }
     }
 
     /// The outcome and rounds to keep after `answer` from `source`, over what `previous` kept.
@@ -219,6 +245,15 @@ struct ReviewOutcome: Equatable, Sendable {
         switch source {
         case .read: kept["reviewOutcome"] = object(answer["reviewOutcome"]); kept["reviewRounds"] = object(answer["reviewRounds"])
         case .verdict: kept["reviewOutcome"] = object(answer["reviewOutcome"]); kept["reviewRounds"] = previous["reviewRounds"]
+        case .approval:
+            kept = previous.isObject ? previous : [:]
+            if answer["reviewOutcome"].isObject {
+                kept["reviewOutcome"] = answer["reviewOutcome"]
+            } else if answer["approvals"].isObject, kept["reviewOutcome"].isObject {
+                var outcome = kept["reviewOutcome"]
+                outcome["approvals"] = answer["approvals"]
+                kept["reviewOutcome"] = outcome
+            }
         case .other: return previous
         }
         return kept["reviewOutcome"].isObject || kept["reviewRounds"].isObject ? kept : .null

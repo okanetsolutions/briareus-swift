@@ -208,6 +208,10 @@ struct APIRoute: Sendable {
         // its `comments` (CodeReviewLogic.swift).
         .init(name: "update_code_review", method: "PATCH", path: "pulls/{pr}/code-reviews/{reviewId}"),
         .init(name: "update_code_review_finding", method: "PATCH", path: "pulls/{pr}/code-reviews/{reviewId}/findings/{findingId}"),
+        // A person records their approval of the reviewed head (`headSha`, an optional `note`) or withdraws one of theirs;
+        // each answers the requirement and the outcome computed after it (ReviewApprovalsLogic.swift).
+        .init(name: "approve_pull", method: "POST", path: "pulls/{pr}/approvals"),
+        .init(name: "withdraw_pull_approval", method: "POST", path: "pulls/{pr}/approvals/{approvalId}/withdraw"),
         .init(name: "merge_pull", method: "POST", path: "pulls/{pr}/merge"),
         .init(name: "update_pull", method: "PATCH", path: "pulls/{pr}"),   // its `title`, `body`, `labels` and `assignees`; a list replaces the old one
         .init(name: "update_pull_branch", method: "POST", path: "pulls/{pr}/update-branch"),   // merges its base into it, at the `headSha` and `baseRef` read

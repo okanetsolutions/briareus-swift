@@ -215,7 +215,9 @@ struct ProjectSettingsScreen: View {
                 }
                 tabContent
             }
-            .safeAreaInset(edge: .top, spacing: 0) { tabStrip }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                ProjectSettingsTabStrip(tab: $model.tab, dot: model.tabDot) { focus = nil }
+            }
             .onChange(of: model.scrollToken) { _, _ in
                 withAnimation { proxy.scrollTo(settingsErrorID, anchor: .top) }
             }
@@ -244,53 +246,6 @@ struct ProjectSettingsScreen: View {
         }
     }
 
-    /// The tabs as a strip of chips under the bar: six do not fit a segmented control on a phone.
-    private var tabStrip: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(ProjectTab.allCases, id: \.self) { t in
-                        let on = model.tab == t
-                        Button {
-                            focus = nil
-                            model.tab = t
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: Self.symbol(t)).font(.caption)
-                                Text(t.title).font(.subheadline.weight(on ? .semibold : .regular))
-                                if model.tabDot(t) { Circle().fill(Theme.accent).frame(width: 6, height: 6) }
-                            }
-                            .padding(.horizontal, 12).frame(minHeight: 34)
-                            .foregroundStyle(on ? Color.white : .primary)
-                            .background(on ? Theme.accent : Theme.field, in: Capsule())
-                            .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .id(t)
-                        .accessibilityAddTraits(on ? .isSelected : [])
-                        .accessibilityValue(model.tabDot(t) ? "Unsaved changes" : "")
-                    }
-                }
-                .padding(.horizontal, 16).padding(.vertical, 8)
-            }
-            .onChange(of: model.tab) { _, t in withAnimation { proxy.scrollTo(t, anchor: .center) } }
-            .onAppear { proxy.scrollTo(model.tab, anchor: .center) }
-        }
-        .background(Theme.canvas)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 0.5) }
-    }
-
-    static func symbol(_ t: ProjectTab) -> String {
-        switch t {
-        case .project: return "folder"
-        case .database: return "cylinder.split.1x2"
-        case .review: return "magnifyingglass"
-        case .orchestrator: return "point.3.connected.trianglepath.dotted"
-        case .env: return "doc.text"
-        case .run: return "play"
-        }
-    }
-
     // MARK: Tabs
 
     @ViewBuilder private var tabContent: some View {
@@ -307,7 +262,8 @@ struct ProjectSettingsScreen: View {
             Section { field(.dbName); field(.dbExt) }.listRowBackground(Theme.row)
             Section { check(.dbPool); field(.dbRestore) } header: { Text("Database pool") }.listRowBackground(Theme.row)
         case .review:
-            Section { field(.prAuthor) }.listRowBackground(Theme.row)
+            Section { field(.prAuthor); field(.roundLimit) }.listRowBackground(Theme.row)
+            ProjectReviewRules(state: state, text: model.binding, toggle: model.toggle)
             if state.offered(.review) {
                 Section { runtime(.review) } header: { Text("Runtime") }.listRowBackground(Theme.row)
             }

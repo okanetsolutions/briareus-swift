@@ -18,13 +18,20 @@ struct Device: Equatable, Sendable {
     var permission: String          // read, manage or admin
     var repos: [String]             // empty for an admin token, which is held to no project list
     var expiresAt: Double           // milliseconds since 1970
+    /// The user the token acts as; nil from a server, or a saved connection, from before it was sent.
+    var userId: Int?
 
     init?(_ j: JSON) {
         guard let id = j["id"].string, let label = j["label"].string, let permission = j["permission"].string,
               j["repos"].isArray, let expires = j["expiresAt"].number else { return nil }
         self.id = id; self.label = label; self.permission = permission; repos = j["repos"].strings; expiresAt = expires
+        userId = j["userId"].truncatedInt
     }
-    var json: JSON { ["id": .string(id), "label": .string(label), "permission": .string(permission), "repos": JSON(repos), "expiresAt": .number(expiresAt)] }
+    var json: JSON {
+        var o: JSON = ["id": .string(id), "label": .string(label), "permission": .string(permission), "repos": JSON(repos), "expiresAt": .number(expiresAt)]
+        if let userId { o["userId"] = JSON(userId) }
+        return o
+    }
     /// A manage or admin token may write.
     var canManage: Bool { (permissionRank(permission) ?? -1) >= 1 }
     var isAdmin: Bool { permission == "admin" }

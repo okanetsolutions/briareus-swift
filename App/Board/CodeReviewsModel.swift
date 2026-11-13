@@ -24,6 +24,8 @@ final class CodeReviewsModel: ObservableObject {
     @Published private(set) var saveError: String?
     /// The finding whose verdict is being overruled, in its sheet; nil when none is open. Closing it drops its error.
     @Published var editing: CodeReviewFindingEdit? { didSet { if editing == nil { editError = nil } } }
+    /// Why the last approval or withdrawal failed, shown under the approvals.
+    @Published private(set) var approvalError: String?
     /// Why the last verdict save failed, shown in the sheet.
     @Published private(set) var editError: String?
     /// Each write's start and end. A `code_reviews` read that began before a write, or while one was under way, may
@@ -37,6 +39,8 @@ final class CodeReviewsModel: ObservableObject {
     /// The server offers each write and this token may make it.
     private var canHandle: Bool { Store.shared.supports("update_code_review") }
     private var canEditFindings: Bool { Store.shared.supports("update_code_review_finding") }
+    /// The user this token acts as, which tells one's own approvals from other people's.
+    private var me: Int? { Store.shared.device?.userId }
 
     /// What the tab says went wrong: the read first, then the last handling save.
     var notice: String? { error ?? saveError }
@@ -48,6 +52,14 @@ final class CodeReviewsModel: ObservableObject {
     var busy: Bool { saving != nil }
     /// Save is offered while this token may write verdicts, the edit can be saved and its review has not started again.
     func canSave(_ edit: CodeReviewFindingEdit) -> Bool { canEditFindings && reviews.allowsSaving(edit) }
+
+    /// Approve is offered while this token may record one and the requirement waits on a person for a reviewed head.
+    var canApprove: Bool { Store.shared.supports("approve_pull") && outcome?.approvals?.canApprove(me: me) == true }
+    func canWithdraw(_ approval: ReviewApproval) -> Bool {
+        Store.shared.supports("withdraw_pull_approval") && approval.canWithdraw(me: me)
+    }
+    var isApproving: Bool { saving == "approve" }
+    func isWithdrawing(_ approval: ReviewApproval) -> Bool { saving == "approval:\(approval.id)" }
 
     // MARK: Reading
 
@@ -100,26 +112,52 @@ final class CodeReviewsModel: ObservableObject {
         })
     }
 
+    /// Records this person's approval of the head the requirement names; `done` says whether the server took it.
+    func approve(note: String, done: @escaping @MainActor (Bool) -> Void = { _ in }) {
+        guard saving == nil, canApprove, let head = outcome?.approvals?.headSha else { return }
+        let args = ReviewApprovalWrite.approveArguments(repo: repo, number: number, headSha: head, note: note)
+        write("approve", "approve_pull", args, failure: \.approvalError, fold: { $1 }, done: done)
+    }
+    /// Withdraws one of this person's approvals; it stays on record and no longer counts.
+    func withdraw(_ approval: ReviewApproval, note: String, done: @escaping @MainActor (Bool) -> Void = { _ in }) {
+        guard saving == nil, canWithdraw(approval) else { return }
+        let args = ReviewApprovalWrite.withdrawArguments(repo: repo, number: number, approval: approval, note: note)
+        write("approval:\(approval.id)", "withdraw_pull_approval", args, failure: \.approvalError, fold: { $1 }, done: done)
+    }
+
     /// One write, its answer folded into the list, then `done` with whether the server took it; a failure lands on
     /// `failure`. It counts as saving from the tap, so a second tap waits.
     private func write(_ key: String, _ call: String, _ args: JSON, failure: ReferenceWritableKeyPath<CodeReviewsModel, String?>,
                        fold: @escaping (JSON, JSON) -> JSON, done: @escaping @MainActor (Bool) -> Void = { _ in }) {
-        saving = key; saveError = nil; editError = nil
+        saving = key; saveError = nil; editError = nil; approvalError = nil
         writes.begin()
-        Task { done(await send(call, args, failure: failure, fold: fold)) }
+        Task {
+            let sent = await send(call, args, failure: failure, fold: fold)
+            if ReviewApprovalWrite.rereads(after: sent.refusal) { await reread() }
+            done(sent.saved)
+        }
     }
+    /// The write and whether the server took it, with the refusal's code when it gave one.
     private func send(_ call: String, _ args: JSON, failure key: ReferenceWritableKeyPath<CodeReviewsModel, String?>,
-                      fold: (JSON, JSON) -> JSON) async -> Bool {
+                      fold: (JSON, JSON) -> JSON) async -> (saved: Bool, refusal: String?) {
         defer { saving = nil; writes.end() }
         do {
             let answer = try await Store.shared.call(call, args)
             take(fold(answer, raw))
-            takeOutcome(answer, from: call == "update_code_review_finding" ? .verdict : .other)
+            takeOutcome(answer, from: ReviewOutcome.source(after: call))
             changed()
-            return true
+            return (true, nil)
         } catch {
             if let said = failure(error) { self[keyPath: key] = SettingsWritePolicy.failureText(said, error) }
-            return false
+            return (false, (error as? APIError)?.code)
         }
+    }
+    /// Reads the reviews and outcome again after a refusal said the kept ones are out of date; the refusal stays shown.
+    private func reread() async {
+        guard Store.shared.supports("code_reviews") else { return }
+        let mark = writes.mark
+        guard let v = try? await Store.shared.call("code_reviews", ["repo": .string(repo), "pr": JSON(number)]) else { return }
+        take(v["codeReviews"], answer: v, readAt: mark)
+        changed()
     }
 }
