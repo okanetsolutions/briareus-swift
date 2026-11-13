@@ -10,6 +10,8 @@ struct ReviewApprovalsSection: View {
     @State private var approving = false
     @State private var withdrawing: ReviewApproval?
     @State private var note = ""
+    /// Starts with what set the risk shown, as Status does for the approval it asks for.
+    var riskOpen = false
 
     var body: some View {
         Section {
@@ -18,7 +20,7 @@ struct ReviewApprovalsSection: View {
             ForEach(approvals.listedReasons) { reason in
                 Text(reason.message).font(.footnote).foregroundStyle(reason.isNote ? .secondary : Theme.color(reason.tone))
             }
-            if !approvals.riskReasons.isEmpty { RiskReasonsGroup(reasons: approvals.riskReasons) }
+            if !approvals.riskReasons.isEmpty { RiskReasonsGroup(reasons: approvals.riskReasons, open: riskOpen) }
             ForEach(approvals.approvals) { approval in
                 ApprovalRow(approval: approval)
                 if model.canWithdraw(approval) {
@@ -65,8 +67,10 @@ struct ReviewApprovalsSection: View {
 /// What set the change's risk tier, folded.
 private struct RiskReasonsGroup: View {
     let reasons: [RiskReason]
+    @State private var open: Bool
+    init(reasons: [RiskReason], open: Bool) { self.reasons = reasons; _open = State(initialValue: open) }
     var body: some View {
-        DisclosureGroup("What set the risk") {
+        DisclosureGroup("What set the risk", isExpanded: $open) {
             ForEach(reasons) { reason in
                 VStack(alignment: .leading, spacing: 2) {
                     if let tier = reason.tier { Text("\(tier) risk").font(.caption.weight(.semibold)).foregroundStyle(.secondary) }

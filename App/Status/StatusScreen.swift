@@ -38,8 +38,8 @@ struct StatusScreen: View {
             }
             ToolbarItem(placement: .topBarTrailing) { OpenInWindowButton(page: .status) }
         }
-        .refreshable { try? await projects.load() }
+        .refreshable { try? await projects.load(); await StatusApprovalsModel.shared.load() }
         // Every 7 seconds, or every minute while the live stream brings the changes, as the projects list asks.
-        .task { await poll(every: SessionFeed.shared.live ? 60 : ProjectFeed.sessionsEvery) { await reading { try await projects.load() } } }
+        .task { await poll(every: SessionFeed.shared.live ? 60 : ProjectFeed.sessionsEvery) { await reading { try await projects.load(); await StatusApprovalsModel.shared.load() } } }
     }
 }

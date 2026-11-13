@@ -38,4 +38,15 @@ final class AttentionTests: XCTestCase {
         // Each review kind has a word of its own, not the raw kind.
         for item in [list[0], list[1], list[3]] { XCTAssertNotEqual(item.label, item.kind); XCTAssertFalse(item.isApproval) }
     }
+
+    func testOnlyAReviewApprovalWithAPullRequestIsApprovedInPlace() {
+        let list = AttentionItem.parse(j(#"{"items":[{"id":"review-limit:o/r#7","kind":"review-limit","repo":"o/r","prNumber":7,"title":"PR #7"},{"id":"review-approval:o/r#8","kind":"review-approval","repo":"o/r","prNumber":8,"title":"PR #8"},{"id":"review-approval:x#2","kind":"review-approval","prNumber":2,"title":"PR #2"},{"id":"review-approval:o/r#9","kind":"review-approval","repo":"o/r","prNumber":9,"sessionId":"s9","title":"PR #9"},{"id":"ssh:r1","kind":"ssh","repo":"o/r","prNumber":8,"title":"web-1","request":{"id":"r1"}}]}"#))
+        XCTAssertNil(list[0].approvalPull)
+        XCTAssertEqual(list[1].approvalPull?.repo, "o/r"); XCTAssertEqual(list[1].approvalPull?.number, 8)
+        // Without a project, or tied to a session, there is no pull request to read; another kind never is one.
+        XCTAssertNil(list[2].approvalPull)
+        XCTAssertNil(list[3].approvalPull)
+        XCTAssertNil(list[4].approvalPull)
+        XCTAssertEqual(AttentionItem.approvalPulls(list).map(\.id), ["review-approval:o/r#8"])
+    }
 }

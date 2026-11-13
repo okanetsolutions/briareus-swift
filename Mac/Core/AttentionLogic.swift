@@ -39,6 +39,9 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
         guard sessionID == nil, let repo, let prNumber else { return nil }
         return (repo, prNumber)
     }
+    /// The pull request a `review-approval` item waits on a person's approval of, which both Status screens read and
+    /// approve in place (its risk, security pass and Approve); nil for every other kind.
+    var approvalPull: (repo: String, number: Int)? { kind == "review-approval" ? pull : nil }
     /// The approval's own id, which the decision names.
     var requestID: String? { request["id"].nonEmpty }
     var expiresAt: Date? { request["expiresAt"].number.map { Date(timeIntervalSince1970: $0 / 1000) } }
@@ -77,6 +80,8 @@ struct AttentionItem: Equatable, Sendable, Identifiable {
 
     /// The list, newest first as the server sends it.
     static func parse(_ answer: JSON) -> [AttentionItem] { answer["items"].items.compactMap(AttentionItem.init) }
+    /// The items waiting on a pull request's approval, in the server's order: the iPhone's Status lists these alone.
+    static func approvalPulls(_ items: [AttentionItem]) -> [AttentionItem] { items.filter { $0.approvalPull != nil } }
 }
 
 /// An ISO-8601 time, with or without fractions.

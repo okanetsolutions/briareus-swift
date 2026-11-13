@@ -1,6 +1,7 @@
 // What the server says waits on the operator (core /attention): approvals an agent asked for, a command over SSH or a
 // Slack message to send as you, to rule on at once, and questions and failures to open. The ◉ Status screen lists them
-// and the sidebar strip counts the approvals; the projects' poll reads them.
+// and the sidebar strip counts the approvals; the projects' poll reads them. A pull request waiting on a person's approval
+// shows its review, security pass and risk with Approve in place (StatusReviewApproval).
 import Combine
 import SwiftUI
 
@@ -113,6 +114,7 @@ struct AttentionSection: View {
             } else {
                 Text(item.summary).font(Theme.footnote).foregroundStyle(Theme.ink).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             }
+            if let pull = item.approvalPull { StatusReviewApproval(repo: pull.repo, number: pull.number) }
             HStack(spacing: 8) {
                 if item.isApproval {
                     let op = item.kind == "ssh" ? "ssh_decision" : "slack_decision"
