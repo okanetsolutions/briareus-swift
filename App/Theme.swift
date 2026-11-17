@@ -110,7 +110,7 @@ struct ErrorNotice: View {
 // MARK: - Markdown
 
 /// A reply's Markdown, on the core's parser (Mac/Core/Markdown.swift, the Windows client's): headings, lists and task
-/// boxes, quotes, code, rules and tables. Equal sources draw the same, so a screen redrawn around a reply leaves it be.
+/// boxes, quotes, code, rules and tables, and image links as previews (App/Shared/MarkdownImage.swift). Equal sources draw the same, so a screen redrawn around a reply leaves it be.
 struct MarkdownText: View, Equatable {
     let source: String
     /// What a find bar over it is looking for, marked where it occurs.
@@ -122,7 +122,7 @@ struct MarkdownText: View, Equatable {
             ForEach(Array(Markdown.parse(source).enumerated()), id: \.offset) { _, block in
                 switch block.kind {
                 case .paragraph:
-                    Text(inlineMarkdown(block.text).marking(finding))
+                    InlineMarkdown(source: block.text)
                 case .heading:
                     Text(inlineMarkdown(block.text).marking(finding)).font(block.level == 1 ? .title3.bold() : block.level == 2 ? .headline : .subheadline.bold())
                         .padding(.top, 4)
@@ -133,10 +133,10 @@ struct MarkdownText: View, Equatable {
                         case .unchecked: Image(systemName: "square").foregroundStyle(.secondary).accessibilityLabel("Not done")
                         case .checked: Image(systemName: "checkmark.square.fill").foregroundStyle(Theme.accent).accessibilityLabel("Done")
                         }
-                        Text(inlineMarkdown(block.text).marking(finding))
+                        InlineMarkdown(source: block.text)
                     }.padding(.leading, CGFloat(block.indent) * 16)
                 case .quote:
-                    Text(inlineMarkdown(block.text).marking(finding)).foregroundStyle(.secondary)
+                    InlineMarkdown(source: block.text).foregroundStyle(.secondary)
                         .padding(.leading, 12)
                         .overlay(alignment: .leading) { Capsule().fill(Theme.line).frame(width: 3) }
                 case .code:
@@ -154,9 +154,12 @@ struct MarkdownText: View, Equatable {
 }
 
 /// Inline Markdown as styled text: code in the accent on a tint, bold, italic, struck through, and links that open.
-func inlineMarkdown(_ text: String) -> AttributedString {
+func inlineMarkdown(_ text: String) -> AttributedString { inlineMarkdown(spans: Markdown.inline(text)) }
+
+/// Spans Core already parsed, styled as `inlineMarkdown(_:)` styles a text's.
+func inlineMarkdown(spans: [MdSpan]) -> AttributedString {
     var out = AttributedString()
-    for span in Markdown.inline(text) {
+    for span in spans {
         var run = AttributedString(span.text)
         if span.flags.contains(.code) {
             run.font = .system(.callout, design: .monospaced)

@@ -38,11 +38,11 @@ func selectablePlain(_ text: String, font: NSFont, color: Color, align: NSTextAl
 /// Inline Markdown (`doc_rich`): bold, italic, strikethrough in the muted colour, code in the mono font on the sunken
 /// tint, links in the accent with a faint underline; lines 4px apart.
 func selectableRich(_ source: String, size: MarkdownSize = .body, color: Color = Theme.ink, bold: Bool = false,
-                    font base: NSFont? = nil) -> NSAttributedString {
+                    font base: NSFont? = nil, spans: [MdSpan]? = nil) -> NSAttributedString {
     let out = NSMutableAttributedString()
     let style = paragraph(.left, 4)
     let ink = NSColor(color), accent = NSColor(Theme.accent), muted = NSColor(Theme.muted)
-    for span in Markdown.inline(source) {
+    for span in spans ?? Markdown.inline(source) {
         var attrs: [NSAttributedString.Key: Any] = [.paragraphStyle: style]
         var font: NSFont
         if span.flags.contains(.code) {

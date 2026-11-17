@@ -43,6 +43,8 @@ struct MdSpanStyle: OptionSet, Hashable, Sendable {
     static let code = MdSpanStyle(rawValue: 4)
     static let link = MdSpanStyle(rawValue: 8)
     static let strike = MdSpanStyle(rawValue: 16)
+    /// The link was written as an image, `![alt](url)`.
+    static let image = MdSpanStyle(rawValue: 32)
 }
 
 struct MdSpan: Equatable, Sendable {
@@ -382,7 +384,8 @@ private struct MdInline {
                     p = close + 2; continue
                 }
             }
-            if c == ch("!") && p + 1 < end && t[p + 1] == ch("[") { p += 1; c = ch("[") }
+            var image = false
+            if c == ch("!") && p + 1 < end && t[p + 1] == ch("[") { p += 1; c = ch("["); image = true }
             if c == ch("`") {
                 var ticks = 0
                 while p + ticks < end && t[p + ticks] == ch("`") { ticks += 1 }
@@ -444,10 +447,11 @@ private struct MdInline {
                         if let space = url.firstIndex(of: SP) { url = Array(url[..<space]) }
                         flushPlain(&out)
                         var label: [RawSpan] = []
-                        parse(&label, p + 1, close, flags.union(.link))
+                        let linkFlags = image ? flags.union([.link, .image]) : flags.union(.link)
+                        parse(&label, p + 1, close, linkFlags)
                         for var span in label { span.url = url; out.append(span) }
                         // An empty label shows the link itself.
-                        if label.isEmpty && !url.isEmpty { emit(&out, flags.union(.link), url[...], url) }
+                        if label.isEmpty && !url.isEmpty { emit(&out, linkFlags, url[...], url) }
                         p = paren + 1; continue
                     }
                 }

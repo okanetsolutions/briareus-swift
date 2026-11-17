@@ -1,5 +1,5 @@
 // Markdown as doc.c lays it out: paragraphs, headings, bullets and task lists, quotes, code with a copy button, tables and
-// rules, with bold, italic, strikethrough, inline code and links inline. Its text selects across blocks (SelectableText.swift).
+// rules, with bold, italic, strikethrough, inline code and links inline, and image links as previews (MarkdownImage.swift). Its text selects across blocks (SelectableText.swift).
 import AppKit
 import SwiftUI
 
@@ -62,7 +62,7 @@ struct MarkdownView: View {
     @ViewBuilder private func block(_ b: MdBlock) -> some View {
         switch b.kind {
         case .paragraph:
-            RichText(source: b.text, size: size)
+            InlineBlock(source: b.text, size: size)
         case .heading:
             HeadingText(text: b.text)
         case .bullet:
@@ -74,11 +74,11 @@ struct MarkdownView: View {
                     Text(verbatim: b.marker ?? "\u{2022}").font(.system(size: size.size)).foregroundStyle(Theme.muted)
                         .padding(.trailing, 8).frame(minWidth: 18, alignment: .leading)
                 }
-                RichText(source: b.text, size: size, color: b.task == .checked ? Theme.muted : Theme.ink)
+                InlineBlock(source: b.text, size: size, color: b.task == .checked ? Theme.muted : Theme.ink)
             }
             .padding(.leading, CGFloat(b.indent) * 16)
         case .quote:
-            RichText(source: b.text, size: size, color: Theme.muted)
+            InlineBlock(source: b.text, size: size, color: Theme.muted)
                 .padding(.leading, 12)
                 .overlay(alignment: .leading) { Rectangle().fill(Theme.line).frame(width: 2) }
         case .code:
