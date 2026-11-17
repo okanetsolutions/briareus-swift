@@ -229,7 +229,7 @@ struct ProjectSettingsScreen: View {
             if model.tab == .project && state.id != 0 && state.row["localDir"].nonEmpty != nil && store.supports("project_update") {
                 LocalCheckoutUpdate(projectID: Double(state.id))
             }
-            if model.tab == .project && state.id != 0, let repo = state.row["repo"].nonEmpty { ProjectGithubAccountSection(repo: repo) }
+            if model.tab == .project && state.id != 0, let repo = state.row["repo"].nonEmpty { ProjectGithubAccountSection(repo: repo).id(repo) }
             tabContent
         }
         .onAppear {

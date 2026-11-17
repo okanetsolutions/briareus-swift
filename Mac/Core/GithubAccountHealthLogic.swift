@@ -53,7 +53,9 @@ struct GithubAccountIdentity: Equatable, Sendable {
 /// project's account in general. For refusals such as "could not read the board with …".
 func githubAccountPhrase(_ identity: GithubAccountIdentity?) -> String {
     guard let identity else { return "the project's GitHub account" }
-    if !identity.hasToken { return "no GitHub token" }
+    if !identity.hasToken {
+        return identity.globalFallback || identity.label.isEmpty ? "no GitHub token" : "the GitHub account \(identity.label), which has no token"
+    }
     if identity.globalFallback { return "the server's GITHUB_TOKEN" }
     let login = identity.login.map { "@\($0)" }
     switch (identity.label.isEmpty ? nil : identity.label, login) {
@@ -206,13 +208,14 @@ extension GithubAccountHealth {
     }
 
 
-    /// Healthy as the server judges it; a check GitHub could not finish (throttled, unreachable) is a warning, not a fault.
+    /// Healthy as the server judges it. Otherwise a fault (a bad or missing token, missing scopes, a denied repository)
+    /// needs attention, and a check GitHub only could not finish (throttled, unreachable) is a warning.
     var verdict: GithubHealthVerdict {
         if healthy { return GithubHealthVerdict(title: "Healthy", tone: .ok, symbol: "checkmark.circle") }
-        if token == .rateLimited || token == .unavailable {
-            return GithubHealthVerdict(title: "Could not finish the check", tone: .warn, symbol: "exclamationmark.triangle")
+        if ([tokenRow] + scopeRows + repoRows).contains(where: { $0.tone == .danger }) {
+            return GithubHealthVerdict(title: "Needs attention", tone: .danger, symbol: "xmark.octagon")
         }
-        return GithubHealthVerdict(title: "Needs attention", tone: .danger, symbol: "xmark.octagon")
+        return GithubHealthVerdict(title: "Could not finish the check", tone: .warn, symbol: "exclamationmark.triangle")
     }
 
     /// Every row, grouped in `GithubHealthSection` order; reset and cool-down times are read against `now`.

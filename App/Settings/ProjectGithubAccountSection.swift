@@ -19,9 +19,9 @@ struct ProjectGithubAccountSection: View {
                     Text("GitHub account")
                 }
                 .listRowBackground(Theme.row)
+                .task { await model.load() }
                 if let health = model.health { GithubHealthResults(health: health) }
             }
-            .task { await model.load() }
         }
     }
 

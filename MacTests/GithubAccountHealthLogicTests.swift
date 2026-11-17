@@ -24,11 +24,16 @@ final class GithubAccountHealthLogicTests: XCTestCase {
     func testTheGlobalFallbackNamesTheServersToken() throws {
         let a = try XCTUnwrap(GithubAccountIdentity(j(#"{"account":{"id":null,"label":"GITHUB_TOKEN","login":null,"globalFallback":true,"hasToken":true}}"#)))
         XCTAssertNil(a.id); XCTAssertNil(a.login); XCTAssertTrue(a.globalFallback)
-        XCTAssertTrue(a.line.contains("GITHUB_TOKEN"))
-        XCTAssertFalse(a.line.contains("@"))
+        // The fallback reads apart from an assigned account and from a missing token.
+        let assigned = GithubAccountIdentity(id: 4, label: "GITHUB_TOKEN", login: "acme", globalFallback: false, hasToken: true)
+        XCTAssertNotEqual(a.line, assigned.line)
+        XCTAssertNotEqual(a.line, GithubAccountIdentity(label: "GITHUB_TOKEN", globalFallback: true, hasToken: false).line)
         XCTAssertNotNil(a.detail)
         XCTAssertEqual(a.tone, .muted)
-        XCTAssertTrue(githubAccountPhrase(a).contains("GITHUB_TOKEN"))
+        XCTAssertNotEqual(githubAccountPhrase(a), githubAccountPhrase(assigned))
+        XCTAssertNotEqual(githubAccountPhrase(a), githubAccountPhrase(nil))
+        // A login a health check verified for the fallback shows with it.
+        XCTAssertTrue(GithubAccountIdentity(label: "GITHUB_TOKEN", login: "srv", globalFallback: true, hasToken: true).line.contains("srv"))
     }
 
     func testAMissingTokenIsAFaultWhicheverAccountIsSelected() throws {
@@ -36,13 +41,14 @@ final class GithubAccountHealthLogicTests: XCTestCase {
         let assigned = try XCTUnwrap(GithubAccountIdentity(j(#"{"id":2,"label":"ops","login":"ops-bot","globalFallback":false,"hasToken":false}"#)))
         for a in [fallback, assigned] {
             XCTAssertEqual(a.tone, .danger)
-            XCTAssertFalse(a.line.contains("@"))
+            XCTAssertFalse(a.line.contains("ops-bot"))
             XCTAssertNotEqual(a.line, GithubAccountIdentity(label: "GITHUB_TOKEN", globalFallback: true, hasToken: true).line)
         }
-        // The two missing tokens read the same line; the account it belongs to is in the detail.
+        // The two missing tokens read the same line; the account it belongs to is in the detail and in a refusal's phrase.
         XCTAssertEqual(fallback.line, assigned.line)
         XCTAssertTrue(assigned.detail?.contains("ops") == true)
-        XCTAssertEqual(githubAccountPhrase(fallback), githubAccountPhrase(assigned))
+        XCTAssertTrue(githubAccountPhrase(assigned).contains("ops"))
+        XCTAssertNotEqual(githubAccountPhrase(fallback), githubAccountPhrase(assigned))
     }
 
     func testAnAnswerWithoutTheAccountShapeIsNotAnIdentity() {
@@ -57,6 +63,13 @@ final class GithubAccountHealthLogicTests: XCTestCase {
         let unlabelled = GithubAccountIdentity(id: 1, label: "", login: "bot", globalFallback: false, hasToken: true)
         XCTAssertTrue(githubAccountPhrase(unlabelled).contains("@bot"))
         XCTAssertNotEqual(githubAccountPhrase(unlabelled), general)
+    }
+
+    func testRoutes() {
+        XCTAssertEqual(APIRoute.named("github_account")?.path, "github/account")
+        XCTAssertEqual(APIRoute.named("github_account")?.method, "GET")
+        XCTAssertEqual(APIRoute.named("settings_github_health")?.path, "settings/github/health")
+        XCTAssertEqual(APIRoute.named("settings_github_health")?.method, "GET")
     }
 
     // MARK: Health
@@ -166,6 +179,17 @@ final class GithubAccountHealthLogicTests: XCTestCase {
         XCTAssertNil(h.rateLimit)
         XCTAssertFalse(h.rows(now: now).contains { $0.section == .rateLimits })
         XCTAssertEqual(h.groups(now: now).map(\.section), [.token, .scopes, .repos])
+    }
+
+    func testARepositoryGithubCouldNotAnswerIsAWarningNotAFault() throws {
+        let h = try health(#"""
+        {"healthy":false,"token":{"status":"valid","httpStatus":200},
+         "scopes":{"status":"ok","granted":["repo"],"required":["repo"],"missing":[]},
+         "repos":[{"repo":"acme/web","accessible":true,"status":"ok","httpStatus":200},
+                  {"repo":"acme/api","accessible":null,"status":"rate_limited","httpStatus":429}],"rateLimit":null}
+        """#)
+        XCTAssertEqual(try row(h, "repo:acme/api").tone, .warn)
+        XCTAssertEqual(h.verdict.tone, .warn)
     }
 
     func testMissingScopesAndADeniedRepositoryNeedAttention() throws {

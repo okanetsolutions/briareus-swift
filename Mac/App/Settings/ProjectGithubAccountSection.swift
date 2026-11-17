@@ -16,9 +16,11 @@ struct ProjectGithubAccountSection: View {
                     identity
                     Spacer()
                     if model.canCheck {
-                        Button(model.checking ? "Checking…" : "Check GitHub account") { model.check() }
-                            .dashButton(.bordered).disabled(model.checking)
-                            .help("Check its token, scopes, repositories and rate limits against GitHub")
+                        Button { model.check() } label: {
+                            Label(model.checking ? "Checking…" : "Check GitHub account", systemImage: "stethoscope")
+                        }
+                        .dashButton(.bordered).disabled(model.checking)
+                        .help("Check its token, scopes, repositories and rate limits against GitHub")
                     }
                 }
                 if let detail = model.identity?.detail {
