@@ -23,6 +23,8 @@ final class SettingsLists: ObservableObject {
     @Published var providers = Section()
     @Published var servers = Section()
     @Published var ssh = Section()
+    /// The GitHub accounts, which the GitHub form also reads to mark the projects another one already serves.
+    @Published var github = Section()
     @Published var forge = Section()
     /// The Slack workspaces, which the Slack form also reads to mark the projects another one already serves.
     @Published var slack = Section()
@@ -41,7 +43,7 @@ final class SettingsLists: ObservableObject {
     }
 
     private func reset() {
-        projects = Section(); providers = Section(); servers = Section(); ssh = Section(); forge = Section(); slack = Section()
+        projects = Section(); providers = Section(); servers = Section(); ssh = Section(); github = Section(); forge = Section(); slack = Section()
         ordering = false
     }
 
@@ -63,13 +65,14 @@ final class SettingsLists: ObservableObject {
     func loadProviders() async throws { try await load(\.providers, "settings_providers", "providers") }
     func loadServers() async throws { try await load(\.servers, "settings_db_servers", "servers") }
     func loadSSH() async throws { try await load(\.ssh, "settings_ssh_servers", "servers") }
+    func loadGithub() async throws { try await load(\.github, "settings_github_accounts", "accounts") }
     func loadForge() async throws { try await load(\.forge, "settings_forge_accounts", "accounts") }
     func loadSlack() async throws { try await load(\.slack, "settings_slack_workspaces", "workspaces") }
 
     /// Every list afresh; the first failure is what a poll backs off on.
     func refresh() async throws {
         var first: Error?
-        for read in [loadProjects, loadProviders, loadServers, loadSSH, loadForge, loadSlack] {
+        for read in [loadProjects, loadProviders, loadServers, loadSSH, loadGithub, loadForge, loadSlack] {
             do { try await read() } catch { if first == nil { first = error } }
         }
         if let first { throw first }

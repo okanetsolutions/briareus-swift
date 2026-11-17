@@ -5,7 +5,7 @@
 import Foundation
 
 /// Whether two project lists hold the same projects, in any order.
-private func sameRepos(_ a: [String], _ b: [String]) -> Bool { a.count == b.count && a.allSatisfy(b.contains) }
+func sameRepos(_ a: [String], _ b: [String]) -> Bool { a.count == b.count && a.allSatisfy(b.contains) }
 
 /// What a Projects list offers: every project, then any ticked one that is no longer a project (the server refuses it on
 /// save, so it stays visible to be unticked).
