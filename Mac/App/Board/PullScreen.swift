@@ -677,7 +677,7 @@ private struct PullSidebar: View {
     @ObservedObject var model: PullModel
     var body: some View {
         let row = model.boardRow
-        let projects = model.issueProjects.entries.map { AnyView(PullProjectsItem(entries: $0)) }
+        let projects = model.issueProjects.entries.map { AnyView(PullProjectsItem(entries: $0, repo: model.repo)) }
         var items: [AnyView] = []
         if !model.actions.isEmpty { items.append(AnyView(actions(row))) }
         if !model.pr.isNull { items.append(AnyView(checks)); items.append(AnyView(reviewers(row))) }

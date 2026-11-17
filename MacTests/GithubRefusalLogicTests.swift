@@ -40,6 +40,18 @@ final class GithubRefusalLogicTests: XCTestCase {
         XCTAssertNil(githubRefusal(.board, error: nil).detail)
     }
 
+    func testTheNoteAndNoticeSplitTheRefusal() {
+        let refused = githubRefusal(.issues, error: "Resource not accessible")
+        XCTAssertEqual(refused.note, refused.explanation)
+        XCTAssertEqual(refused.notice, "Resource not accessible")
+        let bare = githubRefusal(.board, error: nil)
+        XCTAssertEqual(bare.note, bare.explanation)
+        XCTAssertNil(bare.notice)
+        let missing = githubRefusal(.projects, error: "no GitHub token for acme/api")
+        XCTAssertNil(missing.note)
+        XCTAssertEqual(missing.notice, missingGithubTokenText("acme/api"))
+    }
+
     func testEachSubjectExplainsDifferently() {
         let texts = Set([GithubReadSubject.issues, .projects, .board].map { githubRefusal($0, error: "x").explanation })
         XCTAssertEqual(texts.count, 3)

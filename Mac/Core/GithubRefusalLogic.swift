@@ -22,6 +22,12 @@ struct GithubRefusal: Equatable, Sendable {
     var detail: String?
     /// The server had no GitHub token for the repository at all, rather than one GitHub turned away.
     var missingToken: Bool
+
+    /// The muted explanation drawn above the notice; nil when the notice already says it (a missing token). Only a
+    /// refusal with a note names the account, so only it is worth reading the project's identity for.
+    var note: String? { missingToken ? nil : explanation }
+    /// The red notice: the missing token's explanation, else the server's words when there are any.
+    var notice: String? { missingToken ? explanation : detail }
 }
 
 /// The repository named by the core's `no GitHub token for <repo>`, wherever it appears in `message`; nil for any other

@@ -246,7 +246,7 @@ struct ProjectBoardTab: View {
 
     /// What stands above the columns: GitHub's refusal, the view's filter, a cut-off board, and the assignee's share.
     @ViewBuilder private func notes(_ b: ProjectBoard) -> some View {
-        if let refused = b.error { GithubBoardRefusalNote(refusal: githubRefusal(.board, error: refused)) }
+        if let refused = b.error { GithubRefusalNote(.board, error: refused, repo: model.repo, font: Theme.footnote, boxed: true) }
         if let filter = b.filter, !filter.isEmpty {
             Text(verbatim: "Filtered by \(filter)").font(Theme.monoCaption2).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true).padding(.bottom, 8)
         }

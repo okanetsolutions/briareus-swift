@@ -519,7 +519,7 @@ struct IssueScreen: View {
         if list.isEmpty {
             Section("Projects") {
                 if let refused = model.detail["projectsError"].string {
-                    GithubRefusalNote(refusal: githubRefusal(.projects, error: refused))
+                    GithubRefusalNote(.projects, error: refused, repo: repo)
                 } else {
                     Text("None yet").foregroundStyle(.secondary)
                 }

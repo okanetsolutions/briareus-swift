@@ -115,7 +115,7 @@ struct PullScreen: View {
                 case .files: files
                 case .reviews: reviews
                 case .issues: issues
-                case .projects: PullProjectsSection(entries: model.issueProjects.entries)
+                case .projects: PullProjectsSection(entries: model.issueProjects.entries, repo: repo)
                 case .codeReviews: PullCodeReviewsTab(model: model.codeReviews)
                 case .conversations: conversations
                 case .run: EmptyView()

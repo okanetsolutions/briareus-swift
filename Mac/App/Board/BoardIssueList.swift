@@ -11,7 +11,7 @@ struct BoardIssueList: View {
     var body: some View {
         if let refused = model.board["issuesError"].string {
             BoardBox(padding: 12, radius: 10) {
-                GithubRefusalNote(refusal: githubRefusal(.issues, error: refused), font: Theme.footnote)
+                GithubRefusalNote(.issues, error: refused, repo: model.repo, font: Theme.footnote)
             }
         } else {
             let issues = model.listedIssues

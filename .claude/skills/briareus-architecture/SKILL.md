@@ -47,7 +47,7 @@ Search here before writing a component.
 
 **Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `reviewGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
 
-**Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`; `GithubRefusalNote` and `GithubBoardRefusalNote` (`Mac/App/Board/GithubRefusalNote.swift`). Its errands (`Mac/App/Board/BoardErrands.swift`): `actionIcon`, `ErrandLabel`, `rowActions`, `afterThisEvent`.
+**Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`; `GithubRefusalNote` (`Mac/App/Board/GithubRefusalNote.swift`, `boxed` for the ▦ Board tab). Its errands (`Mac/App/Board/BoardErrands.swift`): `actionIcon`, `ErrandLabel`, `rowActions`, `afterThisEvent`.
 
 **Mac settings kit** (`Mac/App/Settings/SettingsKit.swift`): `SettingsPage`, `SettingsTabs`, `SettingsFieldBox`, `SettingsFieldLabel`, `SettingsTextArea`, `SettingsCheck`, `SettingsSelect`, `SettingsLabeledSelect`, `SettingsPair`, `SettingsStatusRow`, `SettingsHint`, `SettingsNote`, `SettingsHelpIcon`, `PopupMenu`.
 

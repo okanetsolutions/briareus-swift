@@ -64,7 +64,7 @@ The iPhone and iPad app opens on tabs, the Mac app's sidebar strip laid out for 
 
 - On iPad, shows what the projects spent over a window, by project, activity, provider and model, with the costliest sessions; an admin token sees every project's, others this month's for their own. Above it, every provider account's login and quota windows, as the Mac shows them.
 - With an admin token, edits the server's settings as the Mac app does: projects (active or not, their GitHub Projects board, PR actions' runtime and local session limit) and their order, providers and their logins, the database pool, SSH servers with the database login each stores, GitHub accounts (a label, its write-only token and the projects it serves, with the login, id and scopes GitHub verified), Forge accounts, and Slack workspaces with the channels each project may post to. Each field's hint is behind an ⓘ beside it.
-- A project's settings show which GitHub account the server reads and writes GitHub with for it, or the server's `GITHUB_TOKEN` when no account serves it, to any token that can read the project (`GET /github/account`). An admin token gets Check GitHub account, which checks that account against GitHub on a tap (`GET /settings/github/health`): the token, its scopes (a fine-grained token reports none, which is not the same as missing them), each repository's access and the REST and GraphQL budgets with their resets. GitHub's refusals on the board, an issue or a pull request name the project's GitHub account, and a project with neither an account nor `GITHUB_TOKEN` says so instead of failing.
+- A project's settings show which GitHub account the server reads and writes GitHub with for it, or the server's `GITHUB_TOKEN` when no account serves it, to any token that can read the project (`GET /github/account`). An admin token gets Check GitHub account, which checks that account against GitHub on a tap (`GET /settings/github/health`): the token, its scopes (a fine-grained token reports none, which is not the same as missing them), each repository's access and the REST and GraphQL budgets with their resets. GitHub's refusals on the board, an issue or a pull request name the project's GitHub account (read once, only when a refusal is shown), and a project with neither an account nor `GITHUB_TOKEN` says so instead of failing.
 
 **In the car**
 
@@ -343,7 +343,7 @@ The iPhone and iPad app has what the Mac app has, except what needs the Mac itse
 - A pull request's labels and conflicts come from the board, which lists open pull requests only, so a merged or closed one shows neither.
 - Starting an epic, which picks an orchestrator's and its workers' models, is not offered by the apps.
 - A project's GitHub account health check runs only when an admin taps (or, on the Mac, clicks) Check GitHub account, and its answer is kept only while that project's settings are open: nothing polls it or caches it, on the iPhone and iPad as on the Mac.
-- GitHub's refusals on the board, an issue or a pull request say "the project's GitHub account" without naming it: the account is read only in the project's settings, so the board screens make no extra request for it, on either app.
+- GitHub's refusals on the board, an issue or a pull request name the project's GitHub account once it is read (`GET /github/account`, which asks GitHub nothing): only while a refusal is shown, once, and never polled or kept, on the iPhone and iPad as on the Mac. Until then, or without that route, they say "the project's GitHub account".
 
 ## Security and privacy
 
