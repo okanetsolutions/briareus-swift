@@ -1,6 +1,7 @@
 // A project's server GitHub account and an admin's health check of it (GithubAccountHealthLogic.swift): the identity read
 // from `GET /github/account`, its line for an assigned account, the global fallback and a missing token, the phrase a
-// refusal names it with, and `GET /settings/github/health` read into rows for valid, invalid and throttled tokens.
+// refusal names it with, which project shows it, and `GET /settings/github/health` read into rows for valid, invalid and
+// throttled tokens.
 import XCTest
 @testable import BriareusMacCore
 
@@ -63,6 +64,15 @@ final class GithubAccountHealthLogicTests: XCTestCase {
         let unlabelled = GithubAccountIdentity(id: 1, label: "", login: "bot", globalFallback: false, hasToken: true)
         XCTAssertTrue(githubAccountPhrase(unlabelled).contains("@bot"))
         XCTAssertNotEqual(githubAccountPhrase(unlabelled), general)
+    }
+
+    func testOnlyASavedProjectShowsItsSavedRepositorysAccount() {
+        XCTAssertEqual(ProjectFormState(row: j(#"{"id":3,"repo":"o/r"}"#)).githubRepo, "o/r")
+        XCTAssertNil(ProjectFormState(row: j(#"{"repo":"o/r"}"#)).githubRepo)
+        XCTAssertNil(ProjectFormState(row: j(#"{"id":3,"repo":""}"#)).githubRepo)
+        var typing = ProjectFormState(row: j(#"{"id":3,"repo":"o/r"}"#))
+        typing.texts[.repo] = "o/other"
+        XCTAssertEqual(typing.githubRepo, "o/r")
     }
 
     func testRoutes() {

@@ -1,7 +1,7 @@
 // The GitHub account the server uses for one project (`GET /github/account?repo=`, any token held to the project) and an
 // admin's on-demand check of it (`GET /settings/github/health?repo=`): parsing, the identity line, the health rows (token,
-// scopes, each repository's access, REST and GraphQL budgets) and one overall state. Both apps' project settings draw
-// these; `githubAccountPhrase(_:)` names the account wherever a refusal mentions it. No UI here.
+// scopes, each repository's access, REST and GraphQL budgets) and one overall state, and which project shows it. Both
+// apps' project settings draw these; `githubAccountPhrase(_:)` names the account wherever a refusal mentions it. No UI here.
 import Foundation
 
 /// The server's GitHub identity for one project: a registered account, or the global `GITHUB_TOKEN` fallback. It never
@@ -65,6 +65,12 @@ func githubAccountPhrase(_ identity: GithubAccountIdentity?) -> String {
     case let (nil, login?): return "the GitHub account \(login)"
     case (nil, nil): return "the project's GitHub account"
     }
+}
+
+extension ProjectFormState {
+    /// The repository whose GitHub account a project's settings show: a saved project's, never a new one's or a clone's
+    /// (neither has an account yet), and the saved name rather than one being typed.
+    var githubRepo: String? { isNew ? nil : row["repo"].nonEmpty }
 }
 
 /// `GET /settings/github/health`: the selected account checked against GitHub, with every repository it serves.

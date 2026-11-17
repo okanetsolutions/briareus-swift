@@ -1,12 +1,11 @@
 // A project's GitHub account in its settings (ProjectSettingsScreen's Project tab), read-only: which server identity reads
 // GitHub for it and, for an Admin token, Check GitHub account, which lists the token, scopes, repositories and rate limits
-// the check found. The check runs only on a tap; nothing polls and nothing is kept once the screen goes.
+// the check found. The check runs only on a tap; nothing polls. ProjectSettingsScreen owns the model and reads or cancels
+// it with the screen's own life: a Form's rows come and go as they scroll, so nothing here starts or stops anything.
 import SwiftUI
 
 struct ProjectGithubAccountSection: View {
-    @StateObject private var model: ProjectGithubAccountModel
-
-    init(repo: String) { _model = StateObject(wrappedValue: ProjectGithubAccountModel(repo: repo)) }
+    @ObservedObject var model: ProjectGithubAccountModel
 
     var body: some View {
         if model.canRead {
@@ -19,8 +18,6 @@ struct ProjectGithubAccountSection: View {
                     Text("GitHub account")
                 }
                 .listRowBackground(Theme.row)
-                .task { await model.load() }
-                .onDisappear { model.stop() }
                 if let health = model.health { GithubHealthResults(health: health) }
             }
         }
