@@ -49,9 +49,7 @@ private final class ProjectFormModel: ObservableObject {
     }
     private func changed() { if !state.dirty { state.dirty = true } }
 
-    var discardMessage: String {
-        state.discardMessage
-    }
+    var discardMessage: String { state.discardMessage }
     func tabDot(_ t: ProjectTab) -> Bool { state.dirty && state.tabChanged(t) }
 
     private func show(_ problem: FormProblem) {
@@ -252,6 +250,7 @@ struct ProjectSettingsScreen: View {
         switch model.tab {
         case .project:
             Section { field(.repo); field(.label) }.listRowBackground(Theme.row)
+            if state.id != 0, let repo = state.row["repo"].nonEmpty { ProjectGithubAccountSection(repo: repo) }
             checkSection(.enabled); checkSection(.printing)
             Section { field(.localDir); field(.localLimit); field(.board) }.listRowBackground(Theme.row)
             Section { field(.setup); field(.php) } header: { Text("Setup") } footer: {

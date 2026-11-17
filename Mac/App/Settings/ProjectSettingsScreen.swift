@@ -56,8 +56,7 @@ final class ProjectFormModel: ObservableObject {
     }
     func canLeave() -> Bool {
         guard state.dirty else { return true }
-        let message = state.discardMessage
-        let leave = confirmDiscard(message)
+        let leave = confirmDiscard(state.discardMessage)
         if leave { state.dirty = false }
         return leave
     }
@@ -201,8 +200,7 @@ final class ProjectFormModel: ObservableObject {
 }
 
 struct ProjectSettingsScreen: View {
-    var row: JSON?
-    var defaults: JSON?
+    var row: JSON?, defaults: JSON?
     @StateObject private var model: ProjectFormModel
     @FocusState private var focus: ProjectField?
     @EnvironmentObject private var store: Store
@@ -231,6 +229,7 @@ struct ProjectSettingsScreen: View {
             if model.tab == .project && state.id != 0 && state.row["localDir"].nonEmpty != nil && store.supports("project_update") {
                 LocalCheckoutUpdate(projectID: Double(state.id))
             }
+            if model.tab == .project && state.id != 0, let repo = state.row["repo"].nonEmpty { ProjectGithubAccountSection(repo: repo) }
             tabContent
         }
         .onAppear {
