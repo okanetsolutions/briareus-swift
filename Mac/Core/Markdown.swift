@@ -43,6 +43,8 @@ struct MdSpanStyle: OptionSet, Hashable, Sendable {
     static let code = MdSpanStyle(rawValue: 4)
     static let link = MdSpanStyle(rawValue: 8)
     static let strike = MdSpanStyle(rawValue: 16)
+    /// The link was written as an image, `![alt](url)`.
+    static let image = MdSpanStyle(rawValue: 32)
 }
 
 struct MdSpan: Equatable, Sendable {
@@ -342,6 +344,38 @@ private struct MdInline {
         return has("https://") || has("http://")
     }
 
+    /// An HTML `<img ... src="https://..." alt="...">` at `p`, as GitHub bodies embed screenshots: its source, its alt
+    /// text (the source without one) and where the tag ends. Nil for any other tag or a source that is not http(s).
+    /// Not in the Windows parser, which leaves the tag as text.
+    func imgTag(_ p: Int, _ end: Int) -> (src: Bytes, label: Bytes, next: Int)? {
+        guard p + 5 < end, t[(p + 1)..<(p + 4)].map({ $0 | 0x20 }) == Array("img".utf8), isSpace(t[p + 4]) || t[p + 4] == ch("/"),
+              let close = t[(p + 4)..<end].firstIndex(of: ch(">")) else { return nil }
+        let tag = Array(t[(p + 4)..<close])
+        guard let src = Self.attribute(tag, "src"), src.hasPrefixBytes("https://") || src.hasPrefixBytes("http://") else { return nil }
+        let alt = Self.attribute(tag, "alt") ?? []
+        return (src, alt.isEmpty ? src : alt, close + 1)
+    }
+
+    /// The value of the attribute `name` in a tag's attribute text, quoted or not; nil without one.
+    static func attribute(_ tag: Bytes, _ name: String) -> Bytes? {
+        let n = Array(name.utf8)
+        var i = 1
+        while i + n.count < tag.count {
+            defer { i += 1 }
+            guard isSpace(tag[i - 1]), tag[i..<(i + n.count)].map({ $0 | 0x20 }) == n, tag[i + n.count] == ch("=") else { continue }
+            var v = i + n.count + 1
+            let quote = tag.at(v)
+            if quote == ch("\"") || quote == ch("'") {
+                v += 1
+                let stop = tag[v...].firstIndex(of: quote) ?? tag.count
+                return Array(tag[v..<stop])
+            }
+            let stop = tag[v...].firstIndex(where: isSpace) ?? tag.count
+            return Array(tag[v..<stop])
+        }
+        return nil
+    }
+
     func matches(_ q: Int, _ marker: Bytes) -> Bool { q + marker.count <= t.count && Array(t[q..<(q + marker.count)]) == marker }
 
     /// Finds the closing `marker` after `p` on the same span; nil without one. A single marker steps over a doubled span inside it.
@@ -382,7 +416,8 @@ private struct MdInline {
                     p = close + 2; continue
                 }
             }
-            if c == ch("!") && p + 1 < end && t[p + 1] == ch("[") { p += 1; c = ch("[") }
+            var image = false
+            if c == ch("!") && p + 1 < end && t[p + 1] == ch("[") { p += 1; c = ch("["); image = true }
             if c == ch("`") {
                 var ticks = 0
                 while p + ticks < end && t[p + ticks] == ch("`") { ticks += 1 }
@@ -444,14 +479,20 @@ private struct MdInline {
                         if let space = url.firstIndex(of: SP) { url = Array(url[..<space]) }
                         flushPlain(&out)
                         var label: [RawSpan] = []
-                        parse(&label, p + 1, close, flags.union(.link))
+                        let linkFlags = image ? flags.union([.link, .image]) : flags.union(.link)
+                        parse(&label, p + 1, close, linkFlags)
                         for var span in label { span.url = url; out.append(span) }
                         // An empty label shows the link itself.
-                        if label.isEmpty && !url.isEmpty { emit(&out, flags.union(.link), url[...], url) }
+                        if label.isEmpty && !url.isEmpty { emit(&out, linkFlags, url[...], url) }
                         p = paren + 1; continue
                     }
                 }
                 plain.append(c); p += 1; continue
+            }
+            if c == ch("<"), let img = imgTag(p, end) {
+                flushPlain(&out)
+                emit(&out, flags.union([.link, .image]), img.label[...], img.src)
+                p = img.next; continue
             }
             if c == ch("<") && isURLStart(p + 1, end) {
                 if let close = t[p..<end].firstIndex(of: ch(">")) {
