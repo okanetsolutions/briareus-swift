@@ -644,7 +644,7 @@ private struct IssueSidebar: View {
             }
             if list.isEmpty {
                 if let refused = model.detail["projectsError"].string {
-                    GithubRefusalNote(.projects, error: refused, repo: model.repo)
+                    GithubRefusalNote(.projects, error: refused, repo: model.repo).id(model.repo)
                 } else {
                     Text("None yet").font(Theme.caption).foregroundStyle(Theme.muted)
                 }

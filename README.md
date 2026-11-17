@@ -344,6 +344,7 @@ The iPhone and iPad app has what the Mac app has, except what needs the Mac itse
 - Starting an epic, which picks an orchestrator's and its workers' models, is not offered by the apps.
 - A project's GitHub account health check runs only when an admin taps (or, on the Mac, clicks) Check GitHub account, and its answer is kept only while that project's settings are open: nothing polls it or caches it, on the iPhone and iPad as on the Mac.
 - GitHub's refusals on the board, an issue or a pull request name the project's GitHub account once it is read (`GET /github/account`, which asks GitHub nothing): only while a refusal is shown, once, and never polled or kept, on the iPhone and iPad as on the Mac. Until then, or without that route, they say "the project's GitHub account".
+- A project with neither a GitHub account nor `GITHUB_TOKEN` is told apart only by the core's own 503 `no GitHub token for <repo>`. CarPlay says it in a few words ("Could not load"); the phone and the Mac explain it and point to ⚙ Settings → GitHub accounts.
 
 ## Security and privacy
 

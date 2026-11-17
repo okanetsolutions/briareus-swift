@@ -30,9 +30,9 @@ struct APIError: Error, Equatable, Sendable {
     /// A code review refused because the pull request has used the project's `reviewRoundLimit` rounds: nothing started,
     /// and sending it again with `continueReview` runs exactly one more (`BoardAction.arguments(continueReview:)`).
     var isReviewRoundLimit: Bool { kind == .http && status == 409 && code == "review_round_limit" }
-    /// The core's `no GitHub token for <repo>`: neither the project's GitHub account nor GITHUB_TOKEN is set, so waiting
-    /// will not help (it answers 503) until an admin assigns one.
-    var missingGithubToken: String? { kind == .http ? missingGithubTokenRepo(message) : nil }
+    /// The core's 503 `no GitHub token for <repo>`: neither the project's GitHub account nor GITHUB_TOKEN is set, so
+    /// waiting will not help until an admin assigns one. Only that status with exactly that message counts.
+    var missingGithubToken: String? { kind == .http && status == 503 ? missingGithubTokenRepo(message) : nil }
 
     /// The server's own words where a screen shows them bare, except the missing GitHub token, which is explained.
     var serverMessage: String { missingGithubToken == nil ? message ?? description : description }

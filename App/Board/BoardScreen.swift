@@ -160,7 +160,7 @@ struct BoardScreen: View {
     @ViewBuilder private func issueRows(_ issues: [(summary: IssueSummary, raw: JSON)]) -> some View {
         if let refused = board["issuesError"].string {
             Section {
-                GithubRefusalNote(.issues, error: refused, repo: repo)
+                GithubRefusalNote(.issues, error: refused, repo: repo).id(repo)
             }
             .listRowBackground(Theme.row)
         } else {

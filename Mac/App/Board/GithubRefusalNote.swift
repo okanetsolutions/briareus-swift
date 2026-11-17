@@ -1,7 +1,8 @@
 // GitHub's refusal to read something for a project, as the board, issue and pull request screens show it (`githubRefusal`
 // in Core): which account it was read with and what it needs, then the server's words; or, when the server has no GitHub
 // token for the repository at all, only that. The account is named once its identity is read (`GET /github/account`,
-// which asks GitHub nothing), only while a refusal is shown, once, and never polled, as on the iPhone.
+// which asks GitHub nothing), only while a refusal is shown, once, and never polled, as on the iPhone. A call site gives
+// it `.id(repo)`, so a note reused for another repository reads that one's identity.
 import SwiftUI
 
 struct GithubRefusalNote: View {

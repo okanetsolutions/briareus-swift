@@ -269,7 +269,7 @@ final class PreviewFeedback: ObservableObject {
                     let r = await boardCall("preview_feedback", ["sessionId": .string(session), "url": .string(url), "text": .string(text),
                                                                 "uploadId": .string(uploadID), "width": JSON(png.width), "height": JSON(png.height),
                                                                 "x": JSON(png.x), "y": JSON(png.y)])
-                    self.result = r.error.map { $0.message ?? $0.description } ?? "Sent to the session's agent."
+                    self.result = r.error.map(\.serverMessage) ?? "Sent to the session's agent."
                 } catch {
                     self.result = errorText(error)
                 }

@@ -105,6 +105,16 @@ enum CarText {
         }
     }
 
+    // MARK: Failures
+
+    /// What "Could not load" says when the server has no GitHub token for `repo`: a few words, where the phone and the
+    /// Mac explain it in full (`missingGithubTokenText`).
+    static func missingGithubToken(_ repo: String) -> String { "No GitHub token for \(repo). An admin can assign one." }
+    /// What "Could not load" says of `error`, given what a screen would say of it: the missing GitHub token shortened.
+    static func failure(_ error: Error, said: String) -> String {
+        (error as? APIError)?.missingGithubToken.map(missingGithubToken) ?? said
+    }
+
     // MARK: Issues
 
     /// A board issue as the line under its title: number, epic progress, its epic when nested, and two labels.

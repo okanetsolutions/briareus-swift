@@ -34,7 +34,7 @@ final class EnvoyerAccountFormModel: ObservableObject {
             let r = await boardCall(op, body)
             saving = false
             switch r {
-            case .failure(let e): error = e.message ?? e.description
+            case .failure(let e): error = e.serverMessage
             case .success(let v):
                 token = ""
                 post(.envoyerAccountsChanged)

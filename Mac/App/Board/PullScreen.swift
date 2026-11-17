@@ -671,40 +671,40 @@ private struct RunsList: View {
 
 // MARK: - Sidebar
 
-/// The sidebar: only what the server reports; the projects are those of the issues it closes, and notifications are not
-/// part of it.
+/// The sidebar: only what the server reports, not notifications; the projects are those of the issues it closes. Each
+/// item is keyed by what it is, so one arriving late leaves the identity of those after it (and their state) alone.
 private struct PullSidebar: View {
     @ObservedObject var model: PullModel
     var body: some View {
         let row = model.boardRow
-        let projects = model.issueProjects.entries.map { AnyView(PullProjectsItem(entries: $0, repo: model.repo)) }
-        var items: [AnyView] = []
-        if !model.actions.isEmpty { items.append(AnyView(actions(row))) }
-        if !model.pr.isNull { items.append(AnyView(checks)); items.append(AnyView(reviewers(row))) }
+        let projects = model.issueProjects.entries.map { (id: "projects", view: AnyView(PullProjectsItem(entries: $0, repo: model.repo))) }
+        var items: [(id: String, view: AnyView)] = []
+        if !model.actions.isEmpty { items.append(("actions", AnyView(actions(row)))) }
+        if !model.pr.isNull { items.append(("checks", AnyView(checks))); items.append(("reviewers", AnyView(reviewers(row)))) }
         if let row {
-            items.append(AnyView(section("Assignees") {
+            items.append(("assignees", AnyView(section("Assignees") {
                 if row.assignees.isEmpty { Text("No one").font(Theme.caption).foregroundStyle(Theme.muted) }
                 ForEach(row.assignees, id: \.self) { Text($0).font(Theme.footnoteSemibold).foregroundStyle(Theme.ink).lineLimit(1) }
                 if model.canEdit { editButton("Edit assignees ▾") { model.editAssignees() } }
-            }))
-            items.append(AnyView(section("Labels") {
+            })))
+            items.append(("labels", AnyView(section("Labels") {
                 if row.labels.isEmpty { Text("None yet").font(Theme.caption).foregroundStyle(Theme.muted) }
                 else { LabelChips(labels: row.labels, background: Theme.canvas) }
                 if model.canEdit { editButton("Edit labels…") { model.editLabels() } }
-            }))
+            })))
             if let projects { items.append(projects) }
             if let milestone = row.raw["milestone"].string {
-                items.append(AnyView(section("Milestone") { Text(milestone).font(Theme.footnote).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true) }))
+                items.append(("milestone", AnyView(section("Milestone") { Text(milestone).font(Theme.footnote).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true) })))
             }
         }
         if row == nil, let projects { items.append(projects) }
         let issues = (row?.issues.isEmpty == false) ? row!.issues : BoardLink.parseList(model.pr["issues"])
-        if !issues.isEmpty { items.append(AnyView(development(issues))) }
+        if !issues.isEmpty { items.append(("development", AnyView(development(issues)))) }
         return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { i, item in
+            ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
                 if i > 0 { Spacer().frame(height: 14); BoardRule() }
                 Spacer().frame(height: 14)
-                item
+                item.view
             }
         }
     }

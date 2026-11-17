@@ -206,7 +206,7 @@ struct PullProjectsItem: View {
             }
             if shown.isEmpty {
                 if let refused = entries.lazy.compactMap(\.error).first {
-                    GithubRefusalNote(.projects, error: refused, repo: repo)
+                    GithubRefusalNote(.projects, error: refused, repo: repo).id(repo)
                 } else {
                     Text("None yet").font(Theme.caption).foregroundStyle(Theme.muted)
                 }

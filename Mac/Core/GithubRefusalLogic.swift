@@ -1,8 +1,9 @@
 // What both apps say when GitHub would not read something for a project: the board's issues, an issue's or a pull
 // request's Projects, the project's ▦ Board. The server reads GitHub with the project's GitHub account (falling back to
-// its GITHUB_TOKEN), so the refusal names that account, or the loaded identity when there is one. The core's
-// `no GitHub token for <repo>` (neither an account nor GITHUB_TOKEN) is recognised and said plainly, here and in
-// `APIError.description`, instead of as a generic failure. No UI here.
+// its GITHUB_TOKEN), so the refusal names that account, or the loaded identity when there is one. The core's 503
+// `no GitHub token for <repo>` (neither an account nor GITHUB_TOKEN) is recognised by its whole message and said
+// plainly, here and in `APIError.description` (in a few words on CarPlay, `CarText`), instead of as a generic failure.
+// No UI here.
 import Foundation
 
 /// What GitHub would not read.
@@ -30,13 +31,17 @@ struct GithubRefusal: Equatable, Sendable {
     var notice: String? { missingToken ? explanation : detail }
 }
 
-/// The repository named by the core's `no GitHub token for <repo>`, wherever it appears in `message`; nil for any other
-/// message.
+/// What the core says, and all it says, when neither the project's GitHub account nor GITHUB_TOKEN gives it a token
+/// (`lib/github-config.js`, answered with a 503).
+private let missingGithubTokenPrefix = "no GitHub token for "
+
+/// The repository named by the core's `no GitHub token for <repo>` when that is the whole of `message`; nil for any
+/// other message, including one that only mentions it.
 func missingGithubTokenRepo(_ message: String?) -> String? {
-    guard let message, let range = message.range(of: "no GitHub token for ", options: .caseInsensitive) else { return nil }
-    let rest = message[range.upperBound...].prefix { !$0.isWhitespace }
-    let repo = rest.trimmingCharacters(in: CharacterSet(charactersIn: ".,;:)\"'"))
-    return repo.isEmpty ? nil : repo
+    guard let text = message?.trimmingCharacters(in: .whitespacesAndNewlines),
+          text.hasPrefix(missingGithubTokenPrefix) else { return nil }
+    let repo = text.dropFirst(missingGithubTokenPrefix.count)
+    return repo.isEmpty || repo.contains(where: \.isWhitespace) ? nil : String(repo)
 }
 
 /// What the user is told when the server has no GitHub token for `repo`.
@@ -50,7 +55,7 @@ func githubRefusal(_ subject: GithubReadSubject, error: String?, account: Github
     if let repo = missingGithubTokenRepo(error) {
         return GithubRefusal(explanation: missingGithubTokenText(repo), detail: nil, missingToken: true)
     }
-    let with = githubAccountPhrase(account)
+    let with = refusingAccountPhrase(account)
     let explanation: String
     switch subject {
     case .issues:
@@ -62,4 +67,21 @@ func githubRefusal(_ subject: GithubReadSubject, error: String?, account: Github
     }
     let detail = error?.trimmingCharacters(in: .whitespacesAndNewlines)
     return GithubRefusal(explanation: explanation, detail: detail?.isEmpty == false ? detail : nil, missingToken: false)
+}
+
+/// The account a refusal says GitHub was asked with. An identity holding no token at all, which `githubAccountPhrase`
+/// says as "no GitHub token", cannot follow "with", so the project's account is named in general instead.
+private func refusingAccountPhrase(_ account: GithubAccountIdentity?) -> String {
+    guard let account, !account.hasToken, account.globalFallback || account.label.isEmpty else {
+        return githubAccountPhrase(account)
+    }
+    return githubAccountPhrase(nil)
+}
+
+extension APIError {
+    /// A board's `issuesError` as the failure it stands for: the core's missing GitHub token is its 503, anything else
+    /// GitHub refusing the read, a 502.
+    static func githubRead(refused: String) -> APIError {
+        APIError(.http, status: missingGithubTokenRepo(refused) == nil ? 502 : 503, message: refused)
+    }
 }
