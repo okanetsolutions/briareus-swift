@@ -1,7 +1,8 @@
-// A settings form saved as one record on the server (a project, a provider, a database or SSH server, a Forge account, a
-// Slack workspace), the same on the iPhone and the Mac: which operation creates, updates or deletes it, the body a save
+// A settings form saved as one record on the server (a project, a provider, a database or SSH server, a GitHub or Forge
+// account, a Slack workspace), the same on the iPhone and the Mac: which operation creates, updates or deletes it, the body a save
 // sends with the record's id, how the answer fills the form again, and what leaving it unsaved says. Each form's own
-// state (its fields and `body()`) is in SettingsLogic.swift, SSHServerLogic.swift and AccountSettingsLogic.swift.
+// state (its fields and `body()`) is in SettingsLogic.swift, SSHServerLogic.swift, AccountSettingsLogic.swift and
+// GithubAccountLogic.swift.
 import Foundation
 
 /// The operations and words of one kind of record.
@@ -84,6 +85,11 @@ extension ForgeAccountFormState: SettingsRecordForm {
     var recordID: Double { id }
     static let record = SettingsRecord(create: "create_forge_account", update: "update_forge_account", delete: "delete_forge_account",
                                        answerKey: "account", noun: "Forge account", unnamed: "this Forge account")
+}
+extension GithubAccountFormState: SettingsRecordForm {
+    var recordID: Double { id }
+    static let record = SettingsRecord(create: "create_github_account", update: "update_github_account", delete: "delete_github_account",
+                                       answerKey: "account", noun: "GitHub account", unnamed: "this GitHub account")
 }
 extension SlackWorkspaceFormState: SettingsRecordForm {
     var recordID: Double { id }

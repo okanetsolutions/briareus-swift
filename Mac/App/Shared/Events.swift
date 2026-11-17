@@ -17,6 +17,8 @@ extension Notification.Name {
     static let settingsDBServersChanged = Notification.Name("BriareusSettingsDBServersChanged")
     /// The SSH servers changed: the settings sidebar and the SSH and SFTP sessions tabs read them again.
     static let sshServersChanged = Notification.Name("BriareusSSHServersChanged")
+    /// The settings sidebar reads the GitHub accounts again.
+    static let githubAccountsChanged = Notification.Name("BriareusGithubAccountsChanged")
     /// The settings sidebar reads the Forge accounts again.
     static let forgeAccountsChanged = Notification.Name("BriareusForgeAccountsChanged")
     /// The settings sidebar reads the Slack workspaces again.
