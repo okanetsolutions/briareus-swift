@@ -1,6 +1,7 @@
 // What the settings page's sidebar and its forms share, as screen_settings.c keeps it: the lists the sidebar read (the
-// projects, providers, database pool, SSH servers, Forge accounts and Slack workspaces, which the forms also read; the GitHub accounts are GithubAccountsModel's), the menus the pickers pop up, and the
-// form's pieces: labelled boxes, check rows, select boxes, notes and the tab row.
+// projects, providers, database pool, SSH servers, Forge accounts and Slack workspaces, which the forms also read; the
+// GitHub accounts are GithubAccountsModel's), the menus the pickers pop up, and the form's pieces: labelled boxes, check
+// rows, select boxes, notes and the tab row.
 import AppKit
 import Combine
 import SwiftUI
@@ -30,7 +31,7 @@ final class SettingsModel: ObservableObject {
     /// A Move up or Move down is on its way.
     @Published private(set) var ordering = false
 
-    private var tasks: [String: Task<Void, Never>] = [:]
+    private let reader = SettingsListReader()
     private var modeWatch: AnyCancellable?
     /// Open the first row once the list is read (after a delete).
     private var openFirstProvider = false, openFirstServer = false
@@ -72,8 +73,7 @@ final class SettingsModel: ObservableObject {
 
     /// The settings page opening: everything is read afresh, as a new settings screen does.
     func start() {
-        tasks.values.forEach { $0.cancel() }
-        tasks = [:]
+        reader.cancelAll()
         projects = Section(); providers = Section(); servers = Section(); ssh = Section(); forge = Section(); slack = Section(); mcp = Section(); envoyer = Section(); GithubAccountsModel.shared.reset()
         ordering = false
         openFirstProvider = false; openFirstServer = false
@@ -82,20 +82,7 @@ final class SettingsModel: ObservableObject {
     func refresh() { loadProjects(); loadSSH(); loadProviders(); loadServers(); loadForge(); loadSlack(); loadMcp(); loadEnvoyer(); GithubAccountsModel.shared.load() }
 
     private func load(_ section: ReferenceWritableKeyPath<SettingsModel, Section>, _ call: String, _ listKey: String, done: @escaping () -> Void = {}) {
-        tasks[call]?.cancel()
-        guard Store.shared.supports(call) else { self[keyPath: section].loaded = true; return }
-        tasks[call] = Task { [weak self] in
-            do {
-                let r = try await Store.shared.call(call)
-                guard let self, !Task.isCancelled else { return }
-                self[keyPath: section] = Section(list: r[listKey].items, defaults: r["defaults"], loaded: true, error: nil)
-                done()
-            } catch {
-                guard let self, !error.isCancellation else { return }
-                self[keyPath: section].loaded = true
-                self[keyPath: section].error = errorText(error)
-            }
-        }
+        reader.read(call, listKey, update: { [weak self] change in if let self { change(&self[keyPath: section]) } }, done: done)
     }
 
     func loadProjects() {

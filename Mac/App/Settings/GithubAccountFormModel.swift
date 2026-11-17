@@ -22,19 +22,12 @@ final class GithubAccountFormModel: ObservableObject {
     var tabDot: Bool { state.dirty && state.changed }
 
     func binding(_ f: GithubAccountField) -> Binding<String> {
-        Binding(get: { self.state.text(f) }, set: { v in
-            let value = String(v.prefix(f.limit))
-            guard value != self.state.text(f) else { return }
-            self.state.texts[f] = value
-            self.changed()
-        })
+        Binding(get: { self.state.text(f) }, set: { v in if self.state.edit(f, v) { self.changed() } })
     }
     func toggle(_ repo: String) { state.toggle(repo); changed() }
 
-    private func changed() {
-        if !state.dirty { state.dirty = true }
-        guardLeaving { [weak self] in self?.canLeave() ?? true }
-    }
+    /// The form was edited: leaving it now asks first.
+    private func changed() { guardLeaving { [weak self] in self?.canLeave() ?? true } }
     func canLeave() -> Bool {
         guard state.dirty else { return true }
         let leave = confirmDiscard(state.discardMessage)
@@ -43,9 +36,7 @@ final class GithubAccountFormModel: ObservableObject {
     }
     private func showError(_ text: String) { error = text; scrollToken += 1 }
     /// A refusal as the form tells it: a project another account serves in words that say what to do, else the server's.
-    private func refusal(_ error: Error) -> String {
-        (error as? APIError).flatMap(GithubAccountFormState.saveProblem) ?? errorText(error)
-    }
+    private func refusal(_ error: Error) -> String { GithubAccountFormState.refusal(error, otherwise: errorText(error)) }
 
     func save() {
         let id = state.id

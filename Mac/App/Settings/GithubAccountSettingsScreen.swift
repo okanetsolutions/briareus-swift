@@ -41,18 +41,14 @@ struct GithubAccountSettingsScreen: View {
     /// The projects the account serves, one tick box each; one another account serves says which, as the server refuses
     /// to give a project two.
     @ViewBuilder private var projects: some View {
-        let listed = settings.projects.list.compactMap { $0["repo"].nonEmpty }
-        let choices = settingsRepoChoices(projects: listed, ticked: state.repos)
+        let rows = state.repoRows(projects: settings.projects.list.compactMap { $0["repo"].nonEmpty }, accounts: accounts.section.list)
         VStack(alignment: .leading, spacing: 0) {
             SettingsFieldLabel(label: "Projects", hint: "The server reads and writes GitHub for these projects with this account. A project is served by one account at most; the others use the server's own token.")
-            ForEach(choices, id: \.self) { repo in
-                let on = state.repos.contains(repo)
-                let taken = on ? nil : state.takenBy(repo, accounts: accounts.section.list)
-                let gone = !listed.contains(repo)
-                SettingsCheck(label: gone ? "\(repo) (not a project)" : taken.map { "\(repo) · served by \($0)" } ?? repo,
-                              on: on, height: 28, muted: gone || taken != nil) { model.toggle(repo) }
+            ForEach(rows, id: \.repo) { row in
+                SettingsCheck(label: row.gone ? "\(row.repo) (not a project)" : row.takenBy.map { "\(row.repo) · served by \($0)" } ?? row.repo,
+                              on: row.on, height: 28, muted: row.muted) { model.toggle(row.repo) }
             }
-            if choices.isEmpty { SettingsHint(text: "No projects yet. Add one under Projects first.") }
+            if rows.isEmpty { SettingsHint(text: "No projects yet. Add one under Projects first.") }
         }
         .padding(.bottom, 14)
     }

@@ -20,6 +20,17 @@ enum GithubAccountField: Int, CaseIterable, Sendable {
     var limit: Int { self == .token ? 4096 : 200 }
 }
 
+/// One row of the Projects list: the project, whether it is ticked, whether it is no longer a project (kept to be
+/// unticked) and the other account that already serves it, if one does and it is not ticked here.
+struct GithubAccountRepoRow: Equatable, Sendable {
+    var repo: String
+    var on: Bool
+    var gone: Bool
+    var takenBy: String?
+    /// Drawn quieter: a project that is gone or that another account serves.
+    var muted: Bool { gone || takenBy != nil }
+}
+
 /// One line of the read-only summary of what GitHub said about the stored token.
 struct GithubAccountFact: Equatable, Sendable {
     enum Kind: Sendable { case login, githubID, scopes }
@@ -54,8 +65,36 @@ struct GithubAccountFormState: Equatable, Sendable {
     /// What the token's box says while it is empty: whether one is stored.
     var tokenCue: String { hasToken ? "Stored · paste a new token to replace it" : GithubAccountField.token.def.cue ?? "" }
 
+    /// A box typed in: the text cut to the box's limit. False when that leaves it as it was; otherwise the form is edited.
+    @discardableResult
+    mutating func edit(_ f: GithubAccountField, _ value: String) -> Bool {
+        let value = String(value.prefix(f.limit))
+        guard value != text(f) else { return false }
+        texts[f] = value
+        dirty = true
+        return true
+    }
+    /// A project ticked or unticked, which edits the form.
     mutating func toggle(_ repo: String) {
         if let i = repos.firstIndex(of: repo) { repos.remove(at: i) } else { repos.append(repo) }
+        dirty = true
+    }
+    /// A project's switch set: false when it already was, otherwise the project is toggled.
+    @discardableResult
+    mutating func setTicked(_ repo: String, _ on: Bool) -> Bool {
+        guard on != repos.contains(repo) else { return false }
+        toggle(repo)
+        return true
+    }
+
+    /// The Projects list's rows: every project then any ticked one no longer listed, an unticked one another of
+    /// `accounts` serves naming it.
+    func repoRows(projects listed: [String], accounts: [JSON]) -> [GithubAccountRepoRow] {
+        settingsRepoChoices(projects: listed, ticked: repos).map { repo in
+            let on = repos.contains(repo)
+            return GithubAccountRepoRow(repo: repo, on: on, gone: !listed.contains(repo),
+                                        takenBy: on ? nil : takenBy(repo, accounts: accounts))
+        }
     }
 
     func body() -> Result<JSON, FormProblem> {
@@ -115,14 +154,21 @@ struct GithubAccountFormState: Equatable, Sendable {
         return "A ticked project is already served by another GitHub account. Untick it there first, then save this one."
     }
 
+    /// What a refused save or delete says: `saveProblem`'s words where it has them, else `text`, the app's own telling
+    /// of the failure.
+    static func refusal(_ error: Error, otherwise text: String) -> String {
+        (error as? APIError).flatMap(saveProblem) ?? text
+    }
+
     /// What a saved account is called: its label, else its login.
     static func title(_ row: JSON) -> String { row["label"].nonEmpty ?? row["login"].nonEmpty.map { "@\($0)" } ?? "GitHub account" }
 
-    /// The sidebar row's second line: the login, and its one project or how many.
+    /// The sidebar row's second line: the login, or a missing token as the subtitle decides it, and its one project or
+    /// how many.
     static func sidebarLine(_ row: JSON) -> String {
-        let who = row["login"].nonEmpty.map { "@\($0)" } ?? "no token", repos = row["repos"].strings
-        if repos.count == 1 { return "\(who) · \(repos[0])" }
-        return "\(who) · \(repos.count) projects"
+        let who = row["hasToken"].is(true) ? row["login"].nonEmpty.map { "@\($0) · " } ?? "" : "no token · "
+        let repos = row["repos"].strings
+        return repos.count == 1 ? "\(who)\(repos[0])" : "\(who)\(repos.count) projects"
     }
     /// The header's subtitle for a saved account: the login, how many projects, and a missing token.
     static func subtitle(_ row: JSON) -> String {

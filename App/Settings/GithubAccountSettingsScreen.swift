@@ -22,22 +22,12 @@ private final class GithubAccountFormModel: ObservableObject {
     var busy: Bool { saving || deleting }
 
     func binding(_ f: GithubAccountField) -> Binding<String> {
-        Binding(get: { self.state.text(f) }, set: { v in
-            let value = String(v.prefix(f.limit))
-            guard value != self.state.text(f) else { return }
-            self.state.texts[f] = value
-            self.changed()
-        })
+        Binding(get: { self.state.text(f) }, set: { _ = self.state.edit(f, $0) })
     }
     func ticked(_ repo: String) -> Binding<Bool> {
-        Binding(get: { self.state.repos.contains(repo) }, set: { on in
-            guard on != self.state.repos.contains(repo) else { return }
-            self.state.toggle(repo)
-            self.changed()
-        })
+        Binding(get: { self.state.repos.contains(repo) }, set: { _ = self.state.setTicked(repo, $0) })
     }
 
-    private func changed() { if !state.dirty { state.dirty = true } }
     private func showError(_ text: String?) {
         guard let text else { return }
         error = text; scrollToken += 1
@@ -45,8 +35,7 @@ private final class GithubAccountFormModel: ObservableObject {
     /// A refusal as the form tells it: a project another account serves in words that say what to do, else the server's;
     /// nil for a save only abandoned.
     private func refusal(_ error: Error) -> String? {
-        guard let text = failure(error) else { return nil }
-        return (error as? APIError).flatMap(GithubAccountFormState.saveProblem) ?? text
+        failure(error).map { GithubAccountFormState.refusal(error, otherwise: $0) }
     }
 
     func save(done: @escaping () -> Void) {
@@ -156,21 +145,19 @@ struct GithubAccountSettingsScreen: View {
     /// The projects the account serves, one switch each; a ticked one that is no longer a project stays listed so it can be
     /// unticked, and one another account serves says which.
     @ViewBuilder private var projects: some View {
-        let listed = lists.projects.list.compactMap { $0["repo"].nonEmpty }
-        let choices = settingsRepoChoices(projects: listed, ticked: state.repos)
+        let rows = state.repoRows(projects: lists.projects.list.compactMap { $0["repo"].nonEmpty }, accounts: lists.github.list)
         Section {
-            ForEach(choices, id: \.self) { repo in
-                let gone = !listed.contains(repo)
-                let taken = state.repos.contains(repo) ? nil : state.takenBy(repo, accounts: lists.github.list)
-                Toggle(isOn: model.ticked(repo)) {
+            ForEach(rows, id: \.repo) { row in
+                Toggle(isOn: model.ticked(row.repo)) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(gone ? "\(repo) (not a project)" : repo).foregroundStyle(gone ? .secondary : .primary).lineLimit(1).truncationMode(.middle)
-                        if let taken { Text("Served by \(taken)").font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                        Text(row.gone ? "\(row.repo) (not a project)" : row.repo).foregroundStyle(row.gone ? .secondary : .primary)
+                            .lineLimit(1).truncationMode(.middle)
+                        if let taken = row.takenBy { Text("Served by \(taken)").font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                     }
                 }
                 .tint(Theme.accent)
             }
-            if choices.isEmpty { Text("No projects yet. Add one under Projects first.").foregroundStyle(.secondary) }
+            if rows.isEmpty { Text("No projects yet. Add one under Projects first.").foregroundStyle(.secondary) }
         } header: {
             Text("Projects")
         } footer: {

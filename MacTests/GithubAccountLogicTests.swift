@@ -117,6 +117,60 @@ final class GithubAccountFormStateTests: XCTestCase {
         XCTAssertNil(s.takenBy("x/y", accounts: accounts))
     }
 
+    func testRepoRowsMarkGoneAndTakenProjects() {
+        var s = GithubAccountFormState(row: saved)
+        s.toggle("old/gone")
+        let accounts: [JSON] = [saved, ["id": 2, "label": "Other", "repos": ["Acme/Web", "a/b"]]]
+        let rows = s.repoRows(projects: ["a/b", "acme/web", "x/y"], accounts: accounts)
+        XCTAssertEqual(rows.map(\.repo), ["a/b", "acme/web", "x/y", "old/gone"])
+        // A ticked project is never marked taken, even when another account also lists it.
+        XCTAssertEqual(rows[0], GithubAccountRepoRow(repo: "a/b", on: true, gone: false, takenBy: nil))
+        XCTAssertEqual(rows[1].takenBy, "Other")
+        XCTAssertFalse(rows[1].on)
+        XCTAssertTrue(rows[1].muted)
+        XCTAssertEqual(rows[2], GithubAccountRepoRow(repo: "x/y", on: false, gone: false, takenBy: nil))
+        XCTAssertFalse(rows[2].muted)
+        XCTAssertTrue(rows[3].on && rows[3].gone && rows[3].muted)
+        XCTAssertEqual(GithubAccountFormState(row: [:]).repoRows(projects: [], accounts: accounts), [])
+    }
+
+    func testEditsCutToTheLimitAndMarkTheFormEdited() {
+        var s = GithubAccountFormState(row: saved)
+        XCTAssertFalse(s.edit(.label, "Bot"))
+        XCTAssertFalse(s.dirty)
+        XCTAssertTrue(s.edit(.label, String(repeating: "x", count: 500)))
+        XCTAssertEqual(s.text(.label).count, GithubAccountField.label.limit)
+        XCTAssertTrue(s.dirty)
+        XCTAssertFalse(s.edit(.label, String(repeating: "x", count: 300)))
+        XCTAssertTrue(s.edit(.token, String(repeating: "t", count: 5000)))
+        XCTAssertEqual(s.text(.token).count, GithubAccountField.token.limit)
+    }
+
+    func testTickingAProjectMarksTheFormEdited() {
+        var s = GithubAccountFormState(row: saved)
+        XCTAssertFalse(s.setTicked("a/b", true))
+        XCTAssertFalse(s.dirty)
+        XCTAssertTrue(s.setTicked("a/b", false))
+        XCTAssertEqual(s.repos, [])
+        XCTAssertTrue(s.dirty)
+        s.dirty = false
+        s.toggle("c/d")
+        XCTAssertTrue(s.dirty)
+    }
+
+    func testTheTokenCueSaysWhetherOneIsStored() {
+        XCTAssertEqual(GithubAccountFormState(row: [:]).tokenCue, GithubAccountField.token.def.cue)
+        XCTAssertNotEqual(GithubAccountFormState(row: saved).tokenCue, GithubAccountField.token.def.cue)
+        XCTAssertFalse(GithubAccountFormState(row: saved).tokenCue.isEmpty)
+    }
+
+    func testARefusalUsesTheConflictsWordsElseTheAppsOwn() {
+        let conflict = APIError(.http, status: 409, message: "assigned")
+        XCTAssertEqual(GithubAccountFormState.refusal(conflict, otherwise: "x"), GithubAccountFormState.saveProblem(conflict))
+        XCTAssertEqual(GithubAccountFormState.refusal(APIError(.http, status: 400, message: "bad"), otherwise: "x"), "x")
+        XCTAssertEqual(GithubAccountFormState.refusal(CancellationError(), otherwise: "y"), "y")
+    }
+
     func testOnlyAConflictGetsItsOwnWords() {
         XCTAssertNotNil(GithubAccountFormState.saveProblem(APIError(.http, status: 409, message: "assigned")))
         for status in [400, 404, 502, 503] {
@@ -132,6 +186,13 @@ final class GithubAccountFormStateTests: XCTestCase {
         XCTAssertEqual(GithubAccountFormState.title(saved), "Bot")
         XCTAssertTrue(GithubAccountFormState.title(["login": "acme-bot"]).contains("acme-bot"))
         XCTAssertNotEqual(GithubAccountFormState.subtitle(saved), GithubAccountFormState.subtitle(["repos": ["a/b"], "hasToken": false]))
+        // Both lines decide a missing token from hasToken alone, whatever the login says.
+        let tokenless: JSON = ["login": "acme-bot", "repos": ["a/b"], "hasToken": false]
+        XCTAssertTrue(GithubAccountFormState.sidebarLine(tokenless).contains("no token"))
+        XCTAssertTrue(GithubAccountFormState.subtitle(tokenless).contains("no token"))
+        XCTAssertFalse(GithubAccountFormState.sidebarLine(saved).contains("no token"))
+        XCTAssertFalse(GithubAccountFormState.subtitle(saved).contains("no token"))
+        XCTAssertFalse(GithubAccountFormState.sidebarLine(["hasToken": true, "repos": []]).contains("no token"))
     }
 
     func testRoutes() {
