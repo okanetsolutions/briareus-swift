@@ -356,6 +356,12 @@ struct APIRoute: Sendable {
         .init(name: "delete_ssh_server", method: "DELETE", path: "settings/ssh/servers/{id}"),
         // The database login stored with one, opened, for a tunnel over it to its database.
         .init(name: "ssh_server_db_credentials", method: "GET", path: "settings/ssh/servers/{id}/db-credentials"),
+        // The GitHub accounts projects read and write GitHub with (core #317): a label, a token (write-only) GitHub verified,
+        // and the projects each serves, one account a project; admin as well.
+        .init(name: "settings_github_accounts", method: "GET", path: "settings/github/accounts"),
+        .init(name: "create_github_account", method: "POST", path: "settings/github/accounts"),
+        .init(name: "update_github_account", method: "PUT", path: "settings/github/accounts/{id}"),
+        .init(name: "delete_github_account", method: "DELETE", path: "settings/github/accounts/{id}"),
         // The Laravel Forge accounts: an organization, its token (write-only) and the projects it serves; admin as well.
         .init(name: "settings_forge_accounts", method: "GET", path: "settings/forge/accounts"),
         .init(name: "create_forge_account", method: "POST", path: "settings/forge/accounts"),

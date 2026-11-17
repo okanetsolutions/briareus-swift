@@ -47,7 +47,7 @@ final class SettingsRecordFormTests: XCTestCase {
 
     func testEveryKindNamesDistinctOperations() {
         let records = [ProjectFormState.record, ProviderFormState.record, DBServerFormState.record, SSHServerFormState.record,
-                       ForgeAccountFormState.record, SlackWorkspaceFormState.record]
+                       ForgeAccountFormState.record, SlackWorkspaceFormState.record, GithubAccountFormState.record]
         let operations = records.flatMap { [$0.create, $0.update, $0.delete] }
         XCTAssertEqual(Set(operations).count, operations.count)
     }
