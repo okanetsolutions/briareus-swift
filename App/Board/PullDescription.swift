@@ -5,12 +5,15 @@
 import SwiftUI
 
 struct PullDescriptionSection: View {
-    @ObservedObject var model: PullScreenModel
+    /// The description's Markdown, from the pull request or its separate read; nil until one of them has it.
+    let markdown: String?
+    /// Whether the separate description read has answered, so a missing body means there is none.
+    let bodyRead: Bool
+    let author: String?
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        let markdown = model.pr["body"].string ?? model.descriptionBody
-        let loading = markdown == nil && !model.bodyRead && store.supports("pull_description")
+        let loading = markdown == nil && !bodyRead && store.supports("pull_description")
         Section {
             if let markdown {
                 let text = visibleMarkdown(markdown)
@@ -22,7 +25,7 @@ struct PullDescriptionSection: View {
                 Text("No description provided.").italic().foregroundStyle(.secondary)
             }
         } header: {
-            if let author = model.author { Text("@\(author)") }
+            if let author { Text("@\(author)") }
         }
         .listRowBackground(Theme.row)
     }

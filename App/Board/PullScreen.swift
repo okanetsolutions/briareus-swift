@@ -114,7 +114,9 @@ struct PullScreen: View {
                 if model.error == nil { ProgressView().frame(maxWidth: .infinity).padding(.vertical, 12).listRowBackground(Color.clear) }
             } else {
                 switch model.section {
-                case .description: PullDescriptionSection(model: model); PullGithubAccountSection(account: githubAccount)
+                case .description:
+                    PullDescriptionSection(markdown: model.pr["body"].string ?? model.descriptionBody, bodyRead: model.bodyRead, author: model.author)
+                    PullGithubAccountSection(account: githubAccount)
                 case .files: files
                 case .reviews: reviews
                 case .issues: issues
