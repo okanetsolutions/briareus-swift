@@ -2,8 +2,9 @@
 // more) behind a segmented control, then the Review List; the GitHub Projects board stays on the Mac. The author, reviewer (pull requests),
 // assignee (issues, No assignee among them) and label pickers in the toolbar's filter menu, kept per repository. Each pull
 // request row names the errand its state asks for and offers the errands in its context menu, and its linked issues end
-// with their project Status, and a swipe to its right merges it, once confirmed with what stands in the way. The Mac's
-// SSH and SFTP tabs are left out: they drive local ssh and sftp processes a phone does not have.
+// with their project Status, and a swipe to its right merges it, once confirmed with what stands in the way. Under the
+// lists, any reader can show which GitHub account serves the project (GithubAccountSection). The Mac's SSH and SFTP tabs
+// are left out: they drive local ssh and sftp processes a phone does not have.
 import SwiftUI
 
 struct BoardScreen: View {
@@ -18,6 +19,8 @@ struct BoardScreen: View {
     @StateObject private var issueStatus: IssueStatusReader
     /// The issues past the 100 a board lists, read on Load more.
     @StateObject private var issuePages: IssuePagesModel
+    /// The project's GitHub account, shown on a tap under the lists and named by a refusal to read its issues.
+    @StateObject private var githubAccount: ProjectGithubAccountModel
     @State private var tab = Tab.pulls
     /// The epics whose sub-issues the Issues tab hides, by number.
     @State private var foldedEpics: Set<Int> = []
@@ -32,6 +35,7 @@ struct BoardScreen: View {
         _pullActions = StateObject(wrappedValue: BoardPullActionsModel(repo: repo))
         _issueStatus = StateObject(wrappedValue: IssueStatusReader(repo: repo))
         _issuePages = StateObject(wrappedValue: IssuePagesModel(repo: repo))
+        _githubAccount = StateObject(wrappedValue: ProjectGithubAccountModel(repo: repo))
     }
 
     private var board: JSON { feed.board }
@@ -72,6 +76,8 @@ struct BoardScreen: View {
             }
             if tab == .pulls || tab == .review { pullRows(pulls, review: tab == .review ? review : nil) }
             else if tab == .issues { issueRows(issues) }
+            // Every tab ends with it, so any reader reaches it, a project with nothing open too.
+            GithubAccountSection(account: githubAccount)
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden).background(Theme.canvas)
@@ -160,7 +166,7 @@ struct BoardScreen: View {
     @ViewBuilder private func issueRows(_ issues: [(summary: IssueSummary, raw: JSON)]) -> some View {
         if let refused = board["issuesError"].string {
             Section {
-                GithubRefusalNote(.issues, error: refused, repo: repo).id(repo)
+                GithubRefusalNote(.issues, error: refused, account: githubAccount)
             }
             .listRowBackground(Theme.row)
         } else {

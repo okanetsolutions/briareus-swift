@@ -1,17 +1,18 @@
 // A pull request page's sidebar (PullScreen), as GitHub's: its errands, checks, reviewers, assignees, labels, the
 // projects of the issues it closes, milestone and Development, then the GitHub account the server uses for its project,
-// read only on a click.
+// read only on a click (GithubAccountItem, in GithubAccountPieces.swift).
 import SwiftUI
 
 /// The sidebar: only what the server reports, not notifications; the projects are those of the issues it closes. Each
 /// item is keyed by what it is, so one arriving late leaves the identity of those after it (and their state) alone.
 struct PullSidebar: View {
     @ObservedObject var model: PullModel
-    /// The project's GitHub account, owned by PullScreen so a read survives the sidebar moving between layouts.
+    /// The project's GitHub account, owned by PullScreen so a read survives the sidebar moving between layouts; its
+    /// item and a Projects refusal share it.
     let account: ProjectGithubAccountModel
     var body: some View {
         let row = model.boardRow
-        let projects = model.issueProjects.entries.map { (id: "projects", view: AnyView(PullProjectsItem(entries: $0, repo: model.repo))) }
+        let projects = model.issueProjects.entries.map { (id: "projects", view: AnyView(PullProjectsItem(entries: $0, account: account))) }
         var items: [(id: String, view: AnyView)] = []
         if !model.actions.isEmpty { items.append(("actions", AnyView(actions(row)))) }
         if !model.pr.isNull { items.append(("checks", AnyView(checks))); items.append(("reviewers", AnyView(reviewers(row)))) }
@@ -34,7 +35,7 @@ struct PullSidebar: View {
         if row == nil, let projects { items.append(projects) }
         let issues = (row?.issues.isEmpty == false) ? row!.issues : BoardLink.parseList(model.pr["issues"])
         if !issues.isEmpty { items.append(("development", AnyView(development(issues)))) }
-        if ProjectGithubAccountModel.offered { items.append(("github", AnyView(PullGithubAccountItem(account: account)))) }
+        if ProjectGithubAccountModel.offered { items.append(("github", AnyView(GithubAccountItem(account: account)))) }
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
                 if i > 0 { Spacer().frame(height: 14); BoardRule() }
@@ -133,37 +134,5 @@ struct PullSidebar: View {
             if let url = link.url { bare["url"] = .string(url) }
             Navigator.shared.push(.issue(repo: model.repo, issue: bare))
         } else { openWebURL(link.url) }
-    }
-}
-
-/// The sidebar's GitHub account item: which account the server reads and writes GitHub with for this project, for any
-/// token that can read it, read only when clicked (`GET /github/account`, which asks GitHub nothing) and never polled,
-/// as the iPhone's PullGithubAccountSection.
-struct PullGithubAccountItem: View {
-    @ObservedObject var account: ProjectGithubAccountModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("GitHub account").font(Theme.captionSemibold).foregroundStyle(Theme.muted).lineLimit(1).padding(.bottom, 8)
-            VStack(alignment: .leading, spacing: 4) {
-                if let identity = account.identity {
-                    GithubHealthLine(symbol: identity.symbol, tone: identity.tone, title: identity.line)
-                    if let detail = identity.detail {
-                        Text(detail).font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
-                    }
-                } else if let error = account.loadError {
-                    Notice(message: error)
-                } else if account.reading {
-                    LoadingNote(text: "Reading the account…")
-                } else {
-                    Button { Task { await account.load() } } label: {
-                        Label("Show GitHub account", systemImage: "person.badge.key")
-                    }
-                    .dashButton(.bordered)
-                    .help("Read which GitHub account the server uses for this project")
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

@@ -30,7 +30,7 @@ View (`App/**`, `Mac/App/**`) -> Model (`@MainActor ObservableObject`, `*Model.s
 | Status, Usage | `Status/` (Status), `Findings/` (Usage) | `Findings/` | `AttentionLogic.swift`, `PhoneUsage.swift`, `UsageLogic.swift` |
 | Code reviews (a pull request's tab) | `Board/` | `Board/` | `CodeReviewLogic.swift` |
 | Server resources, SSH monitoring, CI/CD | `Stats/` | `Stats/` | `StatsLogic.swift`, `SSHMonitoringLogic.swift`, `CILogic.swift` |
-| Settings | `Settings/` | `Settings/` | `SettingsLogic.swift`, `SSHServerLogic.swift` (the SSH server form), `AccountSettingsLogic.swift`, `GithubAccountLogic.swift` (the GitHub account form), `GithubAccountHealthLogic.swift` (a project's GitHub account and its health check) |
+| Settings | `Settings/` | `Settings/` | `SettingsLogic.swift`, `SSHServerLogic.swift` (the SSH server form), `AccountSettingsLogic.swift`, `GithubAccountLogic.swift` (the GitHub account form), `GithubAccountHealthLogic.swift` (a project's GitHub account, its health check and `ProjectGithubAccountState`, which identity a screen keeps), `GithubRefusalLogic.swift` (what a GitHub refusal or a missing token says) |
 | Forge | `Forge/` | `Board/ProjectForgeTab.swift`, `Board/ForgeSiteView.swift` | `Forge.swift` |
 | Shared browser | `Conversations/SharedBrowserScreen.swift` | `Conversation/SharedBrowserScreen.swift` | `SharedBrowser.swift` |
 | Voice notes | `Conversations/ComposerVoiceNote.swift` | `Conversation/VoiceNote.swift` | n/a |
@@ -47,7 +47,7 @@ Search here before writing a component.
 
 **Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `reviewGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
 
-**Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`; `GithubRefusalNote` (`Mac/App/Board/GithubRefusalNote.swift`, `boxed` for the ▦ Board tab). The pull request page's sidebar is `PullSidebar` (`Mac/App/Board/PullSidebar.swift`), with `PullGithubAccountItem`; the iPhone's twin is `PullGithubAccountSection`, under `PullDescriptionSection` (`App/Board/PullDescription.swift`). Its errands (`Mac/App/Board/BoardErrands.swift`): `actionIcon`, `ErrandLabel`, `rowActions`, `afterThisEvent`.
+**Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`. The project's GitHub account on the board's screens (`Mac/App/Board/GithubAccountPieces.swift`): `GithubAccountItem` (in the pull request's sidebar), `BoardGithubAccountBox` (under the board's lists), `GithubRefusalNote` (given the screen's `ProjectGithubAccountModel`; `boxed` for the ▦ Board tab) and `StandaloneGithubRefusalNote` (owning its own, for a screen that keeps none). The pull request page's sidebar is `PullSidebar` (`Mac/App/Board/PullSidebar.swift`). Its errands (`Mac/App/Board/BoardErrands.swift`): `actionIcon`, `ErrandLabel`, `rowActions`, `afterThisEvent`.
 
 **Mac settings kit** (`Mac/App/Settings/SettingsKit.swift`): `SettingsPage`, `SettingsTabs`, `SettingsFieldBox`, `SettingsFieldLabel`, `SettingsTextArea`, `SettingsCheck`, `SettingsSelect`, `SettingsLabeledSelect`, `SettingsPair`, `SettingsStatusRow`, `SettingsHint`, `SettingsNote`, `SettingsHelpIcon`, `PopupMenu`.
 
@@ -55,7 +55,7 @@ Search here before writing a component.
 
 **iPhone shared** (`App/Shared/`): `StatTiles`/`StatTileView` (Core's `StatTile`, with an optional value tone per tile id), `StatGauge`, `SavedPrompts`, `ProjectGithubAccountModel` (a project's GitHub identity and health check) and `GithubHealthLine` (one toned line of the account or its check), each also in `Mac/App/Shared/`.
 
-**iPhone board pieces** (`App/Board/BoardPieces.swift`): `BoardPullRow`, `BoardIssueRow`, `BoardSessionRow`, `BoardLinkedRow`, `BoardLabelChips`, `BoardBadge`, `ChecksBadge`, `BoardEpicProgress`, `BoardUpdated`, `ErrandNotice`, `BoardFlowLayout`, `GithubRefusalNote`. Its errands (`App/Board/BoardErrands.swift`): `ErrandCatalog`, `boardErrands`, `errandSymbol`, `ErrandRunner`.
+**iPhone board pieces** (`App/Board/BoardPieces.swift`): `BoardPullRow`, `BoardIssueRow`, `BoardSessionRow`, `BoardLinkedRow`, `BoardLabelChips`, `BoardBadge`, `ChecksBadge`, `BoardEpicProgress`, `BoardUpdated`, `ErrandNotice`, `BoardFlowLayout`. The project's GitHub account on the board's screens (`App/Board/GithubAccountPieces.swift`, the Mac's twins): `GithubAccountSection` (under the board's lists and a pull request's description), `GithubRefusalNote` and `StandaloneGithubRefusalNote`. Its errands (`App/Board/BoardErrands.swift`): `ErrandCatalog`, `boardErrands`, `errandSymbol`, `ErrandRunner`.
 
 **iPhone settings kit** (`App/Settings/SettingsFormKit.swift`): `SettingsFormChrome`, `SettingsTextRow`, `SettingsValueRow`, `SettingsLabel`, `SettingsInfoButton`, `SettingsVerdict`, `SettingsErrorSection`, `SettingsUnavailableView`.
 

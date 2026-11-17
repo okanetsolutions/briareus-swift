@@ -1,6 +1,7 @@
 // GitHub's refusals as both apps show them (GithubRefusalLogic.swift): the core's `no GitHub token for <repo>` recognised
-// only as the whole message (and, in `APIError`, only as its 503) and kept apart from GitHub's own refusals, the server's words carried through as the detail, the
-// loaded account named, and `APIError` saying the missing token instead of a generic failure.
+// only as the whole message (and, in `APIError`, only as its 503) and kept apart from GitHub's own refusals, its cause
+// told from the loaded identity, the server's words carried through as the detail, the loaded account named, and
+// `APIError` saying the missing token instead of a generic failure.
 import XCTest
 @testable import BriareusMacCore
 
@@ -36,6 +37,29 @@ final class GithubRefusalLogicTests: XCTestCase {
             XCTAssertTrue(r.explanation.contains("acme/api"))
             XCTAssertEqual(r.explanation, missingGithubTokenText("acme/api"))
         }
+    }
+
+    func testTheMissingTokensCauseComesFromTheLoadedIdentity() {
+        let assigned = GithubAccountIdentity(id: 4, label: "acme-bot", globalFallback: false, hasToken: false)
+        let unusable = GithubAccountIdentity(id: 4, label: "acme-bot", globalFallback: false, hasToken: true)
+        let fallback = GithubAccountIdentity(label: "GITHUB_TOKEN", globalFallback: true, hasToken: false)
+        XCTAssertEqual(MissingGithubTokenCause(nil), .unknown)
+        XCTAssertEqual(MissingGithubTokenCause(assigned), .accountHasNoToken(label: "acme-bot"))
+        // An assigned account's token the core cannot use gets the same 503, with no fallback to GITHUB_TOKEN.
+        XCTAssertEqual(MissingGithubTokenCause(unusable), .accountHasNoToken(label: "acme-bot"))
+        XCTAssertEqual(MissingGithubTokenCause(fallback), .noAccountNorFallback)
+    }
+
+    func testEachMissingTokenCauseIsSaidApartAndNamesTheAccount() {
+        let assigned = GithubAccountIdentity(id: 4, label: "acme-bot", globalFallback: false, hasToken: false)
+        let fallback = GithubAccountIdentity(label: "GITHUB_TOKEN", globalFallback: true, hasToken: false)
+        let texts = [nil, assigned, fallback].map { missingGithubTokenText("acme/api", account: $0) }
+        XCTAssertEqual(Set(texts).count, 3)
+        XCTAssertTrue(texts.allSatisfy { $0.contains("acme/api") })
+        XCTAssertTrue(texts[1].contains("acme-bot"))
+        let refusal = githubRefusal(.issues, error: "no GitHub token for acme/api", account: assigned)
+        XCTAssertTrue(refusal.missingToken)
+        XCTAssertEqual(refusal.explanation, missingGithubTokenText("acme/api", account: assigned))
     }
 
     func testGithubsRefusalKeepsTheServersWordsAsTheDetail() {

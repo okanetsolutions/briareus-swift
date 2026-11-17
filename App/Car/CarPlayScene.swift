@@ -308,7 +308,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
             } catch {
                 guard !Task.isCancelled, !error.isCancellation else { return }
                 self.enter(.ready)
-                self.warn(errorText(error))
+                self.warn(CarText.failure(error, said: errorText(error)))
             }
         }
     }
@@ -343,7 +343,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
             } catch {
                 guard !Task.isCancelled, !error.isCancellation else { return }
                 self.enter(.ready)
-                var words = errorText(error)
+                var words = CarText.failure(error, said: errorText(error))
                 if (error as? APIError)?.isRefusal != true { words += " It may have gone through all the same. Check before trying again." }
                 try? await self.refresh()
                 self.redraw()
@@ -486,7 +486,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
                 // Its state and what may be dictated to it are known only now.
                 if !Task.isCancelled && self.controller.templates.count == 1 && self.phase == .ready { self.show() }
             } catch {
-                if !Task.isCancelled, let words = failure(error) { self.warn(words) }
+                if !Task.isCancelled, let said = failure(error) { self.warn(CarText.failure(error, said: said)) }
             }
         }
     }

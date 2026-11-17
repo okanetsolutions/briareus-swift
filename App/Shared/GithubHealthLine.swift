@@ -1,6 +1,6 @@
 // One line about a project's GitHub account or its check, on a phone: a toned symbol, what it is about and what was
-// found. A project's settings draw its account and health check with it (ProjectGithubAccountSection), and a pull
-// request draws the account that serves its project (PullGithubAccountSection).
+// found. A project's settings draw its account and health check with it (ProjectGithubAccountSection), and the board and a
+// pull request draw the account that serves the project (GithubAccountSection).
 import SwiftUI
 
 /// One line of the account or its check: a toned symbol, what it is about, and what was found on the right.

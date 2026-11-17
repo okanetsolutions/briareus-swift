@@ -1,6 +1,7 @@
 // The project board (screen_pulls.c pulls_screen_*): open pull requests and issues as tabs, with the project's SSH and SFTP
 // sessions beside them for a token that may read the servers. Each pull request row carries the errands its state offers,
-// the suggested one filled; author, reviewer and label pickers narrow the lists, and are kept per repository.
+// the suggested one filled; author, reviewer and label pickers narrow the lists, and are kept per repository. Under the
+// lists, any reader can show which GitHub account serves the project (BoardGithubAccountBox).
 import Combine
 import SwiftUI
 
@@ -50,6 +51,8 @@ final class BoardModel: ObservableObject {
     var dialogOpen = false
     /// The Board tab's own state (ProjectBoardTab.swift).
     lazy var projectBoard = ProjectBoardModel(repo: repo)
+    /// The project's GitHub account, shown on a click under the lists and named by a refusal to read its issues.
+    lazy var githubAccount = ProjectGithubAccountModel(repo: repo)
     /// The project Status of each linked issue, for the chips on the pull request rows (IssueProjects.swift).
     lazy var issueStatus = IssueStatusReader(repo: repo, rows: { [weak self] in (self?.pulls ?? [], self?.pullFilter ?? BoardFilter()) },
                                              changed: { [weak self] in self?.objectWillChange.send() })
@@ -397,24 +400,12 @@ struct BoardScreen: View {
         return BoardTabStrip(labels: labels, active: model.tab) { select($0) }
     }
     private func select(_ tab: BoardTab) {
-        model.tab = tab == .issues || tab == .review || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) || projectTabOffered(tab) ? tab : .pulls
+        model.tab = tab == .issues || tab == .review || ((tab == .ssh || tab == .sftp) && remoteOffered) || (tab == .board && ProjectBoardModel.offered(repo)) || tab.projectTabOffered ? tab : .pulls
         if model.tab == .run { model.run.open() }
     }
 
     // MARK: The Run, Database and Forge tabs
 
-    private func projectTabOffered(_ tab: BoardTab) -> Bool {
-        switch tab {
-        case .run: return ProjectRunModel.offered
-        case .db: return ProjectDBModel.offered
-        case .forge: return ProjectForgeModel.offered
-        case .files: return ProjectFilesModel.offered
-        case .memories: return ProjectMemoriesModel.offered
-        case .deploy: return ProjectDeploymentsModel.offered
-        case .envoyer: return ProjectEnvoyerModel.offered
-        default: return false
-        }
-    }
     /// The tab on show, from the tabs down to the bottom of the pane.
     @ViewBuilder private var projectTab: some View {
         switch model.tab {
@@ -435,6 +426,8 @@ struct BoardScreen: View {
         BoardListFeedback(error: model.error, writeError: model.writeError, uncertain: model.uncertain,
                           loading: boardShowsLoading(loaded: model.loaded, refreshing: model.refreshing), loadingText: model.loadingText)
         if model.tab == .review { reviewList } else { filteredLists }
+        // Every list ends with it, so any reader reaches it, a project with nothing open too.
+        BoardGithubAccountBox(account: model.githubAccount)
     }
 
     @ViewBuilder private var filteredLists: some View {

@@ -1,9 +1,9 @@
 // What both apps say when GitHub would not read something for a project: the board's issues, an issue's or a pull
 // request's Projects, the project's ▦ Board. The server reads GitHub with the project's GitHub account (falling back to
 // its GITHUB_TOKEN), so the refusal names that account, or the loaded identity when there is one. The core's 503
-// `no GitHub token for <repo>` (neither an account nor GITHUB_TOKEN) is recognised by its whole message and said
-// plainly, here and in `APIError.description` (in a few words on CarPlay, `CarText`), instead of as a generic failure.
-// No UI here.
+// `no GitHub token for <repo>` (the project's account has no usable token, or none is assigned and there is no
+// GITHUB_TOKEN) is recognised by its whole message and said plainly, naming which when the identity is loaded, here and
+// in `APIError.description` (in a few words on CarPlay, `CarText`), instead of as a generic failure. No UI here.
 import Foundation
 
 /// What GitHub would not read.
@@ -31,8 +31,9 @@ struct GithubRefusal: Equatable, Sendable {
     var notice: String? { missingToken ? explanation : detail }
 }
 
-/// What the core says, and all it says, when neither the project's GitHub account nor GITHUB_TOKEN gives it a token
-/// (`lib/github-config.js`, answered with a 503).
+/// What the core says, and all it says, when it has no GitHub token for a repository (`lib/github-config.js`, answered with
+/// a 503): the project's assigned account has none it can use (the core does not fall back to GITHUB_TOKEN then), or no
+/// account is assigned and there is no GITHUB_TOKEN.
 private let missingGithubTokenPrefix = "no GitHub token for "
 
 /// The repository named by the core's `no GitHub token for <repo>` when that is the whole of `message`; nil for any
@@ -44,16 +45,42 @@ func missingGithubTokenRepo(_ message: String?) -> String? {
     return repo.isEmpty || repo.contains(where: \.isWhitespace) ? nil : String(repo)
 }
 
-/// What the user is told when the server has no GitHub token for `repo`.
-func missingGithubTokenText(_ repo: String) -> String {
-    "The server has no GitHub token for \(repo): no GitHub account serves it and there is no GITHUB_TOKEN to fall back on. An admin can assign one in ⚙ Settings → GitHub accounts."
+/// Why the core had no GitHub token for a project, as far as the project's identity tells.
+enum MissingGithubTokenCause: Equatable, Sendable {
+    /// The project's assigned account has no usable token; `label` is empty for an unlabelled one.
+    case accountHasNoToken(label: String)
+    /// No account serves the project and the server has no GITHUB_TOKEN.
+    case noAccountNorFallback
+    /// The identity is not loaded, so it is either.
+    case unknown
+
+    init(_ account: GithubAccountIdentity?) {
+        guard let account else { self = .unknown; return }
+        self = account.globalFallback ? .noAccountNorFallback : .accountHasNoToken(label: account.label)
+    }
+}
+
+/// What the user is told when the server has no GitHub token for `repo`: which cause, when the project's identity
+/// (`account`) is loaded, else both.
+func missingGithubTokenText(_ repo: String, account: GithubAccountIdentity? = nil) -> String {
+    let why: String
+    switch MissingGithubTokenCause(account) {
+    case .accountHasNoToken(let label):
+        why = label.isEmpty ? "its GitHub account has no usable token" : "its GitHub account \(label) has no usable token"
+    case .noAccountNorFallback:
+        why = "no GitHub account serves it and there is no GITHUB_TOKEN to fall back on"
+    case .unknown:
+        why = "its GitHub account has no usable token, or none is assigned and there is no GITHUB_TOKEN to fall back on"
+    }
+    return "The server has no GitHub token for \(repo): \(why). An admin can fix it in ⚙ Settings → GitHub accounts."
 }
 
 /// What a screen says when GitHub would not read `subject`: the account it was read with (`account` when the project's
-/// identity is already loaded, else the project's account in general) and the permission it needs, then `error`.
+/// identity is already loaded, else the project's account in general) and the permission it needs, then `error`; or,
+/// for the core's missing token, why it has none.
 func githubRefusal(_ subject: GithubReadSubject, error: String?, account: GithubAccountIdentity? = nil) -> GithubRefusal {
     if let repo = missingGithubTokenRepo(error) {
-        return GithubRefusal(explanation: missingGithubTokenText(repo), detail: nil, missingToken: true)
+        return GithubRefusal(explanation: missingGithubTokenText(repo, account: account), detail: nil, missingToken: true)
     }
     let with = refusingAccountPhrase(account)
     let explanation: String

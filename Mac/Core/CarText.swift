@@ -107,10 +107,11 @@ enum CarText {
 
     // MARK: Failures
 
-    /// What "Could not load" says when the server has no GitHub token for `repo`: a few words, where the phone and the
-    /// Mac explain it in full (`missingGithubTokenText`).
-    static func missingGithubToken(_ repo: String) -> String { "No GitHub token for \(repo). An admin can assign one." }
-    /// What "Could not load" says of `error`, given what a screen would say of it: the missing GitHub token shortened.
+    /// What the car says when the server has no GitHub token for `repo`: a few words, where the phone and the Mac explain
+    /// it in full (`missingGithubTokenText`).
+    static func missingGithubToken(_ repo: String) -> String { "No GitHub token for \(repo). Ask an admin." }
+    /// What the car says of `error` (a list's "Could not load", a write's or dictation's alert), given what a screen would
+    /// say of it: the missing GitHub token shortened, anything else as said.
     static func failure(_ error: Error, said: String) -> String {
         (error as? APIError)?.missingGithubToken.map(missingGithubToken) ?? said
     }

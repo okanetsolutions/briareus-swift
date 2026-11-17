@@ -14,7 +14,7 @@ struct PullScreen: View {
     @ObservedObject private var catalog = ErrandCatalog.shared
     @StateObject private var model: PullScreenModel
     @StateObject private var errands: ErrandRunner
-    /// The GitHub account serving the project, read on a tap and kept while the screen lives, whichever section shows.
+    /// The GitHub account serving the project, read on a tap or by a Projects refusal, kept while the screen lives.
     @StateObject private var githubAccount: ProjectGithubAccountModel
     @Environment(\.navigate) private var navigate
     @State private var deleting: Session?
@@ -116,11 +116,11 @@ struct PullScreen: View {
                 switch model.section {
                 case .description:
                     PullDescriptionSection(markdown: model.pr["body"].string ?? model.descriptionBody, bodyRead: model.bodyRead, author: model.author)
-                    PullGithubAccountSection(account: githubAccount)
+                    GithubAccountSection(account: githubAccount)
                 case .files: files
                 case .reviews: reviews
                 case .issues: issues
-                case .projects: PullProjectsSection(entries: model.issueProjects.entries, repo: repo)
+                case .projects: PullProjectsSection(entries: model.issueProjects.entries, account: githubAccount)
                 case .codeReviews: PullCodeReviewsTab(model: model.codeReviews)
                 case .conversations: conversations
                 case .run: EmptyView()

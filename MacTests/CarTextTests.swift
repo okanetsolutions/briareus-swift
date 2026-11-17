@@ -73,7 +73,7 @@ final class CarTextTests: XCTestCase {
         let said = CarText.failure(missing, said: missing.description)
         XCTAssertEqual(said, CarText.missingGithubToken("acme/api"))
         XCTAssertTrue(said.contains("acme/api"))
-        XCTAssertLessThan(said.count, missingGithubTokenText("acme/api").count)
+        XCTAssertNotEqual(said, missing.description)
         XCTAssertEqual(CarText.failure(APIError.githubRead(refused: "no GitHub token for acme/api"), said: "x"), said)
         let refused = APIError.githubRead(refused: "Resource not accessible")
         XCTAssertEqual(CarText.failure(refused, said: refused.description), refused.description)

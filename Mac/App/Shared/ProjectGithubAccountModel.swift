@@ -2,22 +2,25 @@
 // request) and an admin's health check (`GET /settings/github/health`), run only on a click. Nothing is polled.
 // ProjectGithubAccountSection owns one for as long as its project's settings are open, across their tabs, so a check
 // answers into it whichever tab is showing and is there on return, as on the iPhone; it reads the identity when the
-// Project tab first shows. PullScreen owns one too, whose identity its sidebar (PullGithubAccountItem) reads only when
-// clicked, for any token that can read the project; and the board, issue and pull request screens read it once while a
-// GitHub refusal is shown, to name the account (GithubRefusalNote).
+// Project tab first shows. The board and a pull request own one too, for any token that can read the project: its GitHub
+// account item (GithubAccountItem) reads the identity only when clicked, and a GitHub refusal on the same screen reads it
+// once while shown, to name the account (GithubRefusalNote), so the screen reads it at most once. Which identity wins
+// when a read and a check both answer is Core's `ProjectGithubAccountState`.
 import SwiftUI
 
 @MainActor
 final class ProjectGithubAccountModel: ObservableObject {
     let repo: String
-    @Published private(set) var identity: GithubAccountIdentity?
+    /// The identity and the last check, kept by Core's rule that a verified identity outlives a later read.
+    @Published private(set) var state = ProjectGithubAccountState()
+    var identity: GithubAccountIdentity? { state.identity }
+    /// The last check's answer, for as long as the model's owner lives.
+    var health: GithubAccountHealth? { state.health }
     /// The identity was read, or refused; a read only left behind is asked again the next time the section comes up.
     @Published private(set) var loaded = false
     /// The identity is being read.
     @Published private(set) var reading = false
     @Published private(set) var loadError: String?
-    /// The last check's answer, for as long as the model's owner lives.
-    @Published private(set) var health: GithubAccountHealth?
     @Published private(set) var checking = false
     @Published private(set) var checkError: String?
 
@@ -35,9 +38,7 @@ final class ProjectGithubAccountModel: ObservableObject {
         defer { reading = false }
         do {
             let r = try await Store.shared.call("github_account", ["repo": .string(repo)])
-            let read = GithubAccountIdentity(r)
-            // A check that answered first already set the identity GitHub verified; this read must not replace it.
-            if health?.account == nil { identity = read }
+            state.read(GithubAccountIdentity(r))
             loadError = identity == nil ? unexpectedResponse : nil
             loaded = true
         } catch {
@@ -58,8 +59,8 @@ final class ProjectGithubAccountModel: ObservableObject {
             do {
                 let r = try await Store.shared.call("settings_github_health", ["repo": .string(repo)])
                 guard let h = GithubAccountHealth(r) else { checkError = unexpectedResponse; return }
-                health = h
-                if let account = h.account { identity = account; loadError = nil }
+                state.checked(h)
+                if h.account != nil { loadError = nil }
             } catch {
                 if !error.isCancellation { checkError = errorText(error) }
             }
