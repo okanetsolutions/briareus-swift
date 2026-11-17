@@ -1,7 +1,8 @@
 // The GitHub account the server uses for one project (`GET /github/account?repo=`, any token held to the project) and an
 // admin's on-demand check of it (`GET /settings/github/health?repo=`): parsing, the identity line, the health rows (token,
 // scopes, each repository's access, REST and GraphQL budgets) and one overall state, and which project shows it. Both
-// apps' project settings draw these; `githubAccountPhrase(_:)` names the account wherever a refusal mentions it. No UI here.
+// apps' project settings draw these, which identity a screen keeps when a read and a check both answer
+// (`ProjectGithubAccountState`), and `githubAccountPhrase(_:)` names the account wherever a refusal mentions it. No UI here.
 import Foundation
 
 /// The server's GitHub identity for one project: a registered account, or the global `GITHUB_TOKEN` fallback. It never
@@ -47,6 +48,27 @@ struct GithubAccountIdentity: Equatable, Sendable {
 
     var tone: RowTone { !hasToken ? .danger : globalFallback ? .muted : .ok }
     var symbol: String { !hasToken ? "exclamationmark.triangle" : globalFallback ? "server.rack" : "person.crop.circle" }
+}
+
+/// What a project's GitHub account screen knows: the identity last read or verified, and the last check. A check names the
+/// login GitHub verified, so a read that answers after it never replaces that; until a check has, a read fills it in.
+/// Both apps' `ProjectGithubAccountModel` keep one.
+struct ProjectGithubAccountState: Equatable, Sendable {
+    private(set) var identity: GithubAccountIdentity?
+    private(set) var health: GithubAccountHealth?
+
+    init() {}
+
+    /// `GET /github/account` answered with `read` (nil when its answer was not an identity).
+    mutating func read(_ read: GithubAccountIdentity?) {
+        if health?.account == nil { identity = read }
+    }
+
+    /// `GET /settings/github/health` answered: its verified account, when it names one, is the identity from now on.
+    mutating func checked(_ health: GithubAccountHealth) {
+        self.health = health
+        if let account = health.account { identity = account }
+    }
 }
 
 /// How a message names the account that read GitHub for a project: the loaded identity when there is one, else the

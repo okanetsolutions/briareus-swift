@@ -50,7 +50,7 @@ extension CarAssistant {
                 }
                 template.updateSections(Self.fit([self.section(nil, dictated), self.section("Saved prompts", saved)]))
             } catch {
-                guard current(), let words = failure(error) else { return }
+                guard current(), let words = failure(error).map({ CarText.failure(error, said: $0) }) else { return }
                 template.emptyViewTitleVariants = ["Could not load saved prompts"]
                 template.emptyViewSubtitleVariants = [words]
                 let retry = self.item("Retry", symbol: "arrow.clockwise") { [weak self, weak template] in

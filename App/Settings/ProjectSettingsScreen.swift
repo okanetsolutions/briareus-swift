@@ -174,7 +174,8 @@ private final class ProjectFormModel: ObservableObject {
 
 struct ProjectSettingsScreen: View {
     @StateObject private var model: ProjectFormModel
-    /// The saved project's GitHub account, kept for the screen's life so a check survives scrolling and tab changes.
+    /// The saved project's GitHub account, kept for the screen's life so a check survives scrolling, tab changes and
+    /// the screen being covered.
     @StateObject private var githubAccount: ProjectGithubAccountModel
     @FocusState private var focus: ProjectField?
     @EnvironmentObject private var store: Store
@@ -241,7 +242,6 @@ struct ProjectSettingsScreen: View {
             }
         }
         .task { await githubAccount.load() }
-        .onDisappear { githubAccount.stop() }
     }
 
     // MARK: Tabs

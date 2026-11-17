@@ -207,6 +207,8 @@ extension PullScreenModel {
 /// its Status and the rest of its fields, and a link to it on GitHub; or why there are none.
 struct PullProjectsSection: View {
     var entries: [IssueProjectsEntry]?
+    /// The project's GitHub account, owned by PullScreen, which a refusal names.
+    let account: ProjectGithubAccountModel
 
     var body: some View {
         let list = entries ?? []
@@ -219,9 +221,7 @@ struct PullProjectsSection: View {
                 if entries == nil {
                     HStack(spacing: 8) { ProgressView(); Text("Reading the issues' projects…").foregroundStyle(.secondary) }
                 } else if let refused = list.lazy.compactMap(\.error).first {
-                    Text(verbatim: "GitHub would not read the projects with the server’s token, which needs Projects: read.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    ErrorNotice(message: refused)
+                    GithubRefusalNote(.projects, error: refused, account: account)
                 } else {
                     Text("None of the issues it closes is on a project board.").foregroundStyle(.secondary)
                 }

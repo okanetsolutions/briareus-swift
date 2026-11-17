@@ -195,6 +195,8 @@ extension PullModel {
 /// opening on GitHub, with its Status and the rest of its fields; or why there are none.
 struct PullProjectsItem: View {
     var entries: [IssueProjectsEntry]
+    /// The project's GitHub account, owned by PullScreen, which a refusal names.
+    let account: ProjectGithubAccountModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -205,8 +207,7 @@ struct PullProjectsItem: View {
             }
             if shown.isEmpty {
                 if let refused = entries.lazy.compactMap(\.error).first {
-                    Text(verbatim: "GitHub would not read its projects with the server’s token, which needs Projects: read. \(refused)")
-                        .font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                    GithubRefusalNote(.projects, error: refused, account: account)
                 } else {
                     Text("None yet").font(Theme.caption).foregroundStyle(Theme.muted)
                 }

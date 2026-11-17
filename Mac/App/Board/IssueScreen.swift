@@ -644,8 +644,7 @@ private struct IssueSidebar: View {
             }
             if list.isEmpty {
                 if let refused = model.detail["projectsError"].string {
-                    Text("GitHub would not read its projects with the server’s token, which needs Projects: read. \(refused)")
-                        .font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                    StandaloneGithubRefusalNote(.projects, error: refused, repo: model.repo).id(model.repo)
                 } else {
                     Text("None yet").font(Theme.caption).foregroundStyle(Theme.muted)
                 }

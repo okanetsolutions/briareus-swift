@@ -1,7 +1,7 @@
 // A project's server GitHub account and an admin's health check of it (GithubAccountHealthLogic.swift): the identity read
 // from `GET /github/account`, its line for an assigned account, the global fallback and a missing token, the phrase a
-// refusal names it with, which project shows it, and `GET /settings/github/health` read into rows for valid, invalid and
-// throttled tokens.
+// refusal names it with, which project shows it, which identity a screen keeps when a read and a check both answer, and
+// `GET /settings/github/health` read into rows for valid, invalid and throttled tokens.
 import XCTest
 @testable import BriareusMacCore
 
@@ -73,6 +73,35 @@ final class GithubAccountHealthLogicTests: XCTestCase {
         var typing = ProjectFormState(row: j(#"{"id":3,"repo":"o/r"}"#))
         typing.texts[.repo] = "o/other"
         XCTAssertEqual(typing.githubRepo, "o/r")
+    }
+
+    // MARK: What a screen keeps
+
+    func testACheckedIdentityIsNotReplacedByALaterRead() throws {
+        let read = GithubAccountIdentity(label: "GITHUB_TOKEN", globalFallback: true, hasToken: true)
+        let checked = try health(valid)
+        var state = ProjectGithubAccountState()
+        state.read(read)
+        XCTAssertEqual(state.identity, read)
+        state.checked(checked)
+        XCTAssertEqual(state.health, checked)
+        XCTAssertEqual(state.identity, checked.account)
+        // A read answered after the check leaves the verified identity alone.
+        state.read(read)
+        XCTAssertEqual(state.identity, checked.account)
+        state.read(nil)
+        XCTAssertEqual(state.identity, checked.account)
+    }
+
+    func testACheckNamingNoAccountLeavesTheReadIdentity() throws {
+        let read = GithubAccountIdentity(id: 4, label: "acme-bot", login: "acme", globalFallback: false, hasToken: true)
+        let anonymous = try health(#"{"healthy":false,"token":{"status":"unavailable"},"scopes":{"status":"unknown"},"repos":[]}"#)
+        var state = ProjectGithubAccountState()
+        state.checked(anonymous)
+        XCTAssertNil(state.identity)
+        XCTAssertEqual(state.health, anonymous)
+        state.read(read)
+        XCTAssertEqual(state.identity, read)
     }
 
     func testRoutes() {

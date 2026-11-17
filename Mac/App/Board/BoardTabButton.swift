@@ -1,4 +1,5 @@
-// The tabs of a board, a project's or every project's: a row of buttons, the open one underlined, over a rule.
+// The tabs of a board, a project's or every project's: a row of buttons, the open one underlined, over a rule; and which
+// of a project's own tabs this server offers.
 import SwiftUI
 
 /// One of `#proj-tabs`: 13px, the open one underlined in the accent, 34px tall.
@@ -32,6 +33,22 @@ struct BoardTabStrip<Tab: Hashable>: View {
                 Spacer(minLength: 0)
             }
             BoardRule().padding(.horizontal, -Theme.paneMargin)
+        }
+    }
+}
+
+extension BoardTab {
+    /// Whether this server offers this tab of the project's own (Run, Database, Forge, Files, Memories, Deploy, Envoyer).
+    @MainActor var projectTabOffered: Bool {
+        switch self {
+        case .run: return ProjectRunModel.offered
+        case .db: return ProjectDBModel.offered
+        case .forge: return ProjectForgeModel.offered
+        case .files: return ProjectFilesModel.offered
+        case .memories: return ProjectMemoriesModel.offered
+        case .deploy: return ProjectDeploymentsModel.offered
+        case .envoyer: return ProjectEnvoyerModel.offered
+        default: return false
         }
     }
 }

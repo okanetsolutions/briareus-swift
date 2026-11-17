@@ -1,15 +1,22 @@
 // A project's GitHub account at the top of its settings' Project tab (ProjectSettingsScreen), read-only: which server
 // identity reads GitHub for it and, for an Admin token, Check GitHub account, which lists the token, scopes, repositories
-// and rate limits the check found. The check runs only on a click; nothing polls and nothing is kept once the tab goes.
+// and rate limits the check found. The check runs only on a click; nothing polls. The screen keeps this section for as
+// long as the project's settings are open and it draws only on the Project tab, so its identity and last check stay
+// across tab changes, as on the iPhone; another project, or a saved change of repository, starts it afresh.
 import SwiftUI
 
 struct ProjectGithubAccountSection: View {
     @StateObject private var model: ProjectGithubAccountModel
+    /// Whether the Project tab is open; on any other tab the section draws nothing and keeps what it read.
+    let shown: Bool
 
-    init(repo: String) { _model = StateObject(wrappedValue: ProjectGithubAccountModel(repo: repo)) }
+    init(repo: String, shown: Bool) {
+        _model = StateObject(wrappedValue: ProjectGithubAccountModel(repo: repo))
+        self.shown = shown
+    }
 
     var body: some View {
-        if model.canRead {
+        if shown && model.canRead {
             Card(radius: BriareusRadius.lg) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
@@ -33,7 +40,6 @@ struct ProjectGithubAccountSection: View {
             }
             .padding(.bottom, 16)
             .task { await model.load() }
-            .onDisappear { model.stop() }
         }
     }
 
@@ -63,28 +69,5 @@ private struct GithubHealthResults: View {
                 }
             }
         }
-    }
-}
-
-/// One line of the account or its check: a toned symbol, what it is about, and what was found on the right.
-private struct GithubHealthLine: View {
-    var symbol: String
-    var tone: RowTone
-    var title: String
-    var value: String?
-    var detail: String?
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: symbol).foregroundStyle(Theme.color(tone)).accessibilityHidden(true)
-            Text(title).foregroundStyle(Theme.ink).lineLimit(1).textSelection(.enabled)
-            if let detail { Text(detail).foregroundStyle(Theme.muted).lineLimit(1) }
-            if let value {
-                Spacer(minLength: 8)
-                Text(value).foregroundStyle(Theme.color(tone)).multilineTextAlignment(.trailing)
-            }
-        }
-        .font(Theme.footnote)
-        .accessibilityElement(children: .combine)
     }
 }

@@ -68,6 +68,18 @@ final class CarTextTests: XCTestCase {
         XCTAssertNil(CarText.closingIssue(child, working: false, comment: false))
     }
 
+    func testTheCarShortensTheMissingGithubToken() {
+        let missing = APIError(.http, status: 503, message: "no GitHub token for acme/api")
+        let said = CarText.failure(missing, said: missing.description)
+        XCTAssertEqual(said, CarText.missingGithubToken("acme/api"))
+        XCTAssertTrue(said.contains("acme/api"))
+        XCTAssertNotEqual(said, missing.description)
+        XCTAssertEqual(CarText.failure(APIError.githubRead(refused: "no GitHub token for acme/api"), said: "x"), said)
+        let refused = APIError.githubRead(refused: "Resource not accessible")
+        XCTAssertEqual(CarText.failure(refused, said: refused.description), refused.description)
+        XCTAssertEqual(CarText.failure(CancellationError(), said: "Cancelled"), "Cancelled")
+    }
+
     func testWhatWasDictatedIsShownWholeAndCutShorter() {
         XCTAssertEqual(CarText.title(" Fix  the\nlogin. "), "Fix the login")
         XCTAssertEqual(CarText.variants("Short"), ["“Short”"])

@@ -10,7 +10,7 @@ enum PersonalConnectionKind: String, CaseIterable, Sendable, Identifiable {
     var disconnect: String { self == .github ? "disconnect_github" : "disconnect_home_assistant" }
     var explanation: String {
         self == .github
-            ? "Comments, merges, labels and your sessions’ Git operations use your account. Disconnecting restores the server’s GitHub identity."
+            ? "Comments, merges, labels and your sessions’ Git operations use your account. Disconnecting falls back to the project’s GitHub account, then the server’s."
             : "Connect your own Home Assistant using its address and a long-lived access token."
     }
     func body(token: String, url: String) throws -> JSON {

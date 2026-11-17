@@ -82,7 +82,7 @@ final class ProjectDeploymentsModel: ObservableObject {
             busy = false
             switch r {
             case .success(let v): done(v)
-            case .failure(let e): error = e.message ?? e.description
+            case .failure(let e): error = e.serverMessage
             }
             await load()
         }

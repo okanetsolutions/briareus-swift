@@ -37,7 +37,7 @@ extension CarAssistant {
                     template.updateSections(Self.fit(sections))
                 }
             } catch {
-                guard template.sections.isEmpty, let words = failure(error) else { return }
+                guard template.sections.isEmpty, let words = failure(error).map({ CarText.failure(error, said: $0) }) else { return }
                 template.emptyViewTitleVariants = ["Could not load"]
                 template.emptyViewSubtitleVariants = [words]
             }
@@ -156,7 +156,7 @@ extension CarAssistant {
             }
             if feed.boardLoaded { rows(feed.board) }
             try await feed.loadBoard()
-            if let refused = feed.board["issuesError"].string, feed.board["issues"].count == 0 { throw APIError(.http, status: 502, message: refused) }
+            if let refused = feed.board["issuesError"].string, feed.board["issues"].count == 0 { throw APIError.githubRead(refused: refused) }
             rows(feed.board)
         }
     }

@@ -1,5 +1,6 @@
 // What the board's screens share on a phone: the rows of pull requests, issues and conversations, and the badges and chips
-// they carry. The errands, their catalog and the runner that starts one are in BoardErrands.swift.
+// they carry. The errands, their catalog and the runner that starts one are in BoardErrands.swift; GitHub's refusals and
+// the project's GitHub account in GithubAccountPieces.swift.
 import SwiftUI
 import UIKit
 

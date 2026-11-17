@@ -34,7 +34,7 @@ final class ProjectEnvoyerModel: ObservableObject {
             let r = await boardCall("envoyer_projects", ["id": JSON(id), "repo": .string(repo)])
             guard account == id else { return }  // another account was picked meanwhile; this list isn't its
             switch r {
-            case .failure(let e): error = e.message ?? e.description
+            case .failure(let e): error = e.serverMessage
             case .success(let v):
                 projects = v["projects"].items; error = nil
                 if projects.count == 1, let p = projects[0]["id"].truncatedInt { pickProject(p) }
@@ -56,7 +56,7 @@ final class ProjectEnvoyerModel: ObservableObject {
         guard account == a, project == p else { return }  // the selection moved on while these were loading
         servers = sr.value?["servers"].items ?? []
         deployments = dr.value?["deployments"].items ?? []
-        if let e = dr.error ?? sr.error { error = e.message ?? e.description } else { error = nil }
+        if let e = dr.error ?? sr.error { error = e.serverMessage } else { error = nil }
     }
     func deploy() {
         guard let a = account, let p = project, Store.shared.supports("envoyer_deploy"), !busy else { return }
@@ -68,7 +68,7 @@ final class ProjectEnvoyerModel: ObservableObject {
         Task {
             let r = await boardCall("envoyer_deploy", body)
             busy = false
-            if let e = r.error { error = e.message ?? e.description } else { notice = "Envoyer queued it; it shows below once it runs." }
+            if let e = r.error { error = e.serverMessage } else { notice = "Envoyer queued it; it shows below once it runs." }
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             await loadProject()
         }
