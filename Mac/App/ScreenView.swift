@@ -20,6 +20,7 @@ struct ScreenView: View {
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)
         case .dbServerSettings(let row, let defaults): DBServerSettingsScreen(row: row, defaults: defaults)
         case .sshServerSettings(let row, let defaults): SSHServerSettingsScreen(row: row, defaults: defaults)
+        case .githubAccountSettings(let row): GithubAccountSettingsScreen(row: row)
         case .forgeAccountSettings(let row, let defaults): ForgeAccountSettingsScreen(row: row, defaults: defaults)
         case .slackWorkspaceSettings(let row, let defaults): SlackWorkspaceSettingsScreen(row: row, defaults: defaults)
         case .mcpServerSettings(let row, let defaults): McpServerSettingsScreen(row: row, defaults: defaults)

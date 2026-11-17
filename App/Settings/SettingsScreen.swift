@@ -1,6 +1,7 @@
 // The Settings tab: this device's connection and device settings, then for an Admin token
-// the projects (in server order, rearranged by Edit or Move up/down), providers, database pool, SSH servers,
-// Forge accounts and Slack workspaces. Each row opens its form, matching the Mac settings sidebar.
+// the projects (in server order, rearranged by Edit or Move up/down), providers, database pool, SSH servers, GitHub
+// and Forge accounts and Slack workspaces (SettingsAccountSections.swift). Each row opens its form, matching the Mac
+// settings sidebar.
 import SwiftUI
 
 struct SettingsScreen: View {
@@ -9,8 +10,8 @@ struct SettingsScreen: View {
     @Environment(\.navigate) private var navigate
     /// Any of the settings lists is this token's to read.
     private var managesServer: Bool {
-        ["settings_projects", "settings_providers", "settings_db_servers", "settings_ssh_servers", "settings_forge_accounts",
-         "settings_slack_workspaces"].contains { store.supports($0) }
+        ["settings_projects", "settings_providers", "settings_db_servers", "settings_ssh_servers", "settings_github_accounts",
+         "settings_forge_accounts", "settings_slack_workspaces"].contains { store.supports($0) }
     }
 
     var body: some View {
@@ -26,8 +27,9 @@ struct SettingsScreen: View {
                 if store.supports("settings_providers") { providers }
                 if store.supports("settings_db_servers") { servers }
                 ssh
-                if store.supports("settings_forge_accounts") { forge }
-                if store.supports("settings_slack_workspaces") { slack }
+                if store.supports("settings_github_accounts") { GithubAccountsSection() }
+                if store.supports("settings_forge_accounts") { ForgeAccountsSection() }
+                if store.supports("settings_slack_workspaces") { SlackWorkspacesSection() }
             }
             Section {
                 Text("Briareus for \(Platform.name) · \(Platform.version)").font(.footnote).foregroundStyle(.secondary)
@@ -167,61 +169,6 @@ struct SettingsScreen: View {
     }
 }
 
-extension SettingsScreen {
-    // MARK: Forge accounts
-
-    /// The Forge accounts under the SSH servers: each with its icon (tinted while a token is stored), label, organization
-    /// and projects.
-    @ViewBuilder fileprivate var forge: some View {
-        let s = lists.forge
-        Section {
-            if let error = s.error { ErrorNotice(message: error) }
-            ForEach(Array(s.list.enumerated()), id: \.offset) { _, row in
-                DestinationLink(destination: .forgeAccountSettings(row: row, defaults: s.defaults)) {
-                    SettingsItemRow(title: row["label"].nonEmpty ?? row["organization"].nonEmpty ?? "Forge account",
-                                    subtitle: ForgeAccountFormState.sidebarLine(row), on: row["hasToken"].is(true), systemImage: "cloud")
-                }
-            }
-            if !s.loaded { SettingsLoadingRow(text: "Loading Forge accounts…") }
-        } header: {
-            SettingsSectionHeader(title: "Forge accounts", newLabel: "New Forge account",
-                                  onNew: store.supports("create_forge_account") ? { navigate(.forgeAccountSettings(row: nil, defaults: s.defaults)) } : nil)
-        } footer: {
-            if s.loaded && s.list.isEmpty && s.error == nil {
-                Text("No Forge accounts yet. ＋ adds a Laravel Forge organization and the projects that may use it.")
-            }
-        }
-        .listRowBackground(Theme.row)
-    }
-
-    // MARK: Slack workspaces
-
-    /// The Slack workspaces under the Forge accounts: each with its icon (tinted while a token is stored), label,
-    /// workspace and projects.
-    @ViewBuilder fileprivate var slack: some View {
-        let s = lists.slack
-        Section {
-            if let error = s.error { ErrorNotice(message: error) }
-            ForEach(Array(s.list.enumerated()), id: \.offset) { _, row in
-                DestinationLink(destination: .slackWorkspaceSettings(row: row, defaults: s.defaults)) {
-                    SettingsItemRow(title: row["label"].nonEmpty ?? row["team"].nonEmpty ?? "Slack workspace",
-                                    subtitle: SlackWorkspaceFormState.sidebarLine(row), on: row["hasToken"].is(true),
-                                    systemImage: "bubble.left.and.text.bubble.right")
-                }
-            }
-            if !s.loaded { SettingsLoadingRow(text: "Loading Slack workspaces…") }
-        } header: {
-            SettingsSectionHeader(title: "Slack workspaces", newLabel: "New Slack workspace",
-                                  onNew: store.supports("create_slack_workspace") ? { navigate(.slackWorkspaceSettings(row: nil, defaults: s.defaults)) } : nil)
-        } footer: {
-            if s.loaded && s.list.isEmpty && s.error == nil {
-                Text("No Slack workspaces yet. ＋ lets a project's sessions send Slack messages as you and hear the replies.")
-            }
-        }
-        .listRowBackground(Theme.row)
-    }
-}
-
 /// What a token may do, as the Mac app names it.
 func settingsPermissionTitle(_ permission: String) -> String {
     switch permission {
@@ -258,7 +205,7 @@ struct SettingsSectionHeader: View {
 }
 
 /// "Loading…" in place of a list not read yet.
-private struct SettingsLoadingRow: View {
+struct SettingsLoadingRow: View {
     var text: String
     var body: some View {
         HStack(spacing: 10) { ProgressView(); Text(text).foregroundStyle(.secondary) }
@@ -307,7 +254,7 @@ private struct SettingsProviderRow: View {
 }
 
 /// A database server or an SSH server: its icon (tinted while on), its name and what is under it.
-private struct SettingsItemRow: View {
+struct SettingsItemRow: View {
     var title: String
     var subtitle: String
     var on: Bool

@@ -79,7 +79,7 @@ final class SettingsModel: ObservableObject {
         openFirstProvider = false; openFirstServer = false
         refresh()
     }
-    func refresh() { loadProjects(); loadSSH(); loadProviders(); loadServers(); loadForge(); loadSlack(); loadMcp(); loadEnvoyer() }
+    func refresh() { loadProjects(); loadSSH(); loadProviders(); loadServers(); loadForge(); loadSlack(); loadMcp(); loadEnvoyer(); GithubAccountsModel.shared.load() }
 
     private func load(_ section: ReferenceWritableKeyPath<SettingsModel, Section>, _ call: String, _ listKey: String, done: @escaping () -> Void = {}) {
         tasks[call]?.cancel()
@@ -135,7 +135,7 @@ final class SettingsModel: ObservableObject {
         switch screen {
         case .projectSettings, .providerSettings, .dbServerSettings, .sshServerSettings, .forgeAccountSettings, .slackWorkspaceSettings,
              .mcpServerSettings, .envoyerAccountSettings: return true
-        case .mailSettings, .serverSettings, .templatesSettings, .personalConnection, .sharing, .sshMonitoring: return true
+        case .githubAccountSettings, .mailSettings, .serverSettings, .templatesSettings, .personalConnection, .sharing, .sshMonitoring: return true
         default: return false
         }
     }

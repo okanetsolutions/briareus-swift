@@ -1,5 +1,5 @@
 // Settings, as the Windows client's settings page: a sidebar of its own (← Back to sessions, the projects, the providers,
-// the database pool, the SSH servers, the Forge accounts and the Slack workspaces, each with ＋ New) whose rows open their
+// the database pool, the SSH servers, the GitHub and Forge accounts and the Slack workspaces, each with ＋ New) whose rows open their
 // forms across the detail pane. Those routes need an Admin token; any other token gets a sentence saying so.
 import SwiftUI
 
@@ -43,7 +43,7 @@ struct SettingsSidebar: View {
         let why = settingsUnavailable("settings_projects", path: "settings/projects", what: "Project settings", manage: "projects")
         SectionHeader(title: "Projects", onNew: why == nil ? { model.newProject() } : nil)
         if let why {
-            Explanation(text: why)
+            SettingsExplanation(text: why)
             ssh
             Color.clear.frame(height: 8)
         } else {
@@ -64,11 +64,12 @@ struct SettingsSidebar: View {
                               onNew: store.supports("create_db_server") ? { model.newServer() } : nil)
                 servers
             }
-            // The SSH servers agents may run commands on, as on the Windows client, then the Forge accounts and the Slack
-            // workspaces on a server that has them.
+            // The SSH servers agents may run commands on, as on the Windows client, then the GitHub and Forge accounts and
+            // the Slack workspaces on a server that has them (SettingsSidebarAccounts.swift).
             ssh
-            if store.supports("settings_forge_accounts") { forge }
-            if store.supports("settings_slack_workspaces") { slack }
+            if store.supports("settings_github_accounts") { GithubAccountRows(selected: selected) }
+            if store.supports("settings_forge_accounts") { ForgeAccountRows(selected: selected) }
+            if store.supports("settings_slack_workspaces") { SlackWorkspaceRows(selected: selected) }
             if store.supports("settings_mcp_servers") { mcp }
             if ServerSettingsModel.offered {
                 Color.clear.frame(height: 8)
@@ -108,7 +109,7 @@ struct SettingsSidebar: View {
         }
         // A project being added shows as its own row until it is saved.
         if selected == "project-settings:new" { ItemRow(label: "New project", sub: "not saved yet", enabled: false, selected: true) {} }
-        if s.loaded && s.list.isEmpty && s.error == nil { Explanation(text: "No projects yet. ＋ New adds a repository sessions can be started against.") }
+        if s.loaded && s.list.isEmpty && s.error == nil { SettingsExplanation(text: "No projects yet. ＋ New adds a repository sessions can be started against.") }
         if !s.loaded { LoadingNote(text: "Loading projects…") }
         Color.clear.frame(height: 8)
     }
@@ -126,7 +127,7 @@ struct SettingsSidebar: View {
         if selected == "provider-settings:new" {
             ProviderItemRow(label: "New provider", active: false, tags: ["not saved yet"], selected: true) {}
         }
-        if s.loaded && s.list.isEmpty && s.error == nil { Explanation(text: "No providers yet. Add one so sessions can be started.") }
+        if s.loaded && s.list.isEmpty && s.error == nil { SettingsExplanation(text: "No providers yet. Add one so sessions can be started.") }
         if !s.loaded { LoadingNote(text: "Loading providers…") }
         Color.clear.frame(height: 8)
     }
@@ -141,7 +142,7 @@ struct SettingsSidebar: View {
                     selected: selected == "db-server:\(row["id"].int32 ?? 0)") { model.openServer(i) }
         }
         if selected == "db-server:new" { ItemRow(label: "New database server", sub: "not saved yet", enabled: false, selected: true) {} }
-        if s.loaded && s.list.isEmpty && s.error == nil { Explanation(text: "No servers yet. Add one so sessions can claim a database of their own.") }
+        if s.loaded && s.list.isEmpty && s.error == nil { SettingsExplanation(text: "No servers yet. Add one so sessions can claim a database of their own.") }
         if !s.loaded { LoadingNote(text: "Loading the database pool…") }
         Color.clear.frame(height: 8)
     }
@@ -152,7 +153,7 @@ struct SettingsSidebar: View {
         let why = settingsUnavailable("settings_ssh_servers", path: "settings/ssh/servers", what: "SSH servers", manage: "them")
         SectionHeader(title: "SSH servers", onNew: why == nil ? { model.newSSH() } : nil)
         if let why {
-            Explanation(text: why)
+            SettingsExplanation(text: why)
         } else {
             let s = model.ssh
             if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
@@ -165,46 +166,10 @@ struct SettingsSidebar: View {
             // A server being registered shows as its own row until it is saved.
             if selected == "ssh-server:new" { ItemRow(label: "New SSH server", sub: "not saved yet", enabled: false, selected: true) {} }
             if s.loaded && s.list.isEmpty && s.error == nil {
-                Explanation(text: "No SSH servers registered. ＋ New lets a project's sessions run commands on one, with approval.")
+                SettingsExplanation(text: "No SSH servers registered. ＋ New lets a project's sessions run commands on one, with approval.")
             }
             if !s.loaded { LoadingNote(text: "Loading SSH servers…") }
         }
-    }
-
-    /// The Forge accounts under the SSH servers: each with its dot (a token is stored), label, organization and projects.
-    @ViewBuilder private var forge: some View {
-        Color.clear.frame(height: 8)
-        SectionHeader(title: "Forge accounts", onNew: store.supports("create_forge_account") ? { model.newForge() } : nil)
-        let s = model.forge
-        if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
-        ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
-            ItemRow(label: row["label"].nonEmpty ?? row["organization"].nonEmpty ?? "Forge account", sub: ForgeAccountFormState.sidebarLine(row),
-                    enabled: row["hasToken"].is(true), selected: selected == Screen.forgeAccountSettings(row: row, defaults: nil).id) { model.openForge(i) }
-        }
-        // An account being added shows as its own row until it is saved.
-        if selected == "forge-account:new" { ItemRow(label: "New Forge account", sub: "not saved yet", enabled: false, selected: true) {} }
-        if s.loaded && s.list.isEmpty && s.error == nil {
-            Explanation(text: "No Forge accounts yet. ＋ New adds a Laravel Forge organization and the projects that may use it.")
-        }
-        if !s.loaded { LoadingNote(text: "Loading Forge accounts…") }
-    }
-
-    /// The Slack workspaces under the Forge accounts: each with its dot (a token is stored), label, workspace and projects.
-    @ViewBuilder private var slack: some View {
-        Color.clear.frame(height: 8)
-        SectionHeader(title: "Slack workspaces", onNew: store.supports("create_slack_workspace") ? { model.newSlack() } : nil)
-        let s = model.slack
-        if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
-        ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
-            ItemRow(label: row["label"].nonEmpty ?? row["team"].nonEmpty ?? "Slack workspace", sub: SlackWorkspaceFormState.sidebarLine(row),
-                    enabled: row["hasToken"].is(true), selected: selected == Screen.slackWorkspaceSettings(row: row, defaults: nil).id) { model.openSlack(i) }
-        }
-        // A workspace being added shows as its own row until it is saved.
-        if selected == "slack-workspace:new" { ItemRow(label: "New Slack workspace", sub: "not saved yet", enabled: false, selected: true) {} }
-        if s.loaded && s.list.isEmpty && s.error == nil {
-            Explanation(text: "No Slack workspaces yet. ＋ New lets a project's sessions send Slack messages as you and hear the replies.")
-        }
-        if !s.loaded { LoadingNote(text: "Loading Slack workspaces…") }
     }
 
     /// The MCP servers whose tools sessions get: each with its dot (ready), label, kind, status and projects.
@@ -220,7 +185,7 @@ struct SettingsSidebar: View {
         }
         if selected == "mcp-server:new" { ItemRow(label: "New MCP server", sub: "not saved yet", enabled: false, selected: true) {} }
         if s.loaded && s.list.isEmpty && s.error == nil {
-            Explanation(text: "No MCP servers yet. ＋ New gives sessions another server's tools, remote or run beside them.")
+            SettingsExplanation(text: "No MCP servers yet. ＋ New gives sessions another server's tools, remote or run beside them.")
         }
         if !s.loaded { LoadingNote(text: "Loading MCP servers…") }
     }
@@ -236,7 +201,7 @@ struct SettingsSidebar: View {
                     selected: selected == Screen.envoyerAccountSettings(row: row, defaults: nil).id) { Navigator.shared.show(.envoyerAccountSettings(row: row, defaults: nil)) }
         }
         if selected == "envoyer-account:new" { ItemRow(label: "New Envoyer account", sub: "not saved yet", enabled: false, selected: true) {} }
-        if s.loaded && s.list.isEmpty && s.error == nil { Explanation(text: "No Envoyer accounts yet. ＋ New lets a project deploy through Laravel Envoyer.") }
+        if s.loaded && s.list.isEmpty && s.error == nil { SettingsExplanation(text: "No Envoyer accounts yet. ＋ New lets a project deploy through Laravel Envoyer.") }
     }
 
     // MARK: Foot
@@ -296,7 +261,7 @@ struct SectionHeader: View {
 }
 
 /// A sentence in place of a list: why it cannot be shown, or that it is empty.
-private struct Explanation: View {
+struct SettingsExplanation: View {
     var text: String
     var body: some View {
         Text(text).font(Theme.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
@@ -448,7 +413,7 @@ private struct MailSettingsRows: View {
                     selected: selected == Screen.mailSettings(id: m.id).id) { Navigator.shared.show(.mailSettings(id: m.id)) }
         }
         if selected == "mail-settings" { ItemRow(label: "New mailbox", sub: "not connected yet", enabled: false, selected: true) {} }
-        if mail.loaded && a.accounts.isEmpty { Explanation(text: "No mailboxes yet. ＋ New signs in to Gmail or Outlook.") }
+        if mail.loaded && a.accounts.isEmpty { SettingsExplanation(text: "No mailboxes yet. ＋ New signs in to Gmail or Outlook.") }
         if !mail.loaded { LoadingNote(text: "Loading mail accounts…") }
         Color.clear.frame(height: 16)
             .task { await mail.load() }
