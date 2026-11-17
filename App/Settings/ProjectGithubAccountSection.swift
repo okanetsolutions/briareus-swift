@@ -20,6 +20,7 @@ struct ProjectGithubAccountSection: View {
                 }
                 .listRowBackground(Theme.row)
                 .task { await model.load() }
+                .onDisappear { model.stop() }
                 if let health = model.health { GithubHealthResults(health: health) }
             }
         }

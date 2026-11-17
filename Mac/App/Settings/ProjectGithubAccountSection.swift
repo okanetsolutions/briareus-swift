@@ -10,29 +10,30 @@ struct ProjectGithubAccountSection: View {
 
     var body: some View {
         if model.canRead {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Text("GitHub account").font(Theme.footnoteSemibold).foregroundStyle(Theme.ink)
-                    identity
-                    Spacer()
-                    if model.canCheck {
-                        Button { model.check() } label: {
-                            Label(model.checking ? "Checking…" : "Check GitHub account", systemImage: "stethoscope")
+            Card(radius: BriareusRadius.lg) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text("GitHub account").font(Theme.footnoteSemibold).foregroundStyle(Theme.ink)
+                        identity
+                        Spacer()
+                        if model.canCheck {
+                            Button { model.check() } label: {
+                                Label(model.checking ? "Checking…" : "Check GitHub account", systemImage: "stethoscope")
+                            }
+                            .dashButton(.bordered).disabled(model.checking)
+                            .help("Check its token, scopes, repositories and rate limits against GitHub")
                         }
-                        .dashButton(.bordered).disabled(model.checking)
-                        .help("Check its token, scopes, repositories and rate limits against GitHub")
                     }
+                    if let detail = model.identity?.detail {
+                        Text(detail).font(Theme.footnote).foregroundStyle(Theme.muted)
+                    }
+                    if let error = model.checkError { Notice(message: error) }
+                    if let health = model.health { GithubHealthResults(health: health) }
                 }
-                if let detail = model.identity?.detail {
-                    Text(detail).font(Theme.footnote).foregroundStyle(Theme.muted)
-                }
-                if let error = model.checkError { Notice(message: error) }
-                if let health = model.health { GithubHealthResults(health: health) }
             }
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: BriareusRadius.lg).fill(Theme.raise))
             .padding(.bottom, 16)
             .task { await model.load() }
+            .onDisappear { model.stop() }
         }
     }
 
