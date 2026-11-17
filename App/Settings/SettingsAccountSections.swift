@@ -14,9 +14,9 @@ struct GithubAccountsSection: View {
             if let error = s.error { ErrorNotice(message: error) }
             ForEach(Array(s.list.enumerated()), id: \.offset) { _, row in
                 DestinationLink(destination: .githubAccountSettings(row: row)) {
-                    SettingsItemRow(title: row["label"].nonEmpty ?? row["login"].nonEmpty ?? "GitHub account",
+                    SettingsItemRow(title: GithubAccountFormState.title(row),
                                     subtitle: GithubAccountFormState.sidebarLine(row), on: row["hasToken"].is(true),
-                                    systemImage: "person.badge.key")
+                                    systemImage: "person")
                 }
             }
             if !s.loaded { SettingsLoadingRow(text: "Loading GitHub accounts…") }

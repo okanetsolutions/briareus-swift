@@ -30,7 +30,7 @@ View (`App/**`, `Mac/App/**`) -> Model (`@MainActor ObservableObject`, `*Model.s
 | Status, Usage | `Status/` (Status), `Findings/` (Usage) | `Findings/` | `AttentionLogic.swift`, `PhoneUsage.swift`, `UsageLogic.swift` |
 | Code reviews (a pull request's tab) | `Board/` | `Board/` | `CodeReviewLogic.swift` |
 | Server resources, SSH monitoring, CI/CD | `Stats/` | `Stats/` | `StatsLogic.swift`, `SSHMonitoringLogic.swift`, `CILogic.swift` |
-| Settings | `Settings/` | `Settings/` | `SettingsLogic.swift`, `SSHServerLogic.swift` (the SSH server form), `AccountSettingsLogic.swift` |
+| Settings | `Settings/` | `Settings/` | `SettingsLogic.swift`, `SSHServerLogic.swift` (the SSH server form), `AccountSettingsLogic.swift`, `GithubAccountLogic.swift` (the GitHub account form) |
 | Forge | `Forge/` | `Board/ProjectForgeTab.swift`, `Board/ForgeSiteView.swift` | `Forge.swift` |
 | Shared browser | `Conversations/SharedBrowserScreen.swift` | `Conversation/SharedBrowserScreen.swift` | `SharedBrowser.swift` |
 | Voice notes | `Conversations/ComposerVoiceNote.swift` | `Conversation/VoiceNote.swift` | n/a |

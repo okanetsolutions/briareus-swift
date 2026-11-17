@@ -133,7 +133,7 @@ struct GithubAccountSettingsScreen: View {
             .onChange(of: model.scrollToken) { _, _ in withAnimation { proxy.scrollTo(settingsErrorID, anchor: .top) } }
         }
         .modifier(SettingsFormChrome(
-            title: id != 0 ? state.row["label"].nonEmpty ?? state.row["login"].nonEmpty ?? "GitHub account" : "New GitHub account",
+            title: id != 0 ? GithubAccountFormState.title(state.row) : "New GitHub account",
             dirty: state.dirty, discardMessage: state.discardMessage, saveTitle: "Save",
             canSave: !model.busy && (state.dirty || id == 0) && store.supports(state.saveOperation),
             saving: model.saving, onSave: { focus = nil; model.save { dismiss() } },

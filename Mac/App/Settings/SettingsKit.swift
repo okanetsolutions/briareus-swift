@@ -1,5 +1,5 @@
 // What the settings page's sidebar and its forms share, as screen_settings.c keeps it: the lists the sidebar read (the
-// projects, providers, database pool, SSH servers, Forge accounts and Slack workspaces, which the forms also read), the menus the pickers pop up, and the
+// projects, providers, database pool, SSH servers, Forge accounts and Slack workspaces, which the forms also read; the GitHub accounts are GithubAccountsModel's), the menus the pickers pop up, and the
 // form's pieces: labelled boxes, check rows, select boxes, notes and the tab row.
 import AppKit
 import Combine
@@ -74,7 +74,7 @@ final class SettingsModel: ObservableObject {
     func start() {
         tasks.values.forEach { $0.cancel() }
         tasks = [:]
-        projects = Section(); providers = Section(); servers = Section(); ssh = Section(); forge = Section(); slack = Section(); mcp = Section(); envoyer = Section()
+        projects = Section(); providers = Section(); servers = Section(); ssh = Section(); forge = Section(); slack = Section(); mcp = Section(); envoyer = Section(); GithubAccountsModel.shared.reset()
         ordering = false
         openFirstProvider = false; openFirstServer = false
         refresh()

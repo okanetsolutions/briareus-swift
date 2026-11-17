@@ -33,6 +33,9 @@ final class GithubAccountsModel: ObservableObject {
         }
     }
 
+    /// The settings page opening: what an earlier connection read goes, and the section shows it is loading.
+    func reset() { task?.cancel(); section = SettingsModel.Section() }
+
     func open(_ row: JSON) { Navigator.shared.show(.githubAccountSettings(row: row)) }
     func new() { Navigator.shared.show(.githubAccountSettings(row: nil)) }
 }

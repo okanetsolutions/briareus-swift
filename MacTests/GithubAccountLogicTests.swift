@@ -19,10 +19,20 @@ final class GithubAccountFormStateTests: XCTestCase {
     func testAnUpdateWithAnEmptyTokenKeepsTheStoredOne() throws {
         let body = try GithubAccountFormState(row: saved).body().get()
         XCTAssertNil(body.object?["token"])
-        XCTAssertEqual(body["label"], "Bot")
         XCTAssertEqual(body["repos"], ["a/b"])
         // Read-only fields are never sent back.
         for key in ["login", "githubId", "scopes", "hasToken", "id"] { XCTAssertNil(body.object?[key], key) }
+    }
+
+    func testAnUnchangedLabelIsLeftOutSoItKeepsFollowingTheLogin() throws {
+        var s = GithubAccountFormState(row: saved)
+        s.texts[.token] = "ghp_rotated"
+        XCTAssertNil(try s.body().get().object?["label"])
+        s.texts[.label] = "Renamed"
+        XCTAssertEqual(try s.body().get()["label"], "Renamed")
+        // Emptied, it is sent empty: the server names the account after its login again.
+        s.texts[.label] = ""
+        XCTAssertEqual(try s.body().get()["label"], "")
     }
 
     func testATokenTypedIsSentTrimmed() throws {
@@ -116,9 +126,11 @@ final class GithubAccountFormStateTests: XCTestCase {
     }
 
     func testLinesNameTheLoginAndAMissingToken() {
-        XCTAssertTrue(GithubAccountFormState.sidebarLine(saved).contains("@acme-bot"))
+        XCTAssertTrue(GithubAccountFormState.sidebarLine(saved).contains("acme-bot"))
         XCTAssertTrue(GithubAccountFormState.sidebarLine(saved).contains("a/b"))
-        XCTAssertTrue(GithubAccountFormState.subtitle(saved).contains("@acme-bot"))
+        XCTAssertTrue(GithubAccountFormState.subtitle(saved).contains("acme-bot"))
+        XCTAssertEqual(GithubAccountFormState.title(saved), "Bot")
+        XCTAssertTrue(GithubAccountFormState.title(["login": "acme-bot"]).contains("acme-bot"))
         XCTAssertNotEqual(GithubAccountFormState.subtitle(saved), GithubAccountFormState.subtitle(["repos": ["a/b"], "hasToken": false]))
     }
 

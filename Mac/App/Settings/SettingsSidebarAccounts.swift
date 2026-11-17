@@ -14,7 +14,7 @@ struct GithubAccountRows: View {
         let s = model.section
         if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
         ForEach(Array(s.list.enumerated()), id: \.offset) { _, row in
-            ItemRow(label: row["label"].nonEmpty ?? row["login"].nonEmpty ?? "GitHub account", sub: GithubAccountFormState.sidebarLine(row),
+            ItemRow(label: GithubAccountFormState.title(row), sub: GithubAccountFormState.sidebarLine(row),
                     enabled: row["hasToken"].is(true), selected: selected == Screen.githubAccountSettings(row: row).id) { model.open(row) }
         }
         // An account being added shows as its own row until it is saved.

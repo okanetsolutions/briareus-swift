@@ -70,7 +70,7 @@ struct GithubAccountSettingsScreen: View {
             }
         }
         return id != 0
-            ? PaneHeader(title: state.row["label"].nonEmpty ?? state.row["login"].nonEmpty ?? "GitHub account",
+            ? PaneHeader(title: GithubAccountFormState.title(state.row),
                          subtitle: GithubAccountFormState.subtitle(state.row), buttons: buttons)
             : PaneHeader(title: "New GitHub account", subtitle: "A GitHub token the server uses for the projects you tick.", buttons: buttons)
     }

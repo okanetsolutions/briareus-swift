@@ -60,7 +60,9 @@ struct GithubAccountFormState: Equatable, Sendable {
 
     func body() -> Result<JSON, FormProblem> {
         var body: JSON = [:]
-        body["label"] = .string(text(.label).cTrimmed)
+        // A label sent at all stops following the login, so an update sends it only when it was changed: the server keeps
+        // one left alone as it was, following the login or not. An emptied box follows the login again.
+        if id == 0 || text(.label) != Self.fieldText(row, .label) { body["label"] = .string(text(.label).cTrimmed) }
         // An empty token is left out, so the stored one stays.
         let token = text(.token).cTrimmed
         if !token.isEmpty { body["token"] = .string(token) }
@@ -71,9 +73,7 @@ struct GithubAccountFormState: Equatable, Sendable {
 
     /// Whether the form holds a change not saved yet, for the dot after the tab's title. The projects compare in any order.
     var changed: Bool {
-        let saved = row["repos"].strings
-        return !(repos.count == saved.count && repos.allSatisfy(saved.contains))
-            || GithubAccountField.allCases.contains { text($0) != Self.fieldText(row, $0) }
+        !sameRepos(repos, row["repos"].strings) || GithubAccountField.allCases.contains { text($0) != Self.fieldText(row, $0) }
     }
 
     /// The label of the other saved account that already serves `repo`, if one does: the server gives a project one
@@ -114,6 +114,9 @@ struct GithubAccountFormState: Equatable, Sendable {
         guard error.kind == .http, error.status == 409 else { return nil }
         return "A ticked project is already served by another GitHub account. Untick it there first, then save this one."
     }
+
+    /// What a saved account is called: its label, else its login.
+    static func title(_ row: JSON) -> String { row["label"].nonEmpty ?? row["login"].nonEmpty.map { "@\($0)" } ?? "GitHub account" }
 
     /// The sidebar row's second line: the login, and its one project or how many.
     static func sidebarLine(_ row: JSON) -> String {
