@@ -205,8 +205,7 @@ struct PullProjectsItem: View {
             }
             if shown.isEmpty {
                 if let refused = entries.lazy.compactMap(\.error).first {
-                    Text(verbatim: "GitHub would not read its projects with the server’s token, which needs Projects: read. \(refused)")
-                        .font(Theme.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                    GithubRefusalNote(refusal: githubRefusal(.projects, error: refused))
                 } else {
                     Text("None yet").font(Theme.caption).foregroundStyle(Theme.muted)
                 }

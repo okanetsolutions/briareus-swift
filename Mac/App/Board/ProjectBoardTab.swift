@@ -246,12 +246,7 @@ struct ProjectBoardTab: View {
 
     /// What stands above the columns: GitHub's refusal, the view's filter, a cut-off board, and the assignee's share.
     @ViewBuilder private func notes(_ b: ProjectBoard) -> some View {
-        if let refused = b.error {
-            NoticeBox(message: refused)
-            Text("Reading a board needs Projects: read on the server's GitHub token (read:project on a classic token), and a project and view GitHub can find. The board is named in ⚙ Settings → Projects.")
-                .font(Theme.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 6).padding(.bottom, 10)
-        }
+        if let refused = b.error { GithubBoardRefusalNote(refusal: githubRefusal(.board, error: refused)) }
         if let filter = b.filter, !filter.isEmpty {
             Text(verbatim: "Filtered by \(filter)").font(Theme.monoCaption2).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true).padding(.bottom, 8)
         }

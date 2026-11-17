@@ -519,8 +519,7 @@ struct IssueScreen: View {
         if list.isEmpty {
             Section("Projects") {
                 if let refused = model.detail["projectsError"].string {
-                    Text("GitHub would not read its projects with the server’s token, which needs Projects: read.").font(.footnote).foregroundStyle(.secondary)
-                    ErrorNotice(message: refused)
+                    GithubRefusalNote(refusal: githubRefusal(.projects, error: refused))
                 } else {
                     Text("None yet").foregroundStyle(.secondary)
                 }

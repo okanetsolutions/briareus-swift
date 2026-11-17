@@ -47,7 +47,7 @@ Search here before writing a component.
 
 **Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `reviewGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
 
-**Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`. Its errands (`Mac/App/Board/BoardErrands.swift`): `actionIcon`, `ErrandLabel`, `rowActions`, `afterThisEvent`.
+**Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`; `GithubRefusalNote` and `GithubBoardRefusalNote` (`Mac/App/Board/GithubRefusalNote.swift`). Its errands (`Mac/App/Board/BoardErrands.swift`): `actionIcon`, `ErrandLabel`, `rowActions`, `afterThisEvent`.
 
 **Mac settings kit** (`Mac/App/Settings/SettingsKit.swift`): `SettingsPage`, `SettingsTabs`, `SettingsFieldBox`, `SettingsFieldLabel`, `SettingsTextArea`, `SettingsCheck`, `SettingsSelect`, `SettingsLabeledSelect`, `SettingsPair`, `SettingsStatusRow`, `SettingsHint`, `SettingsNote`, `SettingsHelpIcon`, `PopupMenu`.
 
@@ -55,11 +55,11 @@ Search here before writing a component.
 
 **iPhone shared** (`App/Shared/`): `StatTiles`/`StatTileView` (Core's `StatTile`, with an optional value tone per tile id), `StatGauge`, `SavedPrompts`.
 
-**iPhone board pieces** (`App/Board/BoardPieces.swift`): `BoardPullRow`, `BoardIssueRow`, `BoardSessionRow`, `BoardLinkedRow`, `BoardLabelChips`, `BoardBadge`, `ChecksBadge`, `BoardEpicProgress`, `BoardUpdated`, `ErrandNotice`, `BoardFlowLayout`. Its errands (`App/Board/BoardErrands.swift`): `ErrandCatalog`, `boardErrands`, `errandSymbol`, `ErrandRunner`.
+**iPhone board pieces** (`App/Board/BoardPieces.swift`): `BoardPullRow`, `BoardIssueRow`, `BoardSessionRow`, `BoardLinkedRow`, `BoardLabelChips`, `BoardBadge`, `ChecksBadge`, `BoardEpicProgress`, `BoardUpdated`, `ErrandNotice`, `BoardFlowLayout`; `GithubRefusalNote` (`App/Board/GithubRefusalNote.swift`). Its errands (`App/Board/BoardErrands.swift`): `ErrandCatalog`, `boardErrands`, `errandSymbol`, `ErrandRunner`.
 
 **iPhone settings kit** (`App/Settings/SettingsFormKit.swift`): `SettingsFormChrome`, `SettingsTextRow`, `SettingsValueRow`, `SettingsLabel`, `SettingsInfoButton`, `SettingsVerdict`, `SettingsErrorSection`, `SettingsUnavailableView`.
 
-**Core view logic** (shared by both apps): `LinkedState`, `Session.isClosed`, `workingLineText` with `Session.backgroundTasks` (the transcript's working line), `ProjectField.note(on:)` (what a project switch's note says), `BoardAction.startable`/`isSuggested(for:)`/`isDestructive`, `PullRecord`, `PullSnapshot`, `RunServe`, `SettingsRecordForm`, `IssueRowContent` with `RowFact` and `SubIssueProgress`, `PullRowContent` with `PullMark`, `ChecksState` and `RowTone` (each app maps a tone with `Theme.color(_:)`; the reference for converging the rest), `BoardRow`, `BoardFilter`, `BoardAction`, `ReviewStatus`, `StackPosition`, `mergeWarnings`, `issuesNested`, `issuePrompt`, `SettingsField` and the settings form bodies, `CarText`.
+**Core view logic** (shared by both apps): `LinkedState`, `Session.isClosed`, `workingLineText` with `Session.backgroundTasks` (the transcript's working line), `ProjectField.note(on:)` (what a project switch's note says), `BoardAction.startable`/`isSuggested(for:)`/`isDestructive`, `PullRecord`, `PullSnapshot`, `RunServe`, `SettingsRecordForm`, `IssueRowContent` with `RowFact` and `SubIssueProgress`, `PullRowContent` with `PullMark`, `ChecksState` and `RowTone` (each app maps a tone with `Theme.color(_:)`; the reference for converging the rest), `BoardRow`, `BoardFilter`, `BoardAction`, `ReviewStatus`, `StackPosition`, `mergeWarnings`, `issuesNested`, `issuePrompt`, `SettingsField` and the settings form bodies, `githubRefusal(_:error:account:)` with `missingGithubTokenRepo` (what GitHub's refusals and the core's missing token say), `CarText`.
 
 ## Known duplicates to converge
 

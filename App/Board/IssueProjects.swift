@@ -219,9 +219,7 @@ struct PullProjectsSection: View {
                 if entries == nil {
                     HStack(spacing: 8) { ProgressView(); Text("Reading the issues' projects…").foregroundStyle(.secondary) }
                 } else if let refused = list.lazy.compactMap(\.error).first {
-                    Text(verbatim: "GitHub would not read the projects with the server’s token, which needs Projects: read.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    ErrorNotice(message: refused)
+                    GithubRefusalNote(refusal: githubRefusal(.projects, error: refused))
                 } else {
                     Text("None of the issues it closes is on a project board.").foregroundStyle(.secondary)
                 }

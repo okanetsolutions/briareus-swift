@@ -110,7 +110,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .localLimit: return SettingsField(key: "localSessionLimit", kind: .number, label: "Local sessions at once", cue: "1",
             hint: "How many Local mode sessions may work in the local checkout at the same time, 1 to 10, or 0 for no limit. More wait in the queue until one closes.")
         case .board: return SettingsField(key: "projectBoard", kind: .board, label: "GitHub Projects board", cue: "https://github.com/orgs/acme/projects/1/views/2",
-            hint: "The board the project's ▦ Board tab shows: its address on GitHub, with the view whose filter and columns it follows. The server's GitHub token needs Projects: read. Leave empty for no Board tab.", mono: true)
+            hint: "The board the project's ▦ Board tab shows: its address on GitHub, with the view whose filter and columns it follows. The project's GitHub account (or the server's GITHUB_TOKEN without one) needs Projects: read. Leave empty for no Board tab.", mono: true)
         case .printing: return SettingsField(key: "printToolsEnabled", kind: .bool, label: "Allow sessions to print on the server’s printers", hint: "Gives interactive sessions access to the server’s CUPS printers; off by default.")
         case .setup: return SettingsField(key: "setupCommands", kind: .list, label: "Setup commands",
             hint: "One shell command per line, run in the checkout in order before the session starts. The first failure aborts the session.", rows: 6, mono: true)
@@ -155,7 +155,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
             return "Inactive: no session can be started on it and it is left out of the project lists; its settings are kept for when it is switched back on."
         case .enforceOutcome:
             return on
-                ? "Each pull request's review outcome is written to its head as briareus/code-review, and its approvals as briareus/approvals, which branch protection can require. The server's GitHub token must be allowed to write commit statuses."
+                ? "Each pull request's review outcome is written to its head as briareus/code-review, and its approvals as briareus/approvals, which branch protection can require. The project's GitHub account (or the server's GITHUB_TOKEN without one) must be allowed to write commit statuses."
                 : "The outcome is still computed and shown here; nothing is written to GitHub."
         case .benchmark where on:
             return "A benchmark run opens pull requests and branches in this repository and closes them again: keep it for a repository nobody works in."

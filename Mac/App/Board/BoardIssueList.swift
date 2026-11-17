@@ -11,9 +11,7 @@ struct BoardIssueList: View {
     var body: some View {
         if let refused = model.board["issuesError"].string {
             BoardBox(padding: 12, radius: 10) {
-                Text("GitHub would not read this repository’s issues with the server’s token. A fine-grained token needs Issues: read. The pull requests are unaffected.")
-                    .font(Theme.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
-                Notice(message: refused).padding(.top, 6)
+                GithubRefusalNote(refusal: githubRefusal(.issues, error: refused), font: Theme.footnote)
             }
         } else {
             let issues = model.listedIssues

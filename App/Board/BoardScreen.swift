@@ -160,9 +160,7 @@ struct BoardScreen: View {
     @ViewBuilder private func issueRows(_ issues: [(summary: IssueSummary, raw: JSON)]) -> some View {
         if let refused = board["issuesError"].string {
             Section {
-                Text("GitHub would not read this repository’s issues with the server’s token. A fine-grained token needs Issues: read. The pull requests are unaffected.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                ErrorNotice(message: refused)
+                GithubRefusalNote(refusal: githubRefusal(.issues, error: refused))
             }
             .listRowBackground(Theme.row)
         } else {
