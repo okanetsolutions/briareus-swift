@@ -50,7 +50,8 @@ struct GithubAccountIdentity: Equatable, Sendable {
 }
 
 /// How a message names the account that read GitHub for a project: the loaded identity when there is one, else the
-/// project's account in general. For refusals such as "could not read the board with …".
+/// project's account in general. For the board's and issue screens' refusals (step 3 of #179), such as "could not read
+/// the board with …".
 func githubAccountPhrase(_ identity: GithubAccountIdentity?) -> String {
     guard let identity else { return "the project's GitHub account" }
     if !identity.hasToken {
@@ -206,7 +207,6 @@ extension GithubAccountHealth {
             return rows.isEmpty ? nil : GithubHealthGroup(section: section, rows: rows)
         }
     }
-
 
     /// Healthy as the server judges it. Otherwise a fault (a bad or missing token, missing scopes, a denied repository)
     /// needs attention, and a check GitHub only could not finish (throttled, unreachable) is a warning.

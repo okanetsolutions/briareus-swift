@@ -14,6 +14,8 @@ final class ProjectGithubAccountModel: ObservableObject {
     @Published private(set) var health: GithubAccountHealth?
     @Published private(set) var checking = false
     @Published private(set) var checkError: String?
+    /// The check in flight, cancelled when the section goes (`stop()`).
+    private var checkTask: Task<Void, Never>?
 
     init(repo: String) { self.repo = repo }
 
@@ -26,7 +28,9 @@ final class ProjectGithubAccountModel: ObservableObject {
         guard !loaded, canRead else { return }
         do {
             let r = try await Store.shared.call("github_account", ["repo": .string(repo)])
-            identity = GithubAccountIdentity(r)
+            let read = GithubAccountIdentity(r)
+            // A check that answered first already set the identity GitHub verified; this read must not replace it.
+            if health?.account == nil { identity = read }
             loadError = identity == nil ? settingsUnexpectedResponse : nil
             loaded = true
         } catch {
@@ -41,10 +45,11 @@ final class ProjectGithubAccountModel: ObservableObject {
         guard !checking, canCheck else { return }
         checking = true
         checkError = nil
-        Task {
-            defer { checking = false }
+        checkTask = Task {
+            defer { checking = false; checkTask = nil }
             do {
                 let r = try await Store.shared.call("settings_github_health", ["repo": .string(repo)])
+                try Task.checkCancellation()
                 guard let h = GithubAccountHealth(r) else { checkError = settingsUnexpectedResponse; return }
                 health = h
                 if let account = h.account { identity = account; loadError = nil }
@@ -52,5 +57,11 @@ final class ProjectGithubAccountModel: ObservableObject {
                 checkError = failure(error)
             }
         }
+    }
+
+    /// Stops a check still running, so leaving the screen does not leave the server reading GitHub for nobody.
+    func stop() {
+        checkTask?.cancel()
+        checkTask = nil
     }
 }
