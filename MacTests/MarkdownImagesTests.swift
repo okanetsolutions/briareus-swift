@@ -29,7 +29,7 @@ final class MarkdownImagesTests: XCTestCase {
     }
 
     func testABareImageURLBecomesAnImage() {
-        XCTAssertEqual(pieces("Here: https://x.example/s.png"), ["Here: ", "<img https://x.example/s.png|>"])
+        XCTAssertEqual(pieces("Here: https://x.example/s.png"), ["Here:", "<img https://x.example/s.png|>"])
     }
 
     func testImageSyntaxKeepsItsAltText() {
@@ -45,5 +45,26 @@ final class MarkdownImagesTests: XCTestCase {
         let text = "see [docs](https://x.example/page) and **this**"
         XCTAssertEqual(Markdown.pieces(text), [.text(Markdown.inline(text))])
         XCTAssertEqual(Markdown.pieces(""), [])
+    }
+
+    func testPunctuationAroundAnImageGoesWithIt() {
+        XCTAssertEqual(pieces("See https://x.example/a.png."), ["See", "<img https://x.example/a.png|>"])
+        XCTAssertEqual(pieces("A shot (https://x.example/a.png), then more."),
+                       ["A shot", "<img https://x.example/a.png|>", "then more."])
+        XCTAssertEqual(pieces("<https://x.example/a.png>!"), ["<img https://x.example/a.png|>"])
+    }
+
+    func testHTMLImageTagsAreImages() {
+        XCTAssertEqual(pieces(#"<img width="300" alt="Login screen" src="https://x.example/assets/1"> after"#),
+                       ["<img https://x.example/assets/1|Login screen>", "after"])
+        XCTAssertEqual(pieces("<IMG src='https://x.example/a.png'/>"), ["<img https://x.example/a.png|>"])
+        XCTAssertEqual(pieces("<img src=https://x.example/a.png>"), ["<img https://x.example/a.png|>"])
+        let tag = Markdown.inline(#"<img src="https://x.example/a.png">"#)
+        XCTAssertEqual(tag.map(\.flags), [[.link, .image]])
+    }
+
+    func testOtherTagsAndRelativeImagesStayText() {
+        XCTAssertEqual(pieces(#"<img src="docs/a.png"> and <imgx src="https://x.example/page">"#).count, 1)
+        XCTAssertEqual(Markdown.plain(#"`<img src="https://x.example/a.png">`"#), #"<img src="https://x.example/a.png">"#)
     }
 }

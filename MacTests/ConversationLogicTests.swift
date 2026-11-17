@@ -249,7 +249,7 @@ final class ConversationLogicTests: XCTestCase {
 
     func testFindSkipsTheTextOfImagesDrawnAsPreviews() {
         let pieces = markdownFindPieces("See https://x.example/a.png then example text\n\n- ![a diagram](https://x.example/d)")
-        XCTAssertEqual(pieces, ["See ", " then example text"])
+        XCTAssertEqual(pieces, ["See", "then example text"])
         XCTAssertEqual(pieces.flatMap { findOccurrences(of: "example", in: $0) }.count, 1)
         XCTAssertEqual(markdownFindPieces("# Title\n\nplain [docs](https://x.example/page)"), ["Title", "plain docs"])
     }

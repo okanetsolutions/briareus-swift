@@ -23,21 +23,16 @@ extension Markdown {
     }
 
     /// A block's inline text with each image link taken out as an `.image` piece. A link's consecutive spans (a label
-    /// with bold in it) make one image; text left blank between images is dropped. Text without images is one piece.
+    /// with bold in it) make one image. Beside an image, the spacing and brackets that wrapped its URL and the
+    /// punctuation that ended its sentence go with it, and text left with nothing else is dropped. Text without images is
+    /// one piece.
     static func pieces(_ text: String?) -> [MdPiece] {
         var out: [MdPiece] = []
         var run: [MdSpan] = []
-        func flushRun() {
-            if run.contains(where: { !$0.text.allSatisfy(\.isWhitespace) }) {
-                // The newline that set an image on its own line goes with it.
-                if case .image? = out.last, var first = run.first {
-                    first.text = String(first.text.drop(while: \.isNewline)); run[0] = first
-                }
-                if var last = run.last {
-                    last.text = String(last.text.reversed().drop(while: \.isNewline).reversed()); run[run.count - 1] = last
-                }
-                out.append(.text(run.filter { !$0.text.isEmpty }))
-            }
+        func flushRun(beforeImage: Bool) {
+            if case .image? = out.last { trim(&run, fromStart: true, while: { $0.isWhitespace || closers.contains($0) }) }
+            if beforeImage { trim(&run, fromStart: false, while: { $0.isWhitespace || openers.contains($0) }) }
+            if run.contains(where: { !$0.text.allSatisfy(\.isWhitespace) }) { out.append(.text(run)) }
             run = []
         }
         let spans = inline(text)
@@ -49,10 +44,26 @@ extension Markdown {
             }
             var alt = ""
             while i < spans.count, spans[i].url == url, spans[i].flags.contains(.link) { alt += spans[i].text; i += 1 }
-            flushRun()
+            flushRun(beforeImage: true)
             out.append(.image(url: url, alt: alt == url ? "" : alt))
         }
-        flushRun()
+        flushRun(beforeImage: false)
         return out
+    }
+
+    /// What wraps a URL on its left: the image takes them with it.
+    private static let openers: Set<Character> = ["(", "[", "{", "\"", "'", "<"]
+    /// What follows a URL on its right: its closing bracket and the sentence's punctuation.
+    private static let closers: Set<Character> = [")", "]", "}", "\"", "'", ">", ".", ",", ";", ":", "!", "?"]
+
+    /// Drops characters matching `drop` from one end of the spans, across spans, removing the spans it empties.
+    private static func trim(_ spans: inout [MdSpan], fromStart: Bool, while drop: (Character) -> Bool) {
+        while let k = fromStart ? spans.indices.first : spans.indices.last {
+            let text = spans[k].text
+            let kept = fromStart ? String(text.drop(while: drop)) : String(text.reversed().drop(while: drop).reversed())
+            if kept.isEmpty { spans.remove(at: k); continue }
+            spans[k].text = kept
+            return
+        }
     }
 }
