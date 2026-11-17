@@ -49,9 +49,7 @@ private final class ProjectFormModel: ObservableObject {
     }
     private func changed() { if !state.dirty { state.dirty = true } }
 
-    var discardMessage: String {
-        state.discardMessage
-    }
+    var discardMessage: String { state.discardMessage }
     func tabDot(_ t: ProjectTab) -> Bool { state.dirty && state.tabChanged(t) }
 
     private func show(_ problem: FormProblem) {
@@ -60,8 +58,7 @@ private final class ProjectFormModel: ObservableObject {
         scrollToken += 1
     }
     private func showError(_ text: String?) {
-        guard let text else { return }
-        error = text; scrollToken += 1
+        if let text { error = text; scrollToken += 1 }
     }
 
     // MARK: Runtimes
@@ -176,9 +173,9 @@ private final class ProjectFormModel: ObservableObject {
 }
 
 struct ProjectSettingsScreen: View {
-    let row: JSON?
-    let defaults: JSON?
     @StateObject private var model: ProjectFormModel
+    /// The saved project's GitHub account, kept for the screen's life so a check survives scrolling and tab changes.
+    @StateObject private var githubAccount: ProjectGithubAccountModel
     @FocusState private var focus: ProjectField?
     @EnvironmentObject private var store: Store
     @Environment(\.navigate) private var navigate
@@ -186,9 +183,8 @@ struct ProjectSettingsScreen: View {
     @State private var confirmDelete = false
 
     init(row: JSON?, defaults: JSON?) {
-        self.row = row
-        self.defaults = defaults
         _model = StateObject(wrappedValue: ProjectFormModel(row: row, defaults: defaults))
+        _githubAccount = StateObject(wrappedValue: ProjectGithubAccountModel(repo: ProjectFormState(row: row ?? [:]).githubRepo))
     }
 
     private var state: ProjectFormState { model.state }
@@ -244,6 +240,8 @@ struct ProjectSettingsScreen: View {
                 DispatchQueue.main.async { focus = f }
             }
         }
+        .task { await githubAccount.load() }
+        .onDisappear { githubAccount.stop() }
     }
 
     // MARK: Tabs
@@ -252,6 +250,7 @@ struct ProjectSettingsScreen: View {
         switch model.tab {
         case .project:
             Section { field(.repo); field(.label) }.listRowBackground(Theme.row)
+            ProjectGithubAccountSection(model: githubAccount)
             checkSection(.enabled); checkSection(.printing)
             Section { field(.localDir); field(.localLimit); field(.board) }.listRowBackground(Theme.row)
             Section { field(.setup); field(.php) } header: { Text("Setup") } footer: {

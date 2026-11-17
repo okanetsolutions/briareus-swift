@@ -362,6 +362,9 @@ struct APIRoute: Sendable {
         .init(name: "create_github_account", method: "POST", path: "settings/github/accounts"),
         .init(name: "update_github_account", method: "PUT", path: "settings/github/accounts/{id}"),
         .init(name: "delete_github_account", method: "DELETE", path: "settings/github/accounts/{id}"),
+        // The server GitHub account a project uses (any token held to the project), and an admin's check of its health.
+        .init(name: "github_account", method: "GET", path: "github/account"),
+        .init(name: "settings_github_health", method: "GET", path: "settings/github/health"),
         // The Laravel Forge accounts: an organization, its token (write-only) and the projects it serves; admin as well.
         .init(name: "settings_forge_accounts", method: "GET", path: "settings/forge/accounts"),
         .init(name: "create_forge_account", method: "POST", path: "settings/forge/accounts"),
