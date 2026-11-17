@@ -1,9 +1,10 @@
-// The GitHub account the server uses for one project, as its settings show it (ProjectGithubAccountSection): the identity
-// read when the screen comes up (`GET /github/account`, which makes no GitHub request), and an admin's health check
-// (`GET /settings/github/health`), run only on a tap. Nothing is polled; ProjectSettingsScreen owns it, so nothing is
-// kept once the screen goes, and a check is cancelled then rather than when a row scrolls away. The board, issue and
-// pull request screens read the identity with it too, once and only while a GitHub refusal is shown, to name the
-// account (GithubRefusalNote).
+// The GitHub account the server uses for one project: the identity (`GET /github/account`, which makes no GitHub
+// request) and an admin's health check (`GET /settings/github/health`), run only on a tap. Nothing is polled.
+// ProjectSettingsScreen owns one for as long as the screen lives, so a check that is still running when the screen is
+// covered (another tab, ··· → Clone) answers into it and is there on return; the screen reads the identity as it comes
+// up. PullScreen owns one too, whose identity its GitHub account section (PullGithubAccountSection) reads only when
+// tapped, for any token that can read the project; and the board, issue and pull request screens read it once while a
+// GitHub refusal is shown, to name the account (GithubRefusalNote).
 import SwiftUI
 
 @MainActor
@@ -13,13 +14,13 @@ final class ProjectGithubAccountModel: ObservableObject {
     @Published private(set) var identity: GithubAccountIdentity?
     /// The identity was read, or refused; a read only left behind is asked again the next time the screen comes up.
     @Published private(set) var loaded = false
+    /// The identity is being read.
+    @Published private(set) var reading = false
     @Published private(set) var loadError: String?
-    /// The last check's answer, for as long as the screen is up.
+    /// The last check's answer, for as long as the model's owner lives.
     @Published private(set) var health: GithubAccountHealth?
     @Published private(set) var checking = false
     @Published private(set) var checkError: String?
-    /// The check in flight, cancelled when the screen goes (`stop()`).
-    private var checkTask: Task<Void, Never>?
 
     init(repo: String?) { self.repo = repo }
 
@@ -29,7 +30,9 @@ final class ProjectGithubAccountModel: ObservableObject {
     var canCheck: Bool { Store.shared.supports("settings_github_health") }
 
     func load() async {
-        guard !loaded, canRead, let repo else { return }
+        guard !loaded, !reading, canRead, let repo else { return }
+        reading = true
+        defer { reading = false }
         do {
             let r = try await Store.shared.call("github_account", ["repo": .string(repo)])
             let read = GithubAccountIdentity(r)
@@ -44,16 +47,16 @@ final class ProjectGithubAccountModel: ObservableObject {
         }
     }
 
-    /// Checks the account against GitHub now; its answer also refreshes the identity (the login GitHub verified).
+    /// Checks the account against GitHub now; its answer also refreshes the identity (the login GitHub verified). It is
+    /// one request, left to finish whatever the screen does meanwhile, so its answer is never lost to a covered screen.
     func check() {
         guard !checking, canCheck, let repo else { return }
         checking = true
         checkError = nil
-        checkTask = Task {
-            defer { checking = false; checkTask = nil }
+        Task {
+            defer { checking = false }
             do {
                 let r = try await Store.shared.call("settings_github_health", ["repo": .string(repo)])
-                try Task.checkCancellation()
                 guard let h = GithubAccountHealth(r) else { checkError = settingsUnexpectedResponse; return }
                 health = h
                 if let account = h.account { identity = account; loadError = nil }
@@ -61,11 +64,5 @@ final class ProjectGithubAccountModel: ObservableObject {
                 checkError = failure(error)
             }
         }
-    }
-
-    /// Stops a check still running, so leaving the screen does not leave the server reading GitHub for nobody.
-    func stop() {
-        checkTask?.cancel()
-        checkTask = nil
     }
 }

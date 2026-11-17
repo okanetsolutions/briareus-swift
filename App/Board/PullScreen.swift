@@ -14,6 +14,8 @@ struct PullScreen: View {
     @ObservedObject private var catalog = ErrandCatalog.shared
     @StateObject private var model: PullScreenModel
     @StateObject private var errands: ErrandRunner
+    /// The GitHub account serving the project, read on a tap and kept while the screen lives, whichever section shows.
+    @StateObject private var githubAccount: ProjectGithubAccountModel
     @Environment(\.navigate) private var navigate
     @State private var deleting: Session?
     @State private var deletingServed = false
@@ -26,6 +28,7 @@ struct PullScreen: View {
         _model = StateObject(wrappedValue: PullScreenModel(repo: repo, number: number, stack: stack.flatMap { StackPosition(restoring: $0) },
                                                            summary: summary.flatMap { PullSummary($0) }))
         _errands = StateObject(wrappedValue: ErrandRunner(repo: repo))
+        _githubAccount = StateObject(wrappedValue: ProjectGithubAccountModel(repo: repo))
     }
 
     // The screen, its polls and its prompts, in three parts the type checker takes one at a time.
@@ -111,7 +114,7 @@ struct PullScreen: View {
                 if model.error == nil { ProgressView().frame(maxWidth: .infinity).padding(.vertical, 12).listRowBackground(Color.clear) }
             } else {
                 switch model.section {
-                case .description: description
+                case .description: PullDescriptionSection(model: model); PullGithubAccountSection(account: githubAccount)
                 case .files: files
                 case .reviews: reviews
                 case .issues: issues
@@ -426,25 +429,6 @@ struct PullScreen: View {
     }
 
     // MARK: Sections
-
-    @ViewBuilder private var description: some View {
-        let body = model.pr["body"].string ?? model.descriptionBody
-        let loading = body == nil && !model.bodyRead && store.supports("pull_description")
-        Section {
-            if let body {
-                let text = visibleMarkdown(body)
-                if text.isEmpty { Text("No description provided.").italic().foregroundStyle(.secondary) }
-                else { MarkdownText(text).font(.callout) }
-            } else if loading {
-                HStack(spacing: 8) { ProgressView(); Text("Loading the description…").foregroundStyle(.secondary) }
-            } else {
-                Text("No description provided.").italic().foregroundStyle(.secondary)
-            }
-        } header: {
-            if let author = model.author { Text("@\(author)") }
-        }
-        .listRowBackground(Theme.row)
-    }
 
     @ViewBuilder private var files: some View {
         Section {

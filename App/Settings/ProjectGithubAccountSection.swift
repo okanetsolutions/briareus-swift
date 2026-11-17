@@ -1,7 +1,7 @@
 // A project's GitHub account in its settings (ProjectSettingsScreen's Project tab), read-only: which server identity reads
 // GitHub for it and, for an Admin token, Check GitHub account, which lists the token, scopes, repositories and rate limits
-// the check found. The check runs only on a tap; nothing polls. ProjectSettingsScreen owns the model and reads or cancels
-// it with the screen's own life: a Form's rows come and go as they scroll, so nothing here starts or stops anything.
+// the check found. The check runs only on a tap; nothing polls. ProjectSettingsScreen owns the model for the screen's
+// life and reads it as the screen comes up: a Form's rows come and go as they scroll, so nothing here starts anything.
 import SwiftUI
 
 struct ProjectGithubAccountSection: View {
@@ -67,29 +67,5 @@ private struct GithubHealthResults: View {
             }
             .listRowBackground(Theme.row)
         }
-    }
-}
-
-/// One line of the account or its check: a toned symbol, what it is about, and what was found on the right.
-private struct GithubHealthLine: View {
-    var symbol: String
-    var tone: RowTone
-    var title: String
-    var value: String?
-    var detail: String?
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: symbol).foregroundStyle(Theme.color(tone)).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).foregroundStyle(Theme.ink).textSelection(.enabled)
-                if let detail { Text(detail).font(.footnote).foregroundStyle(.secondary) }
-            }
-            if let value {
-                Spacer(minLength: 8)
-                Text(value).foregroundStyle(Theme.color(tone)).multilineTextAlignment(.trailing)
-            }
-        }
-        .accessibilityElement(children: .combine)
     }
 }

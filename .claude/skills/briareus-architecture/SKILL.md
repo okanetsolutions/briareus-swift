@@ -47,13 +47,13 @@ Search here before writing a component.
 
 **Mac shared rows** (`Mac/App/Shared/Rows.swift`): `Badges` from `pullBadges(_:stack:) -> [BadgeSpec]`, `LabelChips`, `SessionRow`, `LinkedRow`, `MetaLine`/`MetaPart`, `PullRow`, `EpicProgress`, `IssueRowView`; glyph helpers `labelColor`, `reviewGlyph`, `toolGlyph`. Also `MarkdownView`/`RichText`/`CodeBlock`, `SelectableText`, `BrowserView`.
 
-**Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`; `GithubRefusalNote` (`Mac/App/Board/GithubRefusalNote.swift`, `boxed` for the ▦ Board tab). Its errands (`Mac/App/Board/BoardErrands.swift`): `actionIcon`, `ErrandLabel`, `rowActions`, `afterThisEvent`.
+**Mac board kit** (`Mac/App/Board/BoardKit.swift`): `boardCall`, `BoardPopupMenu`, `ActionInputDialog`, `BoardRule`, `BoardBox`, `StatePill`, `BranchChip`, `WordFlow`, `CommentHead`, `CheckCounts`, `GlyphLabel`; `GithubRefusalNote` (`Mac/App/Board/GithubRefusalNote.swift`, `boxed` for the ▦ Board tab). The pull request page's sidebar is `PullSidebar` (`Mac/App/Board/PullSidebar.swift`), with `PullGithubAccountItem`; the iPhone's twin is `PullGithubAccountSection`, under `PullDescriptionSection` (`App/Board/PullDescription.swift`). Its errands (`Mac/App/Board/BoardErrands.swift`): `actionIcon`, `ErrandLabel`, `rowActions`, `afterThisEvent`.
 
 **Mac settings kit** (`Mac/App/Settings/SettingsKit.swift`): `SettingsPage`, `SettingsTabs`, `SettingsFieldBox`, `SettingsFieldLabel`, `SettingsTextArea`, `SettingsCheck`, `SettingsSelect`, `SettingsLabeledSelect`, `SettingsPair`, `SettingsStatusRow`, `SettingsHint`, `SettingsNote`, `SettingsHelpIcon`, `PopupMenu`.
 
 **iPhone primitives** (`App/Theme.swift`): `StatusDot`, `StatusLabel`, `ErrorNotice`, `MarkdownText`, `CodeBlock`; otherwise system controls and `ContentUnavailableView`.
 
-**iPhone shared** (`App/Shared/`): `StatTiles`/`StatTileView` (Core's `StatTile`, with an optional value tone per tile id), `StatGauge`, `SavedPrompts`, `ProjectGithubAccountModel` (a project's GitHub identity and health check; also in `Mac/App/Shared/`).
+**iPhone shared** (`App/Shared/`): `StatTiles`/`StatTileView` (Core's `StatTile`, with an optional value tone per tile id), `StatGauge`, `SavedPrompts`, `ProjectGithubAccountModel` (a project's GitHub identity and health check) and `GithubHealthLine` (one toned line of the account or its check), each also in `Mac/App/Shared/`.
 
 **iPhone board pieces** (`App/Board/BoardPieces.swift`): `BoardPullRow`, `BoardIssueRow`, `BoardSessionRow`, `BoardLinkedRow`, `BoardLabelChips`, `BoardBadge`, `ChecksBadge`, `BoardEpicProgress`, `BoardUpdated`, `ErrandNotice`, `BoardFlowLayout`, `GithubRefusalNote`. Its errands (`App/Board/BoardErrands.swift`): `ErrandCatalog`, `boardErrands`, `errandSymbol`, `ErrandRunner`.
 
