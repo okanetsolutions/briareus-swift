@@ -399,13 +399,15 @@ func transcriptFindBlocks(_ blocks: TranscriptRows, expanded: Set<Int>) -> [(seq
     blocks.map { ($0.seq, transcriptFindPieces($0, open: expanded.contains($0.seq))) }
 }
 
-/// A reply's pieces as MarkdownView draws them: a paragraph, heading, list item or quote each, a code block whole, a
-/// table cell by cell, row by row.
+/// A reply's pieces as MarkdownView draws them: a heading each, a paragraph, list item or quote by the texts around its
+/// image previews (an image's URL and alt text are not drawn as text), a code block whole, a table cell by cell.
 func markdownFindPieces(_ source: String?) -> [String] {
     var out: [String] = []
     for b in Markdown.parse(source) {
         switch b.kind {
-        case .paragraph, .heading, .bullet, .quote: out.append(Markdown.plain(b.text))
+        case .heading: out.append(Markdown.plain(b.text))
+        case .paragraph, .bullet, .quote:
+            for case .text(let spans) in Markdown.pieces(b.text) { out.append(spans.map(\.text).joined()) }
         case .code: out.append(b.text)
         case .table: for row in b.cells { for cell in row { out.append(Markdown.plain(cell)) } }
         case .rule: break
