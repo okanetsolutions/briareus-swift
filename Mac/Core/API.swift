@@ -24,14 +24,18 @@ struct APIError: Error, Equatable, Sendable {
     static func refused(_ message: String) -> APIError { APIError(.http, status: 403, message: message) }
 
     var unauthorized: Bool { kind == .http && status == 401 }
-    /// A 4xx is a definite refusal; anything else may have gone through.
-    var isRefusal: Bool { kind == .http && status >= 400 && status < 500 }
+    /// A 4xx is a definite refusal, as is the core's missing GitHub token (a 503 sent before anything was tried);
+    /// anything else may have gone through.
+    var isRefusal: Bool { kind == .http && ((status >= 400 && status < 500) || missingGithubToken != nil) }
     /// A code review refused because the pull request has used the project's `reviewRoundLimit` rounds: nothing started,
     /// and sending it again with `continueReview` runs exactly one more (`BoardAction.arguments(continueReview:)`).
     var isReviewRoundLimit: Bool { kind == .http && status == 409 && code == "review_round_limit" }
     /// The core's `no GitHub token for <repo>`: neither the project's GitHub account nor GITHUB_TOKEN is set, so waiting
     /// will not help (it answers 503) until an admin assigns one.
     var missingGithubToken: String? { kind == .http ? missingGithubTokenRepo(message) : nil }
+
+    /// The server's own words where a screen shows them bare, except the missing GitHub token, which is explained.
+    var serverMessage: String { missingGithubToken == nil ? message ?? description : description }
 
     /// What the user is told.
     var description: String {

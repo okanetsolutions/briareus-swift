@@ -61,6 +61,13 @@ final class GithubRefusalLogicTests: XCTestCase {
         let e = APIError(.http, status: 503, message: "no GitHub token for acme/api")
         XCTAssertEqual(e.missingGithubToken, "acme/api")
         XCTAssertEqual(e.description, missingGithubTokenText("acme/api"))
+        XCTAssertEqual(e.serverMessage, e.description)
+    }
+
+    func testAMissingTokenIsADefiniteRefusalThoughItIsA503() {
+        XCTAssertTrue(APIError(.http, status: 503, message: "no GitHub token for acme/api").isRefusal)
+        XCTAssertFalse(APIError(.http, status: 503, message: "GitHub account registry is not loaded").isRefusal)
+        XCTAssertTrue(APIError(.http, status: 409, message: "conflict").isRefusal)
     }
 
     func testOtherErrorsAreUnchanged() {
@@ -68,5 +75,6 @@ final class GithubRefusalLogicTests: XCTestCase {
         XCTAssertNil(e.missingGithubToken)
         XCTAssertNotEqual(e.description, missingGithubTokenText("acme/api"))
         XCTAssertNil(APIError(.network, message: "no GitHub token for acme/api").missingGithubToken)
+        XCTAssertEqual(e.serverMessage, "GitHub account registry is not loaded")
     }
 }
