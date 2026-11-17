@@ -53,7 +53,7 @@ Search here before writing a component.
 
 **iPhone primitives** (`App/Theme.swift`): `StatusDot`, `StatusLabel`, `ErrorNotice`, `MarkdownText`, `CodeBlock`; otherwise system controls and `ContentUnavailableView`.
 
-**iPhone shared** (`App/Shared/`): `StatTiles`/`StatTileView` (Core's `StatTile`, with an optional value tone per tile id), `StatGauge`, `SavedPrompts`.
+**iPhone shared** (`App/Shared/`): `StatTiles`/`StatTileView` (Core's `StatTile`, with an optional value tone per tile id), `StatGauge`, `SavedPrompts`, `ProjectGithubAccountModel` (a project's GitHub identity and health check; also in `Mac/App/Shared/`).
 
 **iPhone board pieces** (`App/Board/BoardPieces.swift`): `BoardPullRow`, `BoardIssueRow`, `BoardSessionRow`, `BoardLinkedRow`, `BoardLabelChips`, `BoardBadge`, `ChecksBadge`, `BoardEpicProgress`, `BoardUpdated`, `ErrandNotice`, `BoardFlowLayout`; `GithubRefusalNote` (`App/Board/GithubRefusalNote.swift`). Its errands (`App/Board/BoardErrands.swift`): `ErrandCatalog`, `boardErrands`, `errandSymbol`, `ErrandRunner`.
 

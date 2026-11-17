@@ -1,7 +1,7 @@
-// The GitHub account the server uses for one project, as its settings' Project tab shows it (ProjectGithubAccountSection):
-// the identity read when the tab comes up (`GET /github/account`, which makes no GitHub request), and an admin's health
-// check (`GET /settings/github/health`), run only on a click. Nothing is polled or kept once the screen goes, as on the
-// iPhone.
+// The GitHub account the server uses for one project, as its settings show it (ProjectGithubAccountSection): the identity
+// read when the section comes up (`GET /github/account`, which makes no GitHub request), and an admin's health check
+// (`GET /settings/github/health`), run only on a tap. Nothing is polled or kept once the screen goes. The board, issue and pull request screens
+// read the identity with it too, once and only while a GitHub refusal is shown, to name the account (GithubRefusalNote).
 import SwiftUI
 
 @MainActor
@@ -32,11 +32,11 @@ final class ProjectGithubAccountModel: ObservableObject {
             let read = GithubAccountIdentity(r)
             // A check that answered first already set the identity GitHub verified; this read must not replace it.
             if health?.account == nil { identity = read }
-            loadError = identity == nil ? unexpectedResponse : nil
+            loadError = identity == nil ? settingsUnexpectedResponse : nil
             loaded = true
         } catch {
-            guard !error.isCancellation else { return }
-            loadError = errorText(error)
+            guard let text = failure(error) else { return }
+            loadError = text
             loaded = true
         }
     }
@@ -51,11 +51,11 @@ final class ProjectGithubAccountModel: ObservableObject {
             do {
                 let r = try await Store.shared.call("settings_github_health", ["repo": .string(repo)])
                 try Task.checkCancellation()
-                guard let h = GithubAccountHealth(r) else { checkError = unexpectedResponse; return }
+                guard let h = GithubAccountHealth(r) else { checkError = settingsUnexpectedResponse; return }
                 health = h
                 if let account = h.account { identity = account; loadError = nil }
             } catch {
-                if !error.isCancellation { checkError = errorText(error) }
+                checkError = failure(error)
             }
         }
     }
