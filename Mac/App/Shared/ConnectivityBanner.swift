@@ -1,4 +1,4 @@
-// The one notice across the top of the main window while the link to the server is lost (Core's ConnectivityNotice):
+// The one notice across the top of a window while the link to the server is lost (Core's ConnectivityNotice):
 // offline, or a server that stopped answering, and when what is on screen was saved. The iPhone's twin is in App/Shared.
 import SwiftUI
 
@@ -17,4 +17,18 @@ struct ConnectivityBanner: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("connectivityBanner")
     }
+}
+
+private struct ConnectivityBannerInset: ViewModifier {
+    @EnvironmentObject private var store: Store
+
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .top, spacing: 0) {
+            if let notice = store.linkNotice { ConnectivityBanner(notice: notice) }
+        }
+    }
+}
+
+extension View {
+    func withConnectivityBanner() -> some View { modifier(ConnectivityBannerInset()) }
 }

@@ -254,21 +254,8 @@ extension Error {
 /// back, and a 401 ends it (the store has signed out).
 @MainActor
 func poll(every base: @autoclosure () -> TimeInterval, immediately: Bool = true, _ read: @MainActor () async -> APIError?) async {
-    var failures = 0
-    var retryAfter: Double = 0
-    let link = Store.shared.link
-    var delay: TimeInterval = immediately ? 0 : link.pollInterval(base())
-    while !Task.isCancelled {
-        if delay > 0, await link.pause(delay, atLeast: retryAfter) { failures = 0 }
-        if Task.isCancelled { return }
-        if await untilActive() { failures = 0 }
-        if Task.isCancelled { return }
-        let error = await read()
-        if error?.unauthorized == true { return }
-        if let error, error.kind != .cancelled { failures += 1 } else { failures = 0 }
-        delay = pollDelay(base: link.pollInterval(base()), failures: failures, retryAfter: error?.retryAfter)
-        retryAfter = error?.retryAfter ?? 0
-    }
+    await Store.shared.link.poll(every: base, immediately: immediately, stopOnUnauthorized: true,
+                                 untilReady: untilActive, read)
 }
 
 /// Returns once the app is in front of its user again and there is a way out to the network, or the task is cancelled:
@@ -277,13 +264,7 @@ func poll(every base: @autoclosure () -> TimeInterval, immediately: Bool = true,
 @MainActor
 @discardableResult
 func untilActive() async -> Bool {
-    var waited = false
-    while !Task.isCancelled {
-        while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000_000) }
-        if await Store.shared.link.untilReachable() { waited = true }
-        if Store.shared.active { return waited }
-    }
-    return waited
+    await Store.shared.link.untilActive(checkEvery: 1_000_000_000) { Store.shared.active }
 }
 
 /// Runs a read for `poll`, answering its error as `poll` wants it.

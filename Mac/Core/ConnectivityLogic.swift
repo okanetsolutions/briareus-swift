@@ -29,6 +29,9 @@ enum LinkState: Equatable, Sendable {
 
     /// The link is lost (offline, or the server out of reach), as against working, however poorly.
     var isLost: Bool { self == .offline || self == .unreachable }
+
+    /// Whether the link can attempt an immediate write. The caller still checks permissions and server support.
+    var canWriteNow: Bool { !isLost }
 }
 
 /// The link's state, kept as requests end and the path changes.
@@ -39,6 +42,8 @@ struct Connectivity: Equatable, Sendable {
     private(set) var path = NetworkPath.unknown
     /// Requests in a row that got no answer at all.
     private(set) var failures = 0
+    /// Two answers in a row restore fast polling after a failure, even though the first clears the notice.
+    private var answersToRestorePolling = 0
     /// When the server last answered anything, a refusal included.
     private(set) var lastAnswer: Date?
 
@@ -56,10 +61,11 @@ struct Connectivity: Equatable, Sendable {
     /// cellular, another network) after requests had been failing.
     mutating func pathChanged(_ next: NetworkPath) -> Bool {
         guard next != path else { return false }
-        let wasFailing = !path.reachable || failures > 0
+        let wasFailing = !path.reachable || answersToRestorePolling > 0
         path = next
         guard next.reachable else { return false }
         failures = 0
+        answersToRestorePolling = 0
         return wasFailing
     }
 
@@ -68,17 +74,24 @@ struct Connectivity: Equatable, Sendable {
     /// reach, so screens waiting out a long backoff can ask now.
     mutating func record(_ error: APIError?, at now: Date = Date()) -> Bool {
         if let error, error.kind == .cancelled { return false }
-        if let error, error.kind == .network { failures += 1; return false }
+        if let error, error.kind == .network {
+            failures += 1
+            answersToRestorePolling = 2
+            return false
+        }
         let wasUnreachable = state == .unreachable
         failures = 0
+        answersToRestorePolling = max(0, answersToRestorePolling - 1)
         lastAnswer = now
         return wasUnreachable
     }
 
-    /// The interval a screen polls at, `base` on a good link and stretched on a poor one: an active conversation's 2 s
-    /// becomes 10 s, a list's 7 s nearly half a minute, and nothing waits more than 5 minutes.
+    /// The interval a screen polls at: an active conversation's 2 s becomes 10 s on a poor link and a list's 7 s
+    /// becomes 30 s. Other intervals stretch up to 5 minutes, preserving any longer base.
     func pollInterval(_ base: TimeInterval) -> TimeInterval {
-        state == .online ? base : max(base, min(max(base * 4, 10), 300))
+        guard state != .online || answersToRestorePolling > 0 else { return base }
+        if base == 7 { return 30 }
+        return max(base, min(max(base * 4, 10), 300))
     }
 
     /// What the apps show while the link is lost, or nil while it works (a poor link says nothing: screens only slow down).
@@ -127,13 +140,11 @@ struct ConnectivityNotice: Equatable, Sendable {
 
 // MARK: - Waiting
 
-/// The delay before the next poll after `failures` consecutive failures: `base` with none, else exponential up to a
-/// minute, or the server's Retry-After when longer.
+/// The delay before the next poll, at least `base` (already stretched for the link when applicable). Failures back off
+/// exponentially up to a minute, and Retry-After can extend the wait further.
 func pollDelay(base: TimeInterval, failures: Int, retryAfter: Double?) -> TimeInterval {
-    guard failures > 0 else { return base }
-    var seconds = min(pow(2, Double(min(failures, 6))), 60)
-    if let retryAfter, retryAfter > seconds { seconds = retryAfter }
-    return seconds
+    let backoff = failures > 0 ? min(pow(2, Double(min(failures, 6))), 60) : 0
+    return max(base, backoff, retryAfter ?? 0)
 }
 
 /// Whether a request that got no answer for this reason is worth trying again at once: the link dropped or stalled, as

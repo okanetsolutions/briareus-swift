@@ -102,7 +102,7 @@ final class BrowserWindows: NSObject, NSWindowDelegate {
         w.tabbingMode = .disallowed
         w.minSize = NSSize(width: 420, height: 320)
         w.title = "Browser"
-        w.contentView = NSHostingView(rootView: SharedBrowserScreen(session: session, detached: true)
+        w.contentView = NSHostingView(rootView: SharedBrowserScreen(session: session, detached: true).withConnectivityBanner()
             .environmentObject(Store.shared).environmentObject(Navigator.main)
             .foregroundStyle(Theme.ink).noWritingTools())
         w.delegate = self

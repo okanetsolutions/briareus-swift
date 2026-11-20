@@ -2,6 +2,15 @@
 // same terms as every other call (the token, no cookies, no cache, no redirects), always over the network.
 import Foundation
 
+/// Whether the server opened a stream, set on its delegate queue and read when the stream ends.
+final class StreamOpening: @unchecked Sendable {
+    private let lock = NSLock()
+    private var opened = false
+
+    func markOpened() { lock.lock(); opened = true; lock.unlock() }
+    var didOpen: Bool { lock.lock(); defer { lock.unlock() }; return opened }
+}
+
 extension APIClient {
     /// Reads a GET call's event stream, handing each event to `emit` as it completes (on a queue of the stream's own,
     /// one event at a time), until the server ends it (returns), or it fails or the task is cancelled (throws, with

@@ -85,17 +85,19 @@ final class SleepModel: ObservableObject {
         while !Task.isCancelled, let client = Store.shared.client {
             await link.untilReachable()
             if Task.isCancelled { return }
+            let opening = StreamOpening()
             var failure: APIError?
             do {
-                try await client.stream("events", ["transcripts": "1"]) { event, data in
+                try await client.stream("events", ["transcripts": "1"], opened: { opening.markOpened() }) { event, data in
                     guard let j = JSON.parse(data) else { return }
                     Task { @MainActor in SleepModel.shared.receive(event, j) }
                 }
                 retry.opened()
             } catch {
                 failure = error as? APIError ?? APIError(Task.isCancelled ? .cancelled : .network)
-                link.record(failure)
             }
+            if Task.isCancelled { return }
+            link.streamEnded(opened: opening.didOpen, failure: failure)
             guard let wait = retry.next(after: failure) else { return }
             if await link.pause(wait) { retry.reset() }
         }

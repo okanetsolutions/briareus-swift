@@ -55,6 +55,7 @@ final class ConnectivityLogicTests: XCTestCase {
 
     func testOnlyOfflineAndUnreachableAreLost() {
         XCTAssertEqual([LinkState.online, .poor, .unreachable, .offline].map(\.isLost), [false, false, true, true])
+        XCTAssertEqual([LinkState.online, .poor, .unreachable, .offline].map(\.canWriteNow), [true, true, false, false])
     }
 
     func testLowDataModeIsAPoorLinkWithNoNotice() {
@@ -70,9 +71,38 @@ final class ConnectivityLogicTests: XCTestCase {
         XCTAssertEqual(link.pollInterval(7), 7)
         _ = link.record(dropped())
         XCTAssertEqual(link.pollInterval(2), 10)
-        XCTAssertEqual(link.pollInterval(7), 28)
+        XCTAssertEqual(link.pollInterval(7), 30)
         XCTAssertEqual(link.pollInterval(120), 300)
         XCTAssertEqual(link.pollInterval(600), 600, "a long interval is never shortened")
+    }
+
+    func testPollsStaySlowUntilTwoAnswersOrANewPath() {
+        var link = Connectivity()
+        for _ in 0..<3 { _ = link.record(dropped()) }
+        XCTAssertEqual(link.state, .unreachable)
+        XCTAssertEqual(pollDelay(base: link.pollInterval(7), failures: 3, retryAfter: nil), 30)
+
+        XCTAssertTrue(link.record(nil), "the first answer still wakes waiting screens")
+        XCTAssertNil(link.notice)
+        XCTAssertEqual(pollDelay(base: link.pollInterval(2), failures: 0, retryAfter: nil), 10)
+        XCTAssertEqual(pollDelay(base: link.pollInterval(7), failures: 0, retryAfter: nil), 30)
+        _ = link.record(APIError(.cancelled))
+        XCTAssertEqual(link.pollInterval(7), 30)
+        _ = link.record(nil)
+        XCTAssertEqual(link.pollInterval(7), 7)
+
+        _ = link.record(dropped())
+        _ = link.record(nil)
+        _ = link.record(dropped())
+        _ = link.record(nil)
+        XCTAssertEqual(link.pollInterval(7), 30, "an intervening failure restarts recovery")
+        _ = link.pathChanged(NetworkPath(reachable: false))
+        XCTAssertTrue(link.pathChanged(NetworkPath(reachable: true)))
+        XCTAssertEqual(link.pollInterval(2), 2)
+        _ = link.pathChanged(NetworkPath(reachable: true, constrained: true))
+        _ = link.record(nil)
+        _ = link.record(nil)
+        XCTAssertEqual(link.pollInterval(7), 30, "Low Data Mode still slows polling")
     }
 
     func testTheNoticeFollowsTheStateAndCarriesWhenTheServerLastAnswered() {
@@ -99,9 +129,12 @@ final class ConnectivityLogicTests: XCTestCase {
 
     func testPollDelayBacksOffAndHonoursRetryAfter() {
         XCTAssertEqual(pollDelay(base: 7, failures: 0, retryAfter: nil), 7)
-        XCTAssertEqual(pollDelay(base: 7, failures: 1, retryAfter: nil), 2)
+        XCTAssertEqual(pollDelay(base: 7, failures: 1, retryAfter: nil), 7)
         XCTAssertEqual(pollDelay(base: 7, failures: 3, retryAfter: nil), 8)
+        XCTAssertEqual(pollDelay(base: 10, failures: 1, retryAfter: nil), 10)
+        XCTAssertEqual(pollDelay(base: 30, failures: 1, retryAfter: 20), 30)
         XCTAssertEqual(pollDelay(base: 7, failures: 20, retryAfter: nil), 60)
+        XCTAssertEqual(pollDelay(base: 120, failures: 20, retryAfter: nil), 120)
         XCTAssertEqual(pollDelay(base: 7, failures: 1, retryAfter: 90), 90)
     }
 

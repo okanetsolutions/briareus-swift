@@ -227,20 +227,8 @@ extension Error {
 /// in the background or offline, waits longer on a poor link, and asks at once when the link comes back.
 @MainActor
 func poll(every base: TimeInterval, immediately: Bool = true, _ read: @MainActor () async -> APIError?) async {
-    var failures = 0
-    var retryAfter: Double = 0
-    let link = Store.shared.link
-    var delay: TimeInterval = immediately ? 0 : link.pollInterval(base)
-    while !Task.isCancelled {
-        if delay > 0, await link.pause(delay, atLeast: retryAfter) { failures = 0 }
-        if Task.isCancelled { return }
-        if await untilActive() { failures = 0 }
-        if Task.isCancelled { return }
-        let error = await read()
-        if let error, error.kind != .cancelled { failures += 1 } else { failures = 0 }
-        delay = pollDelay(base: link.pollInterval(base), failures: failures, retryAfter: error?.retryAfter)
-        retryAfter = error?.retryAfter ?? 0
-    }
+    await Store.shared.link.poll(every: { base }, immediately: immediately, stopOnUnauthorized: false,
+                                 untilReady: untilActive, read)
 }
 
 /// Returns once the app is in the foreground and there is a way out to the network, or the task is cancelled.
@@ -248,11 +236,5 @@ func poll(every base: TimeInterval, immediately: Bool = true, _ read: @MainActor
 @MainActor
 @discardableResult
 func untilActive() async -> Bool {
-    var waited = false
-    while !Task.isCancelled {
-        while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 2_000_000_000) }
-        if await Store.shared.link.untilReachable() { waited = true }
-        if Store.shared.active { return waited }
-    }
-    return waited
+    await Store.shared.link.untilActive(checkEvery: 2_000_000_000) { Store.shared.active }
 }

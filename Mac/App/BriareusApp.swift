@@ -144,7 +144,7 @@ struct MainWindow: View {
                         .onChange(of: narrow) { _, now in navigator.isNarrow = now }
                 }
                 // While the link is lost, one notice says so above the columns, which keep showing what they saved.
-                .safeAreaInset(edge: .top, spacing: 0) { if let notice = store.linkNotice { ConnectivityBanner(notice: notice) } }
+                .withConnectivityBanner()
             } else {
                 PairingScreen()
             }

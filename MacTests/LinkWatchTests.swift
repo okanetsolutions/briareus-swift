@@ -84,14 +84,47 @@ final class LinkWatchTests: XCTestCase {
 
     func testAStreamThatOpenedNeverCountsAgainstTheLink() {
         let watch = LinkWatch()
-        var dropped = APIError(.network)
-        dropped.networkCode = URLError.Code.timedOut.rawValue
-        for _ in 0..<4 { watch.streamEnded(opened: true, failure: dropped) }
-        XCTAssertEqual(watch.current.state, .online)
-        watch.streamEnded(opened: false, failure: dropped)
-        XCTAssertEqual(watch.current.failures, 1)
-        watch.streamEnded(opened: false, failure: nil)
-        XCTAssertEqual(watch.current.failures, 1, "a stream that never opened and has no failure says nothing")
+        for code in [URLError.Code.timedOut, .networkConnectionLost] {
+            var dropped = APIError(.network)
+            dropped.networkCode = code.rawValue
+            let opening = StreamOpening()
+            watch.streamEnded(opened: opening.didOpen, failure: dropped)
+            XCTAssertEqual(watch.current.failures, 1)
+            watch.streamEnded(opened: opening.didOpen, failure: nil)
+            XCTAssertEqual(watch.current.failures, 1, "a stream that never opened and has no failure says nothing")
+            opening.markOpened()
+            for _ in 0..<4 { watch.streamEnded(opened: opening.didOpen, failure: dropped) }
+            XCTAssertEqual(watch.current.failures, 0)
+            XCTAssertEqual(watch.current.state, .online)
+        }
+    }
+
+    @MainActor
+    func testPollingWaitsForTheLinkAndStopsOnUnauthorizedWhenRequested() async {
+        let watch = LinkWatch()
+        watch.pathChanged(NetworkPath(reachable: false))
+        let reads = Box<Bool>()
+        let finished = Box<Bool>()
+        let polling = Task {
+            await watch.poll(every: { 30 }, immediately: true, stopOnUnauthorized: true,
+                             untilReady: { await watch.untilActive(checkEvery: 1_000_000_000) { true } }) {
+                reads.add(watch.current.path.reachable)
+                return APIError(.http, status: 401)
+            }
+            finished.add(true)
+        }
+        let deadline = Date().addingTimeInterval(2)
+        while watch.wake.waiting == 0 && reads.all.isEmpty && Date() < deadline { await Task.yield() }
+        XCTAssertEqual(watch.wake.waiting, 1)
+        XCTAssertTrue(reads.all.isEmpty)
+        watch.pathChanged(NetworkPath(reachable: true))
+        let finishDeadline = Date().addingTimeInterval(2)
+        while finished.all.isEmpty && Date() < finishDeadline { await Task.yield() }
+        XCTAssertEqual(finished.all, [true])
+        XCTAssertEqual(reads.all, [true])
+        XCTAssertEqual(watch.wake.waiting, 0)
+        polling.cancel()
+        await polling.value
     }
 
     func testAWayBackWakesWhoeverWaitsForOne() async {

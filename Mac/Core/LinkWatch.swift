@@ -115,6 +115,38 @@ final class LinkWatch: @unchecked Sendable {
     /// The interval a screen polls at for a `base` on a good link.
     func pollInterval(_ base: TimeInterval) -> TimeInterval { current.pollInterval(base) }
 
+    /// Polls until cancelled, waiting for the app and link to be ready before each read. A returning link resets backoff.
+    @MainActor
+    func poll(every base: @MainActor () -> TimeInterval, immediately: Bool, stopOnUnauthorized: Bool,
+              untilReady: @MainActor () async -> Bool, _ read: @MainActor () async -> APIError?) async {
+        var failures = 0
+        var retryAfter: TimeInterval = 0
+        var delay = immediately ? 0 : pollInterval(base())
+        while !Task.isCancelled {
+            if delay > 0, await pause(delay, atLeast: retryAfter) { failures = 0 }
+            if Task.isCancelled { return }
+            if await untilReady() { failures = 0 }
+            if Task.isCancelled { return }
+            let error = await read()
+            if stopOnUnauthorized && error?.unauthorized == true { return }
+            if let error, error.kind != .cancelled { failures += 1 } else { failures = 0 }
+            retryAfter = error?.retryAfter ?? 0
+            delay = pollDelay(base: pollInterval(base()), failures: failures, retryAfter: retryAfter)
+        }
+    }
+
+    /// Waits for both the foreground and a network path, reporting whether it had to wait for the path.
+    @MainActor
+    func untilActive(checkEvery nanoseconds: UInt64, isActive: () -> Bool) async -> Bool {
+        var waited = false
+        while !Task.isCancelled {
+            while !isActive() && !Task.isCancelled { try? await Task.sleep(nanoseconds: nanoseconds) }
+            if await untilReachable() { waited = true }
+            if isActive() { return waited }
+        }
+        return waited
+    }
+
     /// Waits `seconds`, or less once the link comes back, but never less than `atLeast` (a server's Retry-After, which a
     /// returning link does not cut short). True when the link was lost as the wait began and works now: the caller's
     /// backoff then starts again, and a stream given up on meanwhile is tried afresh.

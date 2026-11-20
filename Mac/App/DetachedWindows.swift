@@ -72,7 +72,7 @@ final class DetachedWindows: NSObject, NSWindowDelegate {
         entries.append((w, nav))
         // In front before its page is built, so the page's own reads of the navigator find this window's.
         w.makeKeyAndOrderFront(nil)
-        w.contentView = NSHostingView(rootView: DetachedWindowView()
+        w.contentView = NSHostingView(rootView: DetachedWindowView().withConnectivityBanner()
             .environmentObject(Store.shared).environmentObject(nav)
             .frame(minWidth: 420, minHeight: 360).noWritingTools())
     }

@@ -4,14 +4,6 @@
 // catching up, when it returns; polling carries on beside it, slowly while a stream flows.
 import Foundation
 
-/// Whether a stream's server answered, set from the stream's own queue and read once it ends.
-private final class Opened: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = false
-    func set() { lock.lock(); value = true; lock.unlock() }
-    var yes: Bool { lock.lock(); defer { lock.unlock() }; return value }
-}
-
 /// Follows a GET call's event stream for as long as the calling task runs and the app is in front (a window or the
 /// car's screen), with `arguments()` as they stand each time it opens, once `ready()`. A dropped stream comes back
 /// after StreamRetry's backoff, or at once when the link does; one refused, or failing time after time, is left to
@@ -39,9 +31,9 @@ func followLive(_ name: String, _ arguments: () -> JSON = { [:] }, ready: () -> 
         if away && !link.current.state.isLost { retry.reset() }
         guard let client = Store.shared.client else { return }
         let args = arguments()
-        let opened = Opened()
+        let opening = StreamOpening()
         let stream = Task {
-            try await client.stream(name, args, opened: { opened.set(); Task { @MainActor in live(true) } }) { event, data in
+            try await client.stream(name, args, opened: { opening.markOpened(); Task { @MainActor in live(true) } }) { event, data in
                 guard let j = JSON.parse(data) else { return }
                 Task { @MainActor in emit(event, j) }
             }
@@ -58,8 +50,9 @@ func followLive(_ name: String, _ arguments: () -> JSON = { [:] }, ready: () -> 
         live(false)
         if Task.isCancelled { return }
         if !Store.shared.active { continue }
-        if opened.yes { retry.opened() }
-        link.streamEnded(opened: opened.yes, failure: failure)
+        let opened = opening.didOpen
+        if opened { retry.opened() }
+        link.streamEnded(opened: opened, failure: failure)
         let wait = retry.next(after: failure) ?? 1
         // A link coming back ends the wait, and a stream given up on is tried afresh.
         if await link.pause(wait) { retry.reset() }
