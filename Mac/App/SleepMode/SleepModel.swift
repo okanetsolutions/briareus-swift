@@ -92,12 +92,13 @@ final class SleepModel: ObservableObject {
                     guard let j = JSON.parse(data) else { return }
                     Task { @MainActor in SleepModel.shared.receive(event, j) }
                 }
-                retry.opened()
             } catch {
                 failure = error as? APIError ?? APIError(Task.isCancelled ? .cancelled : .network)
             }
             if Task.isCancelled { return }
-            link.streamEnded(opened: opening.didOpen, failure: failure)
+            let opened = opening.didOpen
+            if opened { retry.opened() }
+            link.streamEnded(opened: opened, failure: failure)
             guard let wait = retry.next(after: failure) else { return }
             if await link.pause(wait) { retry.reset() }
         }
