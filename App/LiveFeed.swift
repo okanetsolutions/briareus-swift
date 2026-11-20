@@ -58,7 +58,8 @@ func followLive(_ name: String, _ arguments: () -> JSON = { [:] }, ready: () -> 
         live(false)
         if Task.isCancelled { return }
         if !Store.shared.active { continue }
-        if opened.yes { retry.opened(); link.record(nil) } else if let failure { link.record(failure) }
+        if opened.yes { retry.opened() }
+        link.streamEnded(opened: opened.yes, failure: failure)
         let wait = retry.next(after: failure) ?? 1
         // A link coming back ends the wait, and a stream given up on is tried afresh.
         if await link.pause(wait) { retry.reset() }

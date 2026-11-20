@@ -82,6 +82,18 @@ final class LinkWatchTests: XCTestCase {
         XCTAssertEqual(told.all.last??.kind, .offline)
     }
 
+    func testAStreamThatOpenedNeverCountsAgainstTheLink() {
+        let watch = LinkWatch()
+        var dropped = APIError(.network)
+        dropped.networkCode = URLError.Code.timedOut.rawValue
+        for _ in 0..<4 { watch.streamEnded(opened: true, failure: dropped) }
+        XCTAssertEqual(watch.current.state, .online)
+        watch.streamEnded(opened: false, failure: dropped)
+        XCTAssertEqual(watch.current.failures, 1)
+        watch.streamEnded(opened: false, failure: nil)
+        XCTAssertEqual(watch.current.failures, 1, "a stream that never opened and has no failure says nothing")
+    }
+
     func testAWayBackWakesWhoeverWaitsForOne() async {
         let watch = LinkWatch()
         watch.pathChanged(NetworkPath(reachable: false))

@@ -142,10 +142,10 @@ final class ConversationModel: ObservableObject {
                 }
                 failures = 0
             } catch {
-                live = false
+                let flowed = live; live = false
                 if Task.isCancelled || (error as? APIError)?.kind == .cancelled { return }
                 if let s = (error as? APIError)?.status, s == 404 || s == 403 { return }
-                failures = min(failures + 1, 6); if let e = error as? APIError { Store.shared.link.record(e) }
+                failures = min(failures + 1, 6); Store.shared.link.streamEnded(opened: flowed, failure: error as? APIError)
             }
             live = false
             if await Store.shared.link.pause(min(pow(2, Double(failures)), 60)) { failures = 0 }

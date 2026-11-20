@@ -193,7 +193,7 @@ final class SessionFeed: ObservableObject {
             guard !Task.isCancelled else { return }
             guard let client = Store.shared.client else { try? await Task.sleep(nanoseconds: 2_000_000_000); continue }
             do {
-                try await client.stream("events", opened: { Task { @MainActor in SessionFeed.shared.live = true; link.record(nil) } }) { event, data in
+                try await client.stream("events", opened: { Task { @MainActor in SessionFeed.shared.live = true } }) { event, data in
                     guard let j = JSON.parse(data) else { return }
                     Task { @MainActor in SessionFeed.shared.apply(event, j) }
                 }
@@ -203,7 +203,7 @@ final class SessionFeed: ObservableObject {
                 live = false
                 if Task.isCancelled || (error as? APIError)?.kind == .cancelled { return }
                 if let s = (error as? APIError)?.status, s == 401 || s == 403 || s == 404 { task = nil; return }
-                if !flowed, let e = error as? APIError { link.record(e) }
+                link.streamEnded(opened: flowed, failure: error as? APIError)
                 failures = min(failures + 1, 6)
             }
             live = false

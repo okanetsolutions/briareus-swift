@@ -106,6 +106,12 @@ final class LinkWatch: @unchecked Sendable {
         if back { wake.fire() }
     }
 
+    /// An event stream ended. One that opened shows the server answered, however it ended (an idle timeout or a restart
+    /// on a working link says nothing against it); one that never opened counts as its failure would.
+    func streamEnded(opened: Bool, failure: APIError?) {
+        if opened { record(nil) } else if let failure { record(failure) }
+    }
+
     /// The interval a screen polls at for a `base` on a good link.
     func pollInterval(_ base: TimeInterval) -> TimeInterval { current.pollInterval(base) }
 
