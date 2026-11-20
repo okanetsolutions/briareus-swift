@@ -19,7 +19,12 @@ struct BriareusApp: App {
     private func shell<Page: View>(@ViewBuilder _ page: () -> Page) -> some View {
         ZStack {
             Group {
-                if store.client != nil { page() } else { PairingView() }
+                if store.client != nil {
+                    // While the link is lost, one notice says so above every screen, which keep showing what they saved.
+                    page().safeAreaInset(edge: .top, spacing: 0) {
+                        if let notice = store.linkNotice { ConnectivityBanner(notice: notice) }
+                    }
+                } else { PairingView() }
             }
             if phase != .active {
                 Theme.canvas.ignoresSafeArea()

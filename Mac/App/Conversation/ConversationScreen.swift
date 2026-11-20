@@ -127,12 +127,12 @@ final class ConversationModel: ObservableObject {
 
     /// Follows the session's event stream while the screen is up: each transcript line lands as it is written, and the
     /// record on each change. It starts after the lines already read; a dropped stream comes back after 2 s doubling to a
-    /// minute, and polling carries on meanwhile.
+    /// minute, or at once when the link does, and polling carries on meanwhile. Offline, it waits.
     func follow() async {
         guard Store.shared.supports("session_events") else { return }
         var failures = 0
         while !Task.isCancelled {
-            while (!Store.shared.active || !loaded) && !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000_000) }
+            while (!Store.shared.active || Store.shared.link.current.pausesReads || !loaded) && !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000_000) }
             guard let client = Store.shared.client, !Task.isCancelled else { return }
             do {
                 try await client.stream("session_events", ["sessionId": .string(id), "since": JSON(transcript.cursor)],
@@ -142,13 +142,13 @@ final class ConversationModel: ObservableObject {
                 }
                 failures = 0
             } catch {
-                live = false
+                let flowed = live; live = false
                 if Task.isCancelled || (error as? APIError)?.kind == .cancelled { return }
                 if let s = (error as? APIError)?.status, s == 404 || s == 403 { return }
-                failures = min(failures + 1, 6)
+                failures = min(failures + 1, 6); Store.shared.link.streamEnded(opened: flowed, failure: error as? APIError)
             }
             live = false
-            try? await Task.sleep(nanoseconds: UInt64(min(pow(2, Double(failures)), 60) * 1_000_000_000))
+            if await Store.shared.link.pause(min(pow(2, Double(failures)), 60)) { failures = 0 }
         }
     }
     private func applyLive(_ event: String, _ j: JSON) {
@@ -166,18 +166,18 @@ final class ConversationModel: ObservableObject {
     }
 
     /// Polls while the screen is up: every 2 seconds while the agent works, every 7 otherwise, with the Windows client's
-    /// backoff; every 30 while the event stream brings the lines.
+    /// backoff; every 30 while the event stream brings the lines. Never offline; slower on a poor link.
     func run() async {
         var failures = 0
         while !Task.isCancelled {
-            while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 2_000_000_000) }
+            if await untilActive() { failures = 0 }
             if Task.isCancelled { return }
             var failure: APIError?
             if !busy && !dialogOpen && !loading { failure = await refresh(full: false) }
             if Task.isCancelled { return }
             if let failure, failure.kind != .cancelled { failures += 1 } else { failures = 0 }
-            let delay = pollDelay(base: live ? 30 : session.isActive ? 2 : 7, failures: failures, retryAfter: failure?.retryAfter)
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            let base = Store.shared.link.pollInterval(live ? 30 : session.isActive ? 2 : 7)
+            if await Store.shared.link.pause(pollDelay(base: base, failures: failures, retryAfter: failure?.retryAfter), atLeast: failure?.retryAfter ?? 0) { failures = 0 }
         }
     }
 

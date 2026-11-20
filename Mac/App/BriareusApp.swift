@@ -143,6 +143,8 @@ struct MainWindow: View {
                         .onAppear { navigator.isNarrow = narrow }
                         .onChange(of: narrow) { _, now in navigator.isNarrow = now }
                 }
+                // While the link is lost, one notice says so above the columns, which keep showing what they saved.
+                .withConnectivityBanner()
             } else {
                 PairingScreen()
             }

@@ -8,6 +8,8 @@ final class Store: ObservableObject {
     @Published var client: APIClient?
     var active = true
     let cache = DiskCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+    /// Never started: the path stays as it was, so the link works throughout.
+    let link = LinkWatch()
     var read: (String, JSON) async throws -> JSON = { _, _ in .null }
     func supports(_ operation: String) -> Bool { true }
     func call(_ operation: String, _ arguments: JSON = [:]) async throws -> JSON { try await read(operation, arguments) }
@@ -25,6 +27,7 @@ enum Dialogs {
 }
 
 func errorText(_ error: Error) -> String { error.localizedDescription }
+@MainActor func untilActive() async {}
 extension Error {
     var isCancellation: Bool { (self as? APIError)?.kind == .cancelled || self is CancellationError }
 }

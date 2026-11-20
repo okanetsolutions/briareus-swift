@@ -184,10 +184,14 @@ final class SessionFeed: ObservableObject {
     }
     func stop() { task?.cancel(); task = nil; live = false }
 
+    /// Follows the stream, opened again after a drop with a backoff the link coming back cuts short; offline, it waits.
     private func follow() async {
         var failures = 0
+        let link = Store.shared.link
         while !Task.isCancelled {
-            guard let client = Store.shared.client, Store.shared.active else { try? await Task.sleep(nanoseconds: 2_000_000_000); continue }
+            await untilActive()
+            guard !Task.isCancelled else { return }
+            guard let client = Store.shared.client else { try? await Task.sleep(nanoseconds: 2_000_000_000); continue }
             do {
                 try await client.stream("events", opened: { Task { @MainActor in SessionFeed.shared.live = true } }) { event, data in
                     guard let j = JSON.parse(data) else { return }
@@ -195,13 +199,15 @@ final class SessionFeed: ObservableObject {
                 }
                 failures = 0
             } catch {
+                let flowed = live
                 live = false
                 if Task.isCancelled || (error as? APIError)?.kind == .cancelled { return }
                 if let s = (error as? APIError)?.status, s == 401 || s == 403 || s == 404 { task = nil; return }
+                link.streamEnded(opened: flowed, failure: error as? APIError)
                 failures = min(failures + 1, 6)
             }
             live = false
-            try? await Task.sleep(nanoseconds: UInt64(min(pow(2, Double(failures)), 60) * 1_000_000_000))
+            if await link.pause(min(pow(2, Double(failures)), 60)) { failures = 0 }
         }
     }
 

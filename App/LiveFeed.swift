@@ -4,37 +4,36 @@
 // catching up, when it returns; polling carries on beside it, slowly while a stream flows.
 import Foundation
 
-/// Whether a stream's server answered, set from the stream's own queue and read once it ends.
-private final class Opened: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = false
-    func set() { lock.lock(); value = true; lock.unlock() }
-    var yes: Bool { lock.lock(); defer { lock.unlock() }; return value }
-}
-
 /// Follows a GET call's event stream for as long as the calling task runs and the app is in front (a window or the
 /// car's screen), with `arguments()` as they stand each time it opens, once `ready()`. A dropped stream comes back
-/// after StreamRetry's backoff; one refused, or failing time after time, is left to polling until the app comes back
-/// to the front. `live` says whether the stream flows; `emit` gets each event on the main actor.
+/// after StreamRetry's backoff, or at once when the link does; one refused, or failing time after time, is left to
+/// polling until the app comes back to the front or the link comes back. Offline, no stream is opened. `live` says
+/// whether the stream flows; `emit` gets each event on the main actor.
 @MainActor
 func followLive(_ name: String, _ arguments: () -> JSON = { [:] }, ready: () -> Bool = { true },
                 live: @escaping @MainActor @Sendable (Bool) -> Void,
                 emit: @escaping @MainActor @Sendable (String, JSON) -> Void) async {
     var retry = StreamRetry()
+    let link = Store.shared.link
     while !Task.isCancelled {
-        // Out of sight (or not ready to say where to start): no stream. Back in front, one given up on is tried again.
+        // Out of sight, offline (or not ready to say where to start): no stream. Back in front, or with the link back
+        // after it was lost, one given up on is tried again.
         var away = false
-        while (!Store.shared.active || !ready() || retry.stopped && !away) && !Task.isCancelled {
-            if !Store.shared.active { away = true }
+        while !Task.isCancelled {
+            let lost = link.current.state.isLost
+            if !Store.shared.active || lost { away = true }
+            let waits = !Store.shared.active || link.current.pausesReads || !ready()
+            if !waits && !(retry.stopped && (!away || lost)) { break }
             try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
         if Task.isCancelled { return }
-        if away { retry.reset() }
+        // Only once the link works again: a stream tried while the server is out of reach keeps its backoff.
+        if away && !link.current.state.isLost { retry.reset() }
         guard let client = Store.shared.client else { return }
         let args = arguments()
-        let opened = Opened()
+        let opening = StreamOpening()
         let stream = Task {
-            try await client.stream(name, args, opened: { opened.set(); Task { @MainActor in live(true) } }) { event, data in
+            try await client.stream(name, args, opened: { opening.markOpened(); Task { @MainActor in live(true) } }) { event, data in
                 guard let j = JSON.parse(data) else { return }
                 Task { @MainActor in emit(event, j) }
             }
@@ -51,9 +50,12 @@ func followLive(_ name: String, _ arguments: () -> JSON = { [:] }, ready: () -> 
         live(false)
         if Task.isCancelled { return }
         if !Store.shared.active { continue }
-        if opened.yes { retry.opened() }
+        let opened = opening.didOpen
+        if opened { retry.opened() }
+        link.streamEnded(opened: opened, failure: failure)
         let wait = retry.next(after: failure) ?? 1
-        try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        // A link coming back ends the wait, and a stream given up on is tried afresh.
+        if await link.pause(wait) { retry.reset() }
     }
 }
 

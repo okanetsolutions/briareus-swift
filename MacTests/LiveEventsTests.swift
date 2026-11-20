@@ -154,6 +154,16 @@ final class LiveEventsTests: XCTestCase {
         XCTAssertEqual(retry.next(after: nil), 1)
     }
 
+    func testRetryKeepsGoingWhenStreamsOpenBeforeDropping() {
+        var retry = StreamRetry()
+        let dropped = APIError(.network)
+        for _ in 0...retry.limit {
+            retry.opened()
+            XCTAssertEqual(retry.next(after: dropped), 2)
+        }
+        XCTAssertFalse(retry.stopped)
+    }
+
     func testRetryWaitsForRetryAfter() {
         var retry = StreamRetry()
         XCTAssertEqual(retry.next(after: APIError(.http, status: 503, retryAfter: 30)), 30)

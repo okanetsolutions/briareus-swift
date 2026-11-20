@@ -140,18 +140,20 @@ final class ConversationScreenModel: ObservableObject {
 
     /// Polls while the screen is up: often while the agent works, less once it waits, rarely once closed, with
     /// the Mac app's backoff; every 30 seconds while the event stream brings the lines; never while a write or a dialog
-    /// is under way.
+    /// is under way, or while offline. A poor link stretches the waits, and one coming back ends them.
     func run() async {
         var failures = 0
+        let link = Store.shared.link
         while !Task.isCancelled {
-            while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000_000) }
+            if await untilActive() { failures = 0 }
             if Task.isCancelled { return }
             var failed: APIError?
             if !busy && !paused && !loading && !deleted { failed = await refresh(full: false) }
             if Task.isCancelled || failed?.unauthorized == true { return }
             if let failed, failed.kind != .cancelled { failures += 1 } else { failures = 0 }
-            let delay = pollDelay(base: live ? 30 : conversationPollInterval(session), failures: failures, retryAfter: failed?.retryAfter)
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            let base = link.pollInterval(live ? 30 : conversationPollInterval(session))
+            let delay = pollDelay(base: base, failures: failures, retryAfter: failed?.retryAfter)
+            if await link.pause(delay, atLeast: failed?.retryAfter ?? 0) { failures = 0 }
         }
     }
 
