@@ -44,9 +44,12 @@ final class Store: ObservableObject {
             server = origin
             UserDefaults.standard.set(origin, forKey: Store.originKey)
         } else { server = "" }
-        link.noticeChanged = { notice in Task { @MainActor in Store.shared.linkNotice = notice } }
+        // Changes land from several queues; the notice published is the one standing when the main actor gets to it.
+        link.noticeChanged = { [link] _ in Task { @MainActor in Store.shared.showNotice(link.current.notice) } }
         link.start()
     }
+
+    private func showNotice(_ notice: ConnectivityNotice?) { if linkNotice != notice { linkNotice = notice } }
 
     var connected: Bool { client != nil }
     var canManage: Bool { device?.canManage ?? false }
@@ -252,10 +255,11 @@ extension Error {
 @MainActor
 func poll(every base: @autoclosure () -> TimeInterval, immediately: Bool = true, _ read: @MainActor () async -> APIError?) async {
     var failures = 0
+    var retryAfter: Double = 0
     let link = Store.shared.link
     var delay: TimeInterval = immediately ? 0 : link.pollInterval(base())
     while !Task.isCancelled {
-        if delay > 0 { await link.pause(delay) }
+        if delay > 0, await link.pause(delay, atLeast: retryAfter) { failures = 0 }
         if Task.isCancelled { return }
         await untilActive()
         if Task.isCancelled { return }
@@ -263,6 +267,7 @@ func poll(every base: @autoclosure () -> TimeInterval, immediately: Bool = true,
         if error?.unauthorized == true { return }
         if let error, error.kind != .cancelled { failures += 1 } else { failures = 0 }
         delay = pollDelay(base: link.pollInterval(base()), failures: failures, retryAfter: error?.retryAfter)
+        retryAfter = error?.retryAfter ?? 0
     }
 }
 

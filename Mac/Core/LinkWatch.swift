@@ -109,8 +109,17 @@ final class LinkWatch: @unchecked Sendable {
     /// The interval a screen polls at for a `base` on a good link.
     func pollInterval(_ base: TimeInterval) -> TimeInterval { current.pollInterval(base) }
 
-    /// Waits `seconds`, or less once the link comes back.
-    func pause(_ seconds: TimeInterval) async { await wake.sleep(seconds) }
+    /// Waits `seconds`, or less once the link comes back, but never less than `atLeast` (a server's Retry-After, which a
+    /// returning link does not cut short). True when the link was lost as the wait began and works now: the caller's
+    /// backoff then starts again, and a stream given up on meanwhile is tried afresh.
+    @discardableResult
+    func pause(_ seconds: TimeInterval, atLeast floor: TimeInterval = 0) async -> Bool {
+        let lost = current.state.isLost
+        let fixed = min(max(floor, 0), seconds)
+        if fixed > 0 { try? await Task.sleep(nanoseconds: UInt64(fixed * 1_000_000_000)) }
+        if !Task.isCancelled { await wake.sleep(seconds - fixed) }
+        return lost && !current.state.isLost
+    }
 
     /// Returns once there is a way out (at once while there is one), or the task is cancelled.
     func untilReachable() async {

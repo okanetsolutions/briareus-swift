@@ -53,6 +53,10 @@ final class ConnectivityLogicTests: XCTestCase {
         XCTAssertEqual(link.failures, 0)
     }
 
+    func testOnlyOfflineAndUnreachableAreLost() {
+        XCTAssertEqual([LinkState.online, .poor, .unreachable, .offline].map(\.isLost), [false, false, true, true])
+    }
+
     func testLowDataModeIsAPoorLinkWithNoNotice() {
         var link = Connectivity()
         _ = link.pathChanged(NetworkPath(reachable: true, constrained: true))
@@ -102,7 +106,7 @@ final class ConnectivityLogicTests: XCTestCase {
     }
 
     func testOnlyADroppedOrStalledLinkIsTransient() {
-        for code in [URLError.Code.timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost] {
+        for code in [URLError.Code.timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost, .dnsLookupFailed] {
             XCTAssertTrue(transientNetworkFailure(code), "\(code)")
         }
         for code in [URLError.Code.serverCertificateUntrusted, .badURL, .cancelled, .userAuthenticationRequired] {

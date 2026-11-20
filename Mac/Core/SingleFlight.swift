@@ -12,8 +12,9 @@ final class SingleFlight<Value: Sendable>: @unchecked Sendable {
 
     init() {}
 
-    /// How many distinct reads are under way, for the tests.
+    /// How many distinct reads are under way, and how many callers wait on them, for the tests.
     var inFlight: Int { lock.lock(); defer { lock.unlock() }; return flights.count }
+    var waiting: Int { lock.lock(); defer { lock.unlock() }; return flights.values.reduce(0) { $0 + $1.waiters.count } }
 
     /// `work`'s answer, from the read already under way for `key` if there is one. A caller cancelled meanwhile gets
     /// `APIError(.cancelled)` at once; the read itself is cancelled only once every caller has gone.

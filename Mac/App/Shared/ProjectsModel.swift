@@ -207,7 +207,7 @@ final class SessionFeed: ObservableObject {
                 failures = min(failures + 1, 6)
             }
             live = false
-            await link.pause(min(pow(2, Double(failures)), 60))
+            if await link.pause(min(pow(2, Double(failures)), 60)) { failures = 0 }
         }
     }
 

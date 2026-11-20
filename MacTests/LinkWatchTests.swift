@@ -3,7 +3,7 @@
 import XCTest
 @testable import BriareusMacCore
 
-/// Answers each request from a script: a dropped link (`nil`) or a JSON body. It can hold answers until released.
+/// Answers each request from a script: a dropped link (`nil`) or a JSON body. It can hold GETs until released.
 private final class Scripted: HTTPTransport, @unchecked Sendable {
     private let lock = NSLock()
     private var script: [String?]
@@ -16,7 +16,7 @@ private final class Scripted: HTTPTransport, @unchecked Sendable {
         methods.append(method)
         let next = script.isEmpty ? "{}" : script.removeFirst()
         lock.unlock()
-        if let gate { await gate.sleep(5) }
+        if method == "GET", let gate { await gate.sleep(5) }
         guard let next else { throw URLSessionTransport.failure(URLError(.networkConnectionLost)) }
         return HTTPResponse(status: 200, contentType: "application/json", retryAfter: nil, body: Data(next.utf8))
     }
@@ -154,18 +154,45 @@ final class LinkWatchTests: XCTestCase {
         async let a = c.call("pulls", ["repo": "o/r"])
         while transport.count < 1 { await Task.yield() }
         async let b = c.call("pulls", ["repo": "o/r"])
-        try await Task.sleep(nanoseconds: 50_000_000)
+        while c.reads.waiting < 2 { await Task.yield() }
         XCTAssertEqual(transport.count, 1, "the second read joined the first")
-        // A write meanwhile: a read asked after it does not take the answer from before it.
-        async let w = c.call("message", ["sessionId": "s1", "text": "hi"])
-        while transport.count < 2 { await Task.yield() }
+        // A write while the first read is still held: a read asked after it does not join the one from before it.
+        _ = try await c.call("message", ["sessionId": "s1", "text": "hi"])
+        async let after = c.call("pulls", ["repo": "o/r"])
+        let deadline = Date().addingTimeInterval(4)
+        while transport.count < 3 && Date() < deadline { await Task.yield() }
+        XCTAssertEqual(transport.count, 3, "the read after the write made its own request")
         gate.fire()
-        _ = try await w
-        transport.gate = nil
-        let after = try await c.call("pulls", ["repo": "o/r"])
-        let (x, y) = try await (a, b)
+        let (x, y, z) = try await (a, b, after)
         XCTAssertEqual(x["n"].truncatedInt, 1); XCTAssertEqual(y["n"].truncatedInt, 1)
-        XCTAssertEqual(after["n"].truncatedInt, 2)
+        XCTAssertEqual(z["n"].truncatedInt, 2)
         XCTAssertEqual(transport.methods, ["GET", "POST", "GET"])
+    }
+
+    // MARK: Pausing
+
+    func testAPauseSaysWhetherTheLinkCameBack() async {
+        let watch = LinkWatch()
+        let quiet = await watch.pause(0.01)
+        XCTAssertFalse(quiet, "a link that was never lost did not come back")
+        watch.pathChanged(NetworkPath(reachable: false))
+        let start = Date()
+        let pausing = Task { await watch.pause(30) }
+        while watch.wake.waiting == 0 { await Task.yield() }
+        watch.pathChanged(NetworkPath(reachable: true))
+        let back = await pausing.value
+        XCTAssertTrue(back)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 5)
+    }
+
+    func testAReturningLinkDoesNotCutARetryAfterShort() async {
+        let watch = LinkWatch()
+        watch.pathChanged(NetworkPath(reachable: false))
+        let start = Date()
+        let pausing = Task { await watch.pause(0.6, atLeast: 0.4) }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        watch.pathChanged(NetworkPath(reachable: true))
+        _ = await pausing.value
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(start), 0.4)
     }
 }

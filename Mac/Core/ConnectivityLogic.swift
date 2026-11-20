@@ -26,6 +26,9 @@ enum LinkState: Equatable, Sendable {
     case unreachable
     /// No way out at all: nothing is asked until there is one.
     case offline
+
+    /// The link is lost (offline, or the server out of reach), as against working, however poorly.
+    var isLost: Bool { self == .offline || self == .unreachable }
 }
 
 /// The link's state, kept as requests end and the path changes.
@@ -133,8 +136,9 @@ func pollDelay(base: TimeInterval, failures: Int, retryAfter: Double?) -> TimeIn
     return seconds
 }
 
-/// Whether a request that got no answer for this reason is worth trying again at once: the link dropped or stalled,
-/// as it does going through a tunnel or between cells. A certificate or an address that does not resolve is not.
+/// Whether a request that got no answer for this reason is worth trying again at once: the link dropped or stalled, as
+/// it does going through a tunnel or between cells, which on a phone often shows as a name lookup that failed. A
+/// certificate, a malformed address or a refused login is not.
 func transientNetworkFailure(_ code: URLError.Code) -> Bool {
     switch code {
     case .timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost, .dnsLookupFailed,

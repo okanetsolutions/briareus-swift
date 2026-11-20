@@ -127,12 +127,12 @@ final class ConversationModel: ObservableObject {
 
     /// Follows the session's event stream while the screen is up: each transcript line lands as it is written, and the
     /// record on each change. It starts after the lines already read; a dropped stream comes back after 2 s doubling to a
-    /// minute, and polling carries on meanwhile.
+    /// minute, or at once when the link does, and polling carries on meanwhile. Offline, it waits.
     func follow() async {
         guard Store.shared.supports("session_events") else { return }
         var failures = 0
         while !Task.isCancelled {
-            while (!Store.shared.active || !loaded) && !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000_000) }
+            while (!Store.shared.active || Store.shared.link.current.pausesReads || !loaded) && !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000_000) }
             guard let client = Store.shared.client, !Task.isCancelled else { return }
             do {
                 try await client.stream("session_events", ["sessionId": .string(id), "since": JSON(transcript.cursor)],
@@ -145,10 +145,10 @@ final class ConversationModel: ObservableObject {
                 live = false
                 if Task.isCancelled || (error as? APIError)?.kind == .cancelled { return }
                 if let s = (error as? APIError)?.status, s == 404 || s == 403 { return }
-                failures = min(failures + 1, 6)
+                failures = min(failures + 1, 6); if let e = error as? APIError { Store.shared.link.record(e) }
             }
             live = false
-            try? await Task.sleep(nanoseconds: UInt64(min(pow(2, Double(failures)), 60) * 1_000_000_000))
+            if await Store.shared.link.pause(min(pow(2, Double(failures)), 60)) { failures = 0 }
         }
     }
     private func applyLive(_ event: String, _ j: JSON) {
@@ -177,7 +177,7 @@ final class ConversationModel: ObservableObject {
             if Task.isCancelled { return }
             if let failure, failure.kind != .cancelled { failures += 1 } else { failures = 0 }
             let base = Store.shared.link.pollInterval(live ? 30 : session.isActive ? 2 : 7)
-            await Store.shared.link.pause(pollDelay(base: base, failures: failures, retryAfter: failure?.retryAfter))
+            if await Store.shared.link.pause(pollDelay(base: base, failures: failures, retryAfter: failure?.retryAfter), atLeast: failure?.retryAfter ?? 0) { failures = 0 }
         }
     }
 

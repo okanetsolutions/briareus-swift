@@ -24,15 +24,19 @@ func followLive(_ name: String, _ arguments: () -> JSON = { [:] }, ready: () -> 
     var retry = StreamRetry()
     let link = Store.shared.link
     while !Task.isCancelled {
-        // Out of sight, offline (or not ready to say where to start): no stream. Back in front or back online, one
-        // given up on is tried again.
+        // Out of sight, offline (or not ready to say where to start): no stream. Back in front, or with the link back
+        // after it was lost, one given up on is tried again.
         var away = false
-        while (!Store.shared.active || link.current.pausesReads || !ready() || retry.stopped && !away) && !Task.isCancelled {
-            if !Store.shared.active || link.current.pausesReads { away = true }
+        while !Task.isCancelled {
+            let lost = link.current.state.isLost
+            if !Store.shared.active || lost { away = true }
+            let waits = !Store.shared.active || link.current.pausesReads || !ready()
+            if !waits && !(retry.stopped && (!away || lost)) { break }
             try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
         if Task.isCancelled { return }
-        if away { retry.reset() }
+        // Only once the link works again: a stream tried while the server is out of reach keeps its backoff.
+        if away && !link.current.state.isLost { retry.reset() }
         guard let client = Store.shared.client else { return }
         let args = arguments()
         let opened = Opened()
@@ -57,9 +61,7 @@ func followLive(_ name: String, _ arguments: () -> JSON = { [:] }, ready: () -> 
         if opened.yes { retry.opened(); link.record(nil) } else if let failure { link.record(failure) }
         let wait = retry.next(after: failure) ?? 1
         // A link coming back ends the wait, and a stream given up on is tried afresh.
-        let failing = link.current.state
-        await link.pause(wait)
-        if failing != .online && failing != .poor && link.current.state != failing { retry.reset() }
+        if await link.pause(wait) { retry.reset() }
     }
 }
 

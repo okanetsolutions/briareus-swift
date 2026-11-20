@@ -77,10 +77,14 @@ final class SleepModel: ObservableObject {
         work = [Task { await follow() }, Task { await beat() }]
     }
 
-    /// The stream, opened again after a drop with StreamRetry's backoff, until the server refuses it.
+    /// The stream, opened again after a drop with StreamRetry's backoff (cut short when the link comes back), until the
+    /// server refuses it. Offline, it waits.
     private func follow() async {
         var retry = StreamRetry()
+        let link = Store.shared.link
         while !Task.isCancelled, let client = Store.shared.client {
+            await link.untilReachable()
+            if Task.isCancelled { return }
             var failure: APIError?
             do {
                 try await client.stream("events", ["transcripts": "1"]) { event, data in
@@ -90,9 +94,10 @@ final class SleepModel: ObservableObject {
                 retry.opened()
             } catch {
                 failure = error as? APIError ?? APIError(Task.isCancelled ? .cancelled : .network)
+                link.record(failure)
             }
             guard let wait = retry.next(after: failure) else { return }
-            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            if await link.pause(wait) { retry.reset() }
         }
     }
 

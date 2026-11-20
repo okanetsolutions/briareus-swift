@@ -152,7 +152,8 @@ final class ConversationScreenModel: ObservableObject {
             if Task.isCancelled || failed?.unauthorized == true { return }
             if let failed, failed.kind != .cancelled { failures += 1 } else { failures = 0 }
             let base = link.pollInterval(live ? 30 : conversationPollInterval(session))
-            await link.pause(pollDelay(base: base, failures: failures, retryAfter: failed?.retryAfter))
+            let delay = pollDelay(base: base, failures: failures, retryAfter: failed?.retryAfter)
+            if await link.pause(delay, atLeast: failed?.retryAfter ?? 0) { failures = 0 }
         }
     }
 

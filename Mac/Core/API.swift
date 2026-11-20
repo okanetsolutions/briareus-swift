@@ -568,7 +568,7 @@ final class APIClient: @unchecked Sendable {
     private let clockLock = NSLock()
     private var clockReference: ServerTimeReference?
     /// GETs under way, shared by identical ones.
-    private let reads = SingleFlight<JSON>()
+    let reads = SingleFlight<JSON>()
     /// Bumped as every write starts and ends, so a read asked for after one never joins a read that began before it
     /// ended and answers from before what the write changed.
     private var writes = 0
@@ -760,6 +760,7 @@ final class APIClient: @unchecked Sendable {
     /// query. The answer is the id a message takes in `attachments`.
     func upload(name: String, bytes: Data) async throws -> String {
         if bytes.count > APIClient.uploadLimit { throw APIError(.http, status: 413, message: "The file exceeds the server’s 500 MiB limit for an attachment.") }
+        wrote(); defer { wrote() }
         let url = address.baseURL + "uploads?name=" + APIClient.encode(name.isEmpty ? "file" : name)
         // Always octet-stream, whatever the file is: the server reads the raw body.
         let j = try await send(method: "POST", url: url, contentType: "application/octet-stream", body: bytes, timeout: 120)
