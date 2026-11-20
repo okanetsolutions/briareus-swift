@@ -166,18 +166,18 @@ final class ConversationModel: ObservableObject {
     }
 
     /// Polls while the screen is up: every 2 seconds while the agent works, every 7 otherwise, with the Windows client's
-    /// backoff; every 30 while the event stream brings the lines.
+    /// backoff; every 30 while the event stream brings the lines. Never offline; slower on a poor link.
     func run() async {
         var failures = 0
         while !Task.isCancelled {
-            while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 2_000_000_000) }
+            await untilActive()
             if Task.isCancelled { return }
             var failure: APIError?
             if !busy && !dialogOpen && !loading { failure = await refresh(full: false) }
             if Task.isCancelled { return }
             if let failure, failure.kind != .cancelled { failures += 1 } else { failures = 0 }
-            let delay = pollDelay(base: live ? 30 : session.isActive ? 2 : 7, failures: failures, retryAfter: failure?.retryAfter)
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            let base = Store.shared.link.pollInterval(live ? 30 : session.isActive ? 2 : 7)
+            await Store.shared.link.pause(pollDelay(base: base, failures: failures, retryAfter: failure?.retryAfter))
         }
     }
 

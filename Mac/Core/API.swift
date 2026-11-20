@@ -1,4 +1,5 @@
-// The client API (/api/v1) over HTTPS: one token, no cookies, no cache, no redirects, no automatic retries.
+// The client API (/api/v1) over HTTPS: one token, no cookies, no cache, no redirects. Only a GET that got no answer
+// because the link dropped is tried again (ConnectivityLogic.swift), and identical GETs at once share one request.
 import Foundation
 
 // MARK: - Errors
@@ -17,6 +18,9 @@ struct APIError: Error, Equatable, Sendable {
     var retryAfter: Double?
     /// The refusal's machine-readable `code` when the server gave one (`review_round_limit`, say); nil otherwise.
     var code: String?
+    /// For a `.network` failure, the system's reason (a `URLError.Code` raw value), which says whether trying again at
+    /// once may help (`readRetryDelay`); nil otherwise.
+    var networkCode: Int?
 
     init(_ kind: Kind, status: Int = 0, message: String? = nil, retryAfter: Double? = nil, code: String? = nil) {
         self.kind = kind; self.status = status; self.message = message; self.retryAfter = retryAfter; self.code = code
@@ -506,7 +510,7 @@ final class URLSessionTransport: NSObject, HTTPTransport, URLSessionTaskDelegate
                                 date: http.value(forHTTPHeaderField: "Date"))
         } catch let error as URLError {
             if error.code == .cancelled { throw APIError(.cancelled) }
-            throw APIError(.network, message: URLSessionTransport.text(error))
+            throw URLSessionTransport.failure(error)
         }
     }
 
@@ -524,8 +528,15 @@ final class URLSessionTransport: NSObject, HTTPTransport, URLSessionTaskDelegate
                                  retryAfter: http.value(forHTTPHeaderField: "Retry-After"), body: Data()), file)
         } catch let error as URLError {
             if error.code == .cancelled { throw APIError(.cancelled) }
-            throw APIError(.network, message: URLSessionTransport.text(error))
+            throw URLSessionTransport.failure(error)
         }
+    }
+
+    /// A request that got no answer, with the reason the user is told and the one the retry rule reads.
+    static func failure(_ error: URLError) -> APIError {
+        var e = APIError(.network, message: text(error))
+        e.networkCode = error.code.rawValue
+        return e
     }
 
     static func text(_ error: URLError) -> String {
@@ -556,6 +567,15 @@ final class APIClient: @unchecked Sendable {
 
     private let clockLock = NSLock()
     private var clockReference: ServerTimeReference?
+    /// GETs under way, shared by identical ones.
+    private let reads = SingleFlight<JSON>()
+    /// Bumped as every write starts and ends, so a read asked for after one never joins a read that began before it
+    /// ended and answers from before what the write changed.
+    private var writes = 0
+    private var writeEpoch: Int { clockLock.lock(); defer { clockLock.unlock() }; return writes }
+    private func wrote() { clockLock.lock(); writes += 1; clockLock.unlock() }
+    /// Scales the waits between a read's retries; the tests set it to 0.
+    var retryScale: Double = 1
 
     /// Server time advanced by a continuous clock, independent of device clock skew or clock changes.
     var serverNow: Date? {
@@ -582,7 +602,7 @@ final class APIClient: @unchecked Sendable {
         guard let u = URL(string: url) else { throw APIError(.invalidAddress) }
         var headers = ["Authorization": "Bearer \(token)", "Accept": "application/json"]
         if let contentType { headers["Content-Type"] = contentType }
-        // No automatic application-level retries, including for POST reads: the screen owns read backoff.
+        // No retries here: only `call` tries a GET again, and a write that got no answer may have gone through.
         let r = try await transport.send(method: method, url: u, headers: headers, body: body, timeout: timeout)
         observeServerTime(r.date)
         if r.status >= 300 && r.status < 400 { throw APIError(.redirected, status: r.status) }
@@ -660,13 +680,18 @@ final class APIClient: @unchecked Sendable {
             kept = rest[filter]?.string
             rest.removeValue(forKey: filter)
         }
-        let reads = route.method == "GET" || route.method == "DELETE"
         let t = timeout ?? APIClient.requestTimeout
         var result: JSON
-        if reads {
+        if route.method == "GET" {
+            path += APIClient.query(rest)
+            let p = path
+            result = try await reads.run("\(writeEpoch) \(t) \(p)") { [self] in try await read(p, timeout: t) }
+        } else if route.method == "DELETE" {
+            wrote(); defer { wrote() }
             path += APIClient.query(rest)
             result = try await request(path, method: route.method, body: nil, timeout: t)
         } else {
+            wrote(); defer { wrote() }
             var sep = "?"
             for key in route.query {
                 guard let arg = rest.removeValue(forKey: key), let value = APIClient.urlValue(arg, inPath: false) else { continue }
@@ -680,6 +705,18 @@ final class APIClient: @unchecked Sendable {
             result[list] = .array(result[list].items.filter { $0[filter].string == kept })
         }
         return result
+    }
+
+    /// A GET, tried again after a dropped or stalled link as `readRetryDelay` says.
+    private func read(_ path: String, timeout: TimeInterval) async throws -> JSON {
+        var attempt = 0
+        while true {
+            do { return try await request(path, method: "GET", body: nil, timeout: timeout) } catch let e as APIError {
+                guard !Task.isCancelled, let wait = readRetryDelay(after: e, attempt: attempt) else { throw e }
+                attempt += 1
+                do { try await Task.sleep(nanoseconds: UInt64(max(wait * retryScale, 0) * 1_000_000_000)) } catch { throw APIError(.cancelled) }
+            }
+        }
     }
 
     /// A GET's arguments as a query string, "" when there are none. An array is a repeatable parameter: `project=a&project=b`.

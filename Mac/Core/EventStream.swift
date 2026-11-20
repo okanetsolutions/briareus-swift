@@ -114,7 +114,7 @@ private final class EventStreamReader: NSObject, URLSessionDataDelegate, @unchec
             lock.lock()
             let wasCancelled = cancelled
             lock.unlock()
-            finish(error.code == .cancelled || wasCancelled ? APIError(.cancelled) : APIError(.network, message: URLSessionTransport.text(error)))
+            finish(error.code == .cancelled || wasCancelled ? APIError(.cancelled) : URLSessionTransport.failure(error))
             return
         }
         if let error { finish(APIError(.network, message: error.localizedDescription)); return }

@@ -20,6 +20,10 @@ final class Store: ObservableObject {
     @Published var active = true
 
     let cache: DiskCache
+    /// The link to the server: the network path, how requests end, and waits a returning link cuts short.
+    let link = LinkWatch()
+    /// What the top of the main window says while the link is lost; nil while it works.
+    @Published private(set) var linkNotice: ConnectivityNotice?
     private static let originKey = "serverOrigin"
 
     private init() {
@@ -32,6 +36,8 @@ final class Store: ObservableObject {
             server = origin
             UserDefaults.standard.set(origin, forKey: Store.originKey)
         } else { server = "" }
+        link.noticeChanged = { notice in Task { @MainActor in Store.shared.linkNotice = notice } }
+        link.start()
     }
 
     var connected: Bool { client != nil }
@@ -170,9 +176,11 @@ final class Store: ObservableObject {
     private func finish<T>(_ client: APIClient, _ work: () async throws -> T) async throws -> T {
         do {
             let value = try await work()
+            link.record(nil)
             try Task.checkCancellation()
             return value
         } catch let e as APIError {
+            link.record(e)
             if e.unauthorized && self.client === client { invalidateCredentials(e) }
             throw e
         } catch is CancellationError {
@@ -211,27 +219,31 @@ extension Error {
 
 // MARK: - Polling
 
-/// The delay before the next poll after `failures` consecutive failures: exponential up to a minute, or the server's Retry-After.
-func pollDelay(base: TimeInterval, failures: Int, retryAfter: Double?) -> TimeInterval {
-    guard failures > 0 else { return base }
-    var seconds = min(pow(2, Double(min(failures, 6))), 60)
-    if let retryAfter, retryAfter > seconds { seconds = retryAfter }
-    return seconds
-}
-
-/// One-shot polling with the Windows client's backoff, for a `.task`: runs `read` now and again after each delay until the task
-/// is cancelled. `read` answers the error of a failed read, or nil. Polling pauses while the app is in the background.
+/// One-shot polling with the Windows client's backoff (`pollDelay`), for a `.task`: runs `read` now and again after each
+/// delay until the task is cancelled. `read` answers the error of a failed read, or nil. Polling pauses while the app is
+/// in the background or offline, waits longer on a poor link, and asks at once when the link comes back.
 @MainActor
 func poll(every base: TimeInterval, immediately: Bool = true, _ read: @MainActor () async -> APIError?) async {
     var failures = 0
-    var delay: TimeInterval = immediately ? 0 : base
+    let link = Store.shared.link
+    var delay: TimeInterval = immediately ? 0 : link.pollInterval(base)
     while !Task.isCancelled {
-        if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
+        if delay > 0 { await link.pause(delay) }
         if Task.isCancelled { return }
-        while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 2_000_000_000) }
+        await untilActive()
         if Task.isCancelled { return }
         let error = await read()
         if let error, error.kind != .cancelled { failures += 1 } else { failures = 0 }
-        delay = pollDelay(base: base, failures: failures, retryAfter: error?.retryAfter)
+        delay = pollDelay(base: link.pollInterval(base), failures: failures, retryAfter: error?.retryAfter)
+    }
+}
+
+/// Returns once the app is in the foreground and there is a way out to the network, or the task is cancelled.
+@MainActor
+func untilActive() async {
+    while !Task.isCancelled {
+        while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 2_000_000_000) }
+        await Store.shared.link.untilReachable()
+        if Store.shared.active { return }
     }
 }

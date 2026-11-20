@@ -14,18 +14,21 @@ private final class Opened: @unchecked Sendable {
 
 /// Follows a GET call's event stream for as long as the calling task runs and the app is in front (a window or the
 /// car's screen), with `arguments()` as they stand each time it opens, once `ready()`. A dropped stream comes back
-/// after StreamRetry's backoff; one refused, or failing time after time, is left to polling until the app comes back
-/// to the front. `live` says whether the stream flows; `emit` gets each event on the main actor.
+/// after StreamRetry's backoff, or at once when the link does; one refused, or failing time after time, is left to
+/// polling until the app comes back to the front or the link comes back. Offline, no stream is opened. `live` says
+/// whether the stream flows; `emit` gets each event on the main actor.
 @MainActor
 func followLive(_ name: String, _ arguments: () -> JSON = { [:] }, ready: () -> Bool = { true },
                 live: @escaping @MainActor @Sendable (Bool) -> Void,
                 emit: @escaping @MainActor @Sendable (String, JSON) -> Void) async {
     var retry = StreamRetry()
+    let link = Store.shared.link
     while !Task.isCancelled {
-        // Out of sight (or not ready to say where to start): no stream. Back in front, one given up on is tried again.
+        // Out of sight, offline (or not ready to say where to start): no stream. Back in front or back online, one
+        // given up on is tried again.
         var away = false
-        while (!Store.shared.active || !ready() || retry.stopped && !away) && !Task.isCancelled {
-            if !Store.shared.active { away = true }
+        while (!Store.shared.active || link.current.pausesReads || !ready() || retry.stopped && !away) && !Task.isCancelled {
+            if !Store.shared.active || link.current.pausesReads { away = true }
             try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
         if Task.isCancelled { return }
@@ -51,9 +54,12 @@ func followLive(_ name: String, _ arguments: () -> JSON = { [:] }, ready: () -> 
         live(false)
         if Task.isCancelled { return }
         if !Store.shared.active { continue }
-        if opened.yes { retry.opened() }
+        if opened.yes { retry.opened(); link.record(nil) } else if let failure { link.record(failure) }
         let wait = retry.next(after: failure) ?? 1
-        try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        // A link coming back ends the wait, and a stream given up on is tried afresh.
+        let failing = link.current.state
+        await link.pause(wait)
+        if failing != .online && failing != .poor && link.current.state != failing { retry.reset() }
     }
 }
 
