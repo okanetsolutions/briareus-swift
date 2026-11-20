@@ -123,12 +123,17 @@ final class LinkWatch: @unchecked Sendable {
         let lost = current.state.isLost
         let fixed = min(max(floor, 0), seconds)
         if fixed > 0 { try? await Task.sleep(nanoseconds: UInt64(fixed * 1_000_000_000)) }
-        if !Task.isCancelled { await wake.sleep(seconds - fixed) }
+        // A link that came back during the server's wait ends the rest of it.
+        if !Task.isCancelled && !(lost && !current.state.isLost) { await wake.sleep(seconds - fixed) }
         return lost && !current.state.isLost
     }
 
-    /// Returns once there is a way out (at once while there is one), or the task is cancelled.
-    func untilReachable() async {
-        while current.pausesReads && !Task.isCancelled { await wake.sleep(60) }
+    /// Returns once there is a way out (at once while there is one), or the task is cancelled. True when it waited for
+    /// one: the caller's backoff then starts again.
+    @discardableResult
+    func untilReachable() async -> Bool {
+        var waited = false
+        while current.pausesReads && !Task.isCancelled { waited = true; await wake.sleep(60) }
+        return waited
     }
 }

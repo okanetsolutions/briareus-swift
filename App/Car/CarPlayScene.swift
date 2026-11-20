@@ -380,7 +380,7 @@ final class CarAssistant: NSObject, CPInterfaceControllerDelegate {
                 if Task.isCancelled || failure?.unauthorized == true { return }
                 if let failure, failure.kind != .cancelled { failures += 1 } else { failures = 0 }
                 if await store.link.pause(pollDelay(base: store.link.pollInterval(session?.isActive == true ? 2 : 7), failures: failures, retryAfter: failure?.retryAfter), atLeast: failure?.retryAfter ?? 0) { failures = 0 }
-                await store.link.untilReachable()   // nothing is asked in a tunnel; the link coming back asks at once
+                if await store.link.untilReachable() { failures = 0 }   // nothing is asked in a tunnel; asks at once after
             }
         }
     }

@@ -234,7 +234,7 @@ func poll(every base: TimeInterval, immediately: Bool = true, _ read: @MainActor
     while !Task.isCancelled {
         if delay > 0, await link.pause(delay, atLeast: retryAfter) { failures = 0 }
         if Task.isCancelled { return }
-        await untilActive()
+        if await untilActive() { failures = 0 }
         if Task.isCancelled { return }
         let error = await read()
         if let error, error.kind != .cancelled { failures += 1 } else { failures = 0 }
@@ -244,11 +244,15 @@ func poll(every base: TimeInterval, immediately: Bool = true, _ read: @MainActor
 }
 
 /// Returns once the app is in the foreground and there is a way out to the network, or the task is cancelled.
+/// True when it waited for the network, so the caller's backoff starts again.
 @MainActor
-func untilActive() async {
+@discardableResult
+func untilActive() async -> Bool {
+    var waited = false
     while !Task.isCancelled {
         while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 2_000_000_000) }
-        await Store.shared.link.untilReachable()
-        if Store.shared.active { return }
+        if await Store.shared.link.untilReachable() { waited = true }
+        if Store.shared.active { return waited }
     }
+    return waited
 }

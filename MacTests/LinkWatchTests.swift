@@ -103,7 +103,9 @@ final class LinkWatchTests: XCTestCase {
         watch.pathChanged(NetworkPath(reachable: true))
         await waiter.value
         XCTAssertLessThan(Date().timeIntervalSince(start), 5)
-        await watch.untilReachable()   // at once while there is a way out
+        let waitedAgain = await watch.untilReachable()   // at once while there is a way out
+        XCTAssertFalse(waitedAgain)
+        XCTAssertTrue(await waiter.value, "it waited for the way out")
     }
 
     // MARK: SingleFlight

@@ -170,7 +170,7 @@ final class ConversationModel: ObservableObject {
     func run() async {
         var failures = 0
         while !Task.isCancelled {
-            await untilActive()
+            if await untilActive() { failures = 0 }
             if Task.isCancelled { return }
             var failure: APIError?
             if !busy && !dialogOpen && !loading { failure = await refresh(full: false) }

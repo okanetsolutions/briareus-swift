@@ -145,7 +145,7 @@ final class ConversationScreenModel: ObservableObject {
         var failures = 0
         let link = Store.shared.link
         while !Task.isCancelled {
-            await untilActive()
+            if await untilActive() { failures = 0 }
             if Task.isCancelled { return }
             var failed: APIError?
             if !busy && !paused && !loading && !deleted { failed = await refresh(full: false) }

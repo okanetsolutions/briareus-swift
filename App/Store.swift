@@ -261,7 +261,7 @@ func poll(every base: @autoclosure () -> TimeInterval, immediately: Bool = true,
     while !Task.isCancelled {
         if delay > 0, await link.pause(delay, atLeast: retryAfter) { failures = 0 }
         if Task.isCancelled { return }
-        await untilActive()
+        if await untilActive() { failures = 0 }
         if Task.isCancelled { return }
         let error = await read()
         if error?.unauthorized == true { return }
@@ -273,13 +273,17 @@ func poll(every base: @autoclosure () -> TimeInterval, immediately: Bool = true,
 
 /// Returns once the app is in front of its user again and there is a way out to the network, or the task is cancelled:
 /// a screen's own refresh loop waits here so it asks nothing while the app runs in the background or is offline.
+/// True when it waited for the network, so the caller's backoff starts again.
 @MainActor
-func untilActive() async {
+@discardableResult
+func untilActive() async -> Bool {
+    var waited = false
     while !Task.isCancelled {
         while !Store.shared.active && !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000_000) }
-        await Store.shared.link.untilReachable()
-        if Store.shared.active { return }
+        if await Store.shared.link.untilReachable() { waited = true }
+        if Store.shared.active { return waited }
     }
+    return waited
 }
 
 /// Runs a read for `poll`, answering its error as `poll` wants it.
