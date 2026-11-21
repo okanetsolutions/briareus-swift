@@ -25,12 +25,11 @@ struct SharingSnapshot: Equatable, Sendable {
 }
 
 enum ShareKind: String, CaseIterable, Identifiable, Sendable {
-    case project, dbServer, sshServer, mcpServer, forgeAccount, envoyerAccount
+    case project, sshServer, mcpServer, forgeAccount, envoyerAccount
     var id: String { rawValue }
     var title: String {
         switch self {
         case .project: return "Projects"
-        case .dbServer: return "Database servers"
         case .sshServer: return "SSH servers"
         case .mcpServer: return "MCP servers"
         case .forgeAccount: return "Forge accounts"
@@ -40,7 +39,6 @@ enum ShareKind: String, CaseIterable, Identifiable, Sendable {
     var operation: String {
         switch self {
         case .project: return "settings_projects"
-        case .dbServer: return "settings_db_servers"
         case .sshServer: return "settings_ssh_servers"
         case .mcpServer: return "settings_mcp_servers"
         case .forgeAccount: return "settings_forge_accounts"
@@ -50,7 +48,7 @@ enum ShareKind: String, CaseIterable, Identifiable, Sendable {
     var listKey: String {
         switch self {
         case .project: return "projects"
-        case .dbServer, .sshServer, .mcpServer: return "servers"
+        case .sshServer, .mcpServer: return "servers"
         case .forgeAccount, .envoyerAccount: return "accounts"
         }
     }

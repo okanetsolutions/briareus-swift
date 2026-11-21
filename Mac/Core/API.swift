@@ -355,12 +355,6 @@ struct APIRoute: Sendable {
         .init(name: "provider_login", method: "POST", path: "settings/providers/{id}/login"),
         .init(name: "provider_login_start", method: "POST", path: "settings/providers/{id}/login/start"),
         .init(name: "provider_login_finish", method: "POST", path: "settings/providers/{id}/login/finish"),
-        // The database pool: the servers sessions claim one at a time, and a probe of one as its form holds it.
-        .init(name: "settings_db_servers", method: "GET", path: "settings/db-servers"),
-        .init(name: "create_db_server", method: "POST", path: "settings/db-servers"),
-        .init(name: "update_db_server", method: "PUT", path: "settings/db-servers/{id}"),
-        .init(name: "delete_db_server", method: "DELETE", path: "settings/db-servers/{id}"),
-        .init(name: "test_db_server", method: "POST", path: "settings/db-servers/test"),
         // The SSH servers agents may run commands on, each held to one project; also for an admin token.
         .init(name: "settings_ssh_servers", method: "GET", path: "settings/ssh/servers"),
         .init(name: "create_ssh_server", method: "POST", path: "settings/ssh/servers"),

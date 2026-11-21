@@ -21,7 +21,6 @@ final class SettingsLists: ObservableObject {
 
     @Published var projects = Section()
     @Published var providers = Section()
-    @Published var servers = Section()
     @Published var ssh = Section()
     /// The GitHub accounts, which the GitHub form also reads to mark the projects another one already serves.
     @Published var github = Section()
@@ -43,7 +42,7 @@ final class SettingsLists: ObservableObject {
     }
 
     private func reset() {
-        projects = Section(); providers = Section(); servers = Section(); ssh = Section(); github = Section(); forge = Section(); slack = Section()
+        projects = Section(); providers = Section(); ssh = Section(); github = Section(); forge = Section(); slack = Section()
         ordering = false
     }
 
@@ -63,7 +62,6 @@ final class SettingsLists: ObservableObject {
 
     func loadProjects() async throws { try await load(\.projects, "settings_projects", "projects") }
     func loadProviders() async throws { try await load(\.providers, "settings_providers", "providers") }
-    func loadServers() async throws { try await load(\.servers, "settings_db_servers", "servers") }
     func loadSSH() async throws { try await load(\.ssh, "settings_ssh_servers", "servers") }
     func loadGithub() async throws { try await load(\.github, "settings_github_accounts", "accounts") }
     func loadForge() async throws { try await load(\.forge, "settings_forge_accounts", "accounts") }
@@ -72,7 +70,7 @@ final class SettingsLists: ObservableObject {
     /// Every list afresh; the first failure is what a poll backs off on.
     func refresh() async throws {
         var first: Error?
-        for read in [loadProjects, loadProviders, loadServers, loadSSH, loadGithub, loadForge, loadSlack] {
+        for read in [loadProjects, loadProviders, loadSSH, loadGithub, loadForge, loadSlack] {
             do { try await read() } catch { if first == nil { first = error } }
         }
         if let first { throw first }
@@ -111,9 +109,6 @@ final class SettingsLists: ObservableObject {
             }
         }
     }
-
-    /// The servers in the pool: one open session with a database per server.
-    var poolCapacity: Int { DBServerFormState.poolCapacity(servers.list) }
 }
 
 /// Why the settings behind `call` cannot be shown with this token, or nil when they can.

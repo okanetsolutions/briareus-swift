@@ -1,5 +1,5 @@
 // Settings, as the Windows client's settings page: a sidebar of its own (← Back to sessions, the projects, the providers,
-// the database pool, the SSH servers, the GitHub and Forge accounts and the Slack workspaces, each with ＋ New) whose rows open their
+// the SSH servers, the GitHub and Forge accounts and the Slack workspaces, each with ＋ New) whose rows open their
 // forms across the detail pane. Those routes need an Admin token; any other token gets a sentence saying so.
 import SwiftUI
 
@@ -48,21 +48,12 @@ struct SettingsSidebar: View {
             Color.clear.frame(height: 8)
         } else {
             projects
-            // The providers sessions start on, then the database pool, below the projects as on the Windows client; a server
-            // without the routes shows neither.
+            // The providers sessions start on, below the projects as on the Windows client; a server without the routes
+            // shows none.
             if store.supports("settings_providers") {
                 Color.clear.frame(height: 8)
                 SectionHeader(title: "Providers", onNew: store.supports("create_provider") ? { model.newProvider() } : nil)
                 providers
-            }
-            if store.supports("settings_db_servers") {
-                Color.clear.frame(height: 8)
-                // One open session with a database per server in the pool, so the pool's size heads the section, as the
-                // sessions it lets run at once.
-                let n = model.poolCapacity
-                SectionHeader(title: "Database pool", note: n > 0 ? "· \(n) session\(n == 1 ? "" : "s")" : nil,
-                              onNew: store.supports("create_db_server") ? { model.newServer() } : nil)
-                servers
             }
             // The SSH servers agents may run commands on, as on the Windows client, then the GitHub and Forge accounts and
             // the Slack workspaces on a server that has them (SettingsSidebarAccounts.swift).
@@ -95,7 +86,7 @@ struct SettingsSidebar: View {
         let movable = s.list.count > 1 && store.supports("order_projects")
         ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
             let repo = row["repo"].string ?? ""
-            ItemRow(label: row["label"].nonEmpty ?? repo, sub: repo, enabled: !row["enabled"].is(false), db: row["dbPoolEnabled"].is(true),
+            ItemRow(label: row["label"].nonEmpty ?? repo, sub: repo, enabled: !row["enabled"].is(false),
                     selected: selected == "project-settings:\(row["id"].int32 ?? 0)",
                     moves: movable ? ItemRow.Moves(up: i > 0 && !model.ordering, down: i + 1 < s.list.count && !model.ordering) { model.move(i, by: $0) } : nil) {
                 model.openProject(i)
@@ -129,21 +120,6 @@ struct SettingsSidebar: View {
         }
         if s.loaded && s.list.isEmpty && s.error == nil { SettingsExplanation(text: "No providers yet. Add one so sessions can be started.") }
         if !s.loaded { LoadingNote(text: "Loading providers…") }
-        Color.clear.frame(height: 8)
-    }
-
-    /// The database pool: each server with its dot and host:port.
-    @ViewBuilder private var servers: some View {
-        let s = model.servers
-        if let error = s.error { Notice(message: error).padding(.horizontal, 8).padding(.bottom, 8) }
-        ForEach(Array(s.list.enumerated()), id: \.offset) { i, row in
-            let address = DBServerFormState.address(row)
-            ItemRow(label: row["label"].nonEmpty ?? address, sub: address, enabled: row["enabled"].is(true),
-                    selected: selected == "db-server:\(row["id"].int32 ?? 0)") { model.openServer(i) }
-        }
-        if selected == "db-server:new" { ItemRow(label: "New database server", sub: "not saved yet", enabled: false, selected: true) {} }
-        if s.loaded && s.list.isEmpty && s.error == nil { SettingsExplanation(text: "No servers yet. Add one so sessions can claim a database of their own.") }
-        if !s.loaded { LoadingNote(text: "Loading the database pool…") }
         Color.clear.frame(height: 8)
     }
 
@@ -269,9 +245,8 @@ struct SettingsExplanation: View {
     }
 }
 
-/// A row of the projects, the pool or the SSH servers: its dot (`.dot.idle` when on, the plain grey dot when off), its label,
-/// and its repository or address under it, with the pool's `db` tag after a project that claims a server. A project row
-/// that can move has ↑ and ↓ at the right end of its first line while it is hovered or open.
+/// A row of the projects or the SSH servers: its dot (`.dot.idle` when on, the plain grey dot when off), its label, and
+/// its repository or address under it. A project row that can move has ↑ and ↓ at the right end of its first line while it is hovered or open.
 struct ItemRow: View {
     /// Which way the row can go now, and what a click on an arrow does with -1 or 1.
     struct Moves {
@@ -282,7 +257,6 @@ struct ItemRow: View {
     var label: String
     var sub: String
     var enabled: Bool
-    var db = false
     var selected: Bool
     var moves: Moves? = nil
     var action: () -> Void
@@ -302,7 +276,6 @@ struct ItemRow: View {
                     .frame(height: 22)
                     HStack(spacing: 8) {
                         Text(sub).font(Theme.caption).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.tail)
-                        if db { Tag(text: "db") }
                         Spacer(minLength: 0)
                     }
                     .frame(height: 18)

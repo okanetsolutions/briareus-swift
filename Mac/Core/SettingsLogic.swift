@@ -1,5 +1,5 @@
-// The settings forms' fields and what a save sends, as the Windows client's screen_settings.c, screen_provider_settings.c
-// and screen_db_servers.c build them: each form keeps the row it was filled from and the text of every box, and the body
+// The settings forms' fields and what a save sends, as the Windows client's screen_settings.c and
+// screen_provider_settings.c build them: each form keeps the row it was filled from and the text of every box, and the body
 // is that row with every field as it stands now.
 import Foundation
 
@@ -92,7 +92,7 @@ enum ProjectTab: Int, CaseIterable, Sendable {
 enum ProjectField: Int, CaseIterable, Sendable {
     case repo, label, enabled, localDir, localLimit, board
     case setup, php, printing
-    case dbName, dbExt, dbPool, dbRestore
+    case dbName, dbExt
     // The round limit sits beside the PR author, so Return goes from one to the other.
     case prAuthor, roundLimit, testRun, qaNotes, sheetSteps
     case securityReview, enforceOutcome, benchmark
@@ -117,12 +117,9 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .php: return SettingsField(key: "phpBinDir", kind: .text, label: "PHP bin directory", cue: "/usr/bin (or ~/.phpenv/versions/8.4/bin)",
             hint: "Prepended to PATH for everything this project runs. Leave empty for the machine's PHP.", mono: true)
         case .dbName: return SettingsField(key: "dbPoolDatabase", kind: .text, label: "Database", cue: "my_app",
-            hint: "What DB_DATABASE is set to in the session's environment. With the pool on, created on the claimed server if it does not exist yet. With the pool off, every session gets a database of its own, this name plus the session id, created on the server the .env template points at, and written into the checkout's .env. Leave empty to use the .env template as-is. Migrations and seeding belong in the setup commands.", mono: true)
+            hint: "What DB_DATABASE is set to in the session's environment. Every session gets a database of its own, this name plus the session id, created on the server the .env template points at, and written into the checkout's .env. Leave empty to use the .env template as-is. Migrations and seeding belong in the setup commands.", mono: true)
         case .dbExt: return SettingsField(key: "dbExtensions", kind: .list, label: "Postgres extensions",
             hint: "One extension name per line, created in the session's database right after it is created. A fresh Postgres database carries only what template1 does, so migrations that declare a vector column fail without this. The extension itself must already be installed on the server. Ignored on MySQL.", rows: 2, mono: true)
-        case .dbPool: return SettingsField(key: "dbPoolEnabled", kind: .bool, label: "Give each session a database server of its own")
-        case .dbRestore: return SettingsField(key: "dbRestoreSql", kind: .text, label: "Restore from .sql", cue: "/home/you/dumps/my_app.sql",
-            hint: "A dump on this machine, piped into the database every time a server is claimed, right after it is created, before the setup steps run. Leave empty to skip. The servers themselves are added under Database pool in the sidebar.", mono: true)
         case .prAuthor: return SettingsField(key: "prAuthor", kind: .text, label: "PR author", cue: "github-username", mono: true)
         case .testRun: return SettingsField(key: "qaTestRun", kind: .bool, label: "Execute the test sheet and record a video of each scenario")
         case .qaNotes: return SettingsField(key: "qaNotes", kind: .area, label: "QA notes",
@@ -169,7 +166,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
     var tab: ProjectTab {
         switch self {
         case .repo, .label, .enabled, .localDir, .localLimit, .board, .setup, .php, .printing: return .project
-        case .dbName, .dbExt, .dbPool, .dbRestore: return .database
+        case .dbName, .dbExt: return .database
         case .prAuthor, .testRun, .qaNotes, .sheetSteps, .roundLimit, .securityReview, .enforceOutcome, .benchmark: return .review
         case .budget, .isSelf: return .orchestrator
         case .env: return .env
@@ -237,8 +234,6 @@ struct ProjectFormState: Equatable, Sendable {
     func has(_ key: String) -> Bool { SettingsText.rowHas(row, key) }
     func offered(_ f: ProjectField) -> Bool { has(f.key) }
     func offered(_ r: ProjectRuntime) -> Bool { has(r.presenceKey) }
-    /// The restore dump only means something with the pool on.
-    func enabled(_ f: ProjectField) -> Bool { f != .dbRestore || bools[.dbPool] == true }
     func text(_ f: ProjectField) -> String { texts[f] ?? "" }
     func bool(_ f: ProjectField) -> Bool { bools[f] ?? false }
     func pick(_ r: ProjectRuntime) -> RuntimePick { picks[r] ?? RuntimePick() }
@@ -603,105 +598,4 @@ enum ProviderQuota {
         account["usage"]["windows"].items.isEmpty ? account["usage"]["error"].nonEmpty : nil
     }
     static func level(_ pct: Double) -> Level { pct >= 90 ? .spent : pct >= 70 ? .close : .ok }
-}
-
-// MARK: - Database servers
-
-enum DBServerTab: Int, CaseIterable, Sendable {
-    case server, pool
-    var title: String { self == .server ? "Server" : "Pool" }
-}
-
-enum DBServerField: Int, CaseIterable, Sendable {
-    case label, host, port, username, password
-    var def: SettingsField {
-        switch self {
-        case .label: return SettingsField(key: "label", kind: .text, label: "Label", cue: "defaults to host:port")
-        case .host: return SettingsField(key: "host", kind: .text, label: "Host", cue: "127.0.0.1", mono: true)
-        case .port: return SettingsField(key: "port", kind: .number, label: "Port", cue: "3306", mono: true)
-        case .username: return SettingsField(key: "username", kind: .text, label: "Username", cue: "root", mono: true)
-        case .password: return SettingsField(key: "password", kind: .text, label: "Password", cue: "empty = no password", mono: true, secret: true)
-        }
-    }
-    var key: String { def.key ?? "" }
-}
-
-struct DBServerFormState: Equatable, Sendable {
-    var row: JSON
-    var texts: [DBServerField: String] = [:]
-    /// In the pool.
-    var enabled = false
-    var dirty = false
-
-    init(row: JSON) { self.row = row.isObject ? row : [:]; fill() }
-
-    var id: Int { row["id"].int32 ?? 0 }
-    func has(_ key: String) -> Bool { SettingsText.rowHas(row, key) }
-    func text(_ f: DBServerField) -> String { texts[f] ?? "" }
-
-    mutating func fill() {
-        enabled = row["enabled"].is(true)
-        for f in DBServerField.allCases { texts[f] = Self.fieldText(row, f) }
-        dirty = false
-    }
-    /// A field's value in the row as its box shows it: a port as digits, empty for null.
-    static func fieldText(_ row: JSON, _ f: DBServerField) -> String {
-        let v = row[f.key]
-        if f.def.kind == .number {
-            guard let n = v.number, n > 0 else { return "" }
-            return String(format: "%.0f", n)
-        }
-        return v.string ?? ""
-    }
-
-    /// The body a save or a test sends.
-    func body() -> Result<JSON, FormProblem> {
-        var body: JSON = row.isObject ? row : [:]
-        for k in ["id", "createdAt", "updatedAt", "sortOrder", "claimedBy"] { body.remove(k) }
-        if has("enabled") { body["enabled"] = .bool(enabled) }
-        for f in DBServerField.allCases where has(f.key) {
-            // A password is sent as typed; spaces may belong to it.
-            let t = f.def.secret ? text(f) : text(f).cTrimmed
-            if f.def.kind != .number { body[f.key] = .string(t); continue }
-            if t.isEmpty { body[f.key] = .null; continue }
-            guard let port = SettingsText.port(t) else {
-                return .failure(FormProblem(message: "The port must be a whole number from 1 to 65535.", tab: DBServerTab.server.rawValue))
-            }
-            body[f.key] = JSON(port)
-        }
-        return .success(body)
-    }
-
-    func tabChanged(_ t: DBServerTab) -> Bool {
-        guard t == .server else { return false }
-        if has("enabled") && enabled != row["enabled"].is(true) { return true }
-        for f in DBServerField.allCases where has(f.key) {
-            if text(f) != Self.fieldText(row, f) { return true }
-        }
-        return false
-    }
-
-    /// host:port, as a row without a label is named.
-    static func address(_ row: JSON) -> String { "\(row["host"].string ?? ""):\(row["port"].int32 ?? 0)" }
-
-    /// What a Test connection said when the server answered.
-    static func testText(_ r: JSON) -> String {
-        let claimed = r["claimedBy"]
-        let dbs = r["databases"].int32 ?? 0
-        let version = r["version"].string ?? "?"
-        // Who holds it, when a session does: its title, else its id.
-        var by = claimed.nonEmpty
-        if by == nil && claimed.isObject { by = claimed["title"].nonEmpty ?? claimed["id"].nonEmpty }
-        let holder = by.map { "claimed by session \($0)" } ?? (claimed.isObject ? "claimed by a session" : "free")
-        return "Healthy: MySQL \(version), \(dbs) database\(dbs == 1 ? "" : "s") · \(holder)"
-    }
-
-    /// One open session with a database per server in the pool.
-    static func poolCapacity(_ rows: [JSON]) -> Int { rows.filter { $0["enabled"].is(true) }.count }
-    static func poolText(capacity n: Int, total: Int) -> String {
-        let off = total > n ? " \(total - n) more \(total - n == 1 ? "is" : "are") listed but taken out of the pool." : ""
-        return n > 0
-            ? "\(n) server\(n == 1 ? "" : "s") in the pool, so \(n) session\(n == 1 ? "" : "s") with a database may be open at once.\(off)"
-            : "No server is in the pool yet.\(off)"
-    }
 }

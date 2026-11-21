@@ -13,8 +13,6 @@ extension Notification.Name {
     static let settingsProjectsChanged = Notification.Name("BriareusSettingsProjectsChanged")
     /// The settings sidebar reads the providers again; `userInfo["openFirst"]` opens the first one left (after a delete).
     static let settingsProvidersChanged = Notification.Name("BriareusSettingsProvidersChanged")
-    /// The settings sidebar reads the database pool again; `userInfo["openFirst"]` as for providers.
-    static let settingsDBServersChanged = Notification.Name("BriareusSettingsDBServersChanged")
     /// The SSH servers changed: the settings sidebar and the SSH and SFTP sessions tabs read them again.
     static let sshServersChanged = Notification.Name("BriareusSSHServersChanged")
     /// The settings sidebar reads the GitHub accounts again.

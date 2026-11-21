@@ -18,7 +18,6 @@ struct ScreenView: View {
         case .webApp(let app): WebAppScreen(app: app)
         case .projectSettings(let row, let defaults): ProjectSettingsScreen(row: row, defaults: defaults)
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)
-        case .dbServerSettings(let row, let defaults): DBServerSettingsScreen(row: row, defaults: defaults)
         case .sshServerSettings(let row, let defaults): SSHServerSettingsScreen(row: row, defaults: defaults)
         case .githubAccountSettings(let row): GithubAccountSettingsScreen(row: row)
         case .forgeAccountSettings(let row, let defaults): ForgeAccountSettingsScreen(row: row, defaults: defaults)
