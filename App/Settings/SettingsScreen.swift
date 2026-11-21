@@ -1,5 +1,5 @@
 // The Settings tab: this device's connection and device settings, then for an Admin token
-// the projects (in server order, rearranged by Edit or Move up/down), providers, database pool, SSH servers, GitHub
+// the projects (in server order, rearranged by Edit or Move up/down), providers, SSH servers, GitHub
 // and Forge accounts and Slack workspaces (SettingsAccountSections.swift). Each row opens its form, matching the Mac
 // settings sidebar.
 import SwiftUI
@@ -10,7 +10,7 @@ struct SettingsScreen: View {
     @Environment(\.navigate) private var navigate
     /// Any of the settings lists is this token's to read.
     private var managesServer: Bool {
-        ["settings_projects", "settings_providers", "settings_db_servers", "settings_ssh_servers", "settings_github_accounts",
+        ["settings_projects", "settings_providers", "settings_ssh_servers", "settings_github_accounts",
          "settings_forge_accounts", "settings_slack_workspaces"].contains { store.supports($0) }
     }
 
@@ -25,7 +25,6 @@ struct SettingsScreen: View {
             } else {
                 projects
                 if store.supports("settings_providers") { providers }
-                if store.supports("settings_db_servers") { servers }
                 ssh
                 if store.supports("settings_github_accounts") { GithubAccountsSection() }
                 if store.supports("settings_forge_accounts") { ForgeAccountsSection() }
@@ -110,35 +109,6 @@ struct SettingsScreen: View {
         .listRowBackground(Theme.row)
     }
 
-    // MARK: Database pool
-
-    @ViewBuilder private var servers: some View {
-        let s = lists.servers
-        let n = lists.poolCapacity
-        Section {
-            if let error = s.error { ErrorNotice(message: error) }
-            ForEach(Array(s.list.enumerated()), id: \.offset) { _, row in
-                let address = DBServerFormState.address(row)
-                DestinationLink(destination: .dbServerSettings(row: row, defaults: s.defaults)) {
-                    SettingsItemRow(title: row["label"].nonEmpty ?? address, subtitle: address, on: row["enabled"].is(true),
-                                    systemImage: "cylinder.split.1x2")
-                }
-            }
-            if !s.loaded { SettingsLoadingRow(text: "Loading the database pool…") }
-        } header: {
-            // One open session with a database per server in the pool, so the pool's size heads the section.
-            SettingsSectionHeader(title: "Database pool", note: n > 0 ? "· \(n) session\(n == 1 ? "" : "s")" : nil, newLabel: "New database server",
-                                  onNew: store.supports("create_db_server") ? { navigate(.dbServerSettings(row: nil, defaults: s.defaults)) } : nil)
-        } footer: {
-            if s.loaded && s.list.isEmpty && s.error == nil {
-                Text("No servers yet. Add one so sessions can claim a database of their own.")
-            } else if s.loaded {
-                Text(DBServerFormState.poolText(capacity: n, total: s.list.count))
-            }
-        }
-        .listRowBackground(Theme.row)
-    }
-
     // MARK: SSH servers
 
     @ViewBuilder private var ssh: some View {
@@ -212,7 +182,7 @@ struct SettingsLoadingRow: View {
     }
 }
 
-/// A project: its monogram, label and repository, with the pool's `db` tag on one that claims a server; a project switched
+/// A project: its monogram, label and repository, with a `local` tag on one that has a local checkout; a project switched
 /// off reads faded.
 private struct SettingsProjectRow: View {
     var row: JSON
@@ -223,7 +193,6 @@ private struct SettingsProjectRow: View {
                 Text(row["label"].nonEmpty ?? repo).font(.body).lineLimit(1)
                 HStack(spacing: 6) {
                     Text(repo).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                    if row["dbPoolEnabled"].is(true) { SettingsTag(text: "db") }
                     if !(row["localDir"].nonEmpty ?? "").isEmpty { SettingsTag(text: "local") }
                 }
             }
@@ -253,7 +222,8 @@ private struct SettingsProviderRow: View {
     }
 }
 
-/// A database server or an SSH server: its icon (tinted while on), its name and what is under it.
+/// A record in a settings list (an SSH server, an account, a workspace): its icon (tinted while on), its name and what is
+/// under it.
 struct SettingsItemRow: View {
     var title: String
     var subtitle: String

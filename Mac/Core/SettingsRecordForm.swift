@@ -1,4 +1,4 @@
-// A settings form saved as one record on the server (a project, a provider, a database or SSH server, a GitHub or Forge
+// A settings form saved as one record on the server (a project, a provider, an SSH server, a GitHub or Forge
 // account, a Slack workspace), the same on the iPhone and the Mac: which operation creates, updates or deletes it, the body a save
 // sends with the record's id, how the answer fills the form again, and what leaving it unsaved says. Each form's own
 // state (its fields and `body()`) is in SettingsLogic.swift, SSHServerLogic.swift, AccountSettingsLogic.swift and
@@ -70,11 +70,6 @@ extension ProviderFormState: SettingsRecordForm {
     func body() -> Result<JSON, FormProblem> { body(validate: true) }
     static let record = SettingsRecord(create: "create_provider", update: "update_provider", delete: "delete_provider",
                                        answerKey: "provider", noun: "provider", unnamed: "this provider")
-}
-extension DBServerFormState: SettingsRecordForm {
-    var recordID: Double { Double(id) }
-    static let record = SettingsRecord(create: "create_db_server", update: "update_db_server", delete: "delete_db_server",
-                                       answerKey: "server", noun: "database server", unnamed: "this server")
 }
 extension SSHServerFormState: SettingsRecordForm {
     var recordID: Double { id }

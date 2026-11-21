@@ -28,7 +28,6 @@ enum Screen: Hashable, Identifiable {
     /// The settings page's forms: `row` is the server's record (nil with `defaults` for a new one).
     case projectSettings(row: JSON?, defaults: JSON?)
     case providerSettings(row: JSON?, defaults: JSON?)
-    case dbServerSettings(row: JSON?, defaults: JSON?)
     case sshServerSettings(row: JSON?, defaults: JSON?)
     /// A GitHub account the server reads and writes GitHub with for its projects; nil for a new one (the list has no defaults).
     case githubAccountSettings(row: JSON?)
@@ -73,7 +72,6 @@ enum Screen: Hashable, Identifiable {
         case .webApp(let app): return app.rawValue
         case .projectSettings(let row, _): return "project-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
-        case .dbServerSettings(let row, _): return "db-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .sshServerSettings(let row, _): return "ssh-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .githubAccountSettings(let row): return "github-account:\(row?["id"].int.map(String.init) ?? "new")"
         case .forgeAccountSettings(let row, _): return "forge-account:\(row?["id"].int.map(String.init) ?? "new")"

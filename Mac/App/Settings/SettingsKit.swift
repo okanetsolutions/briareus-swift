@@ -1,7 +1,7 @@
 // What the settings page's sidebar and its forms share, as screen_settings.c keeps it: the lists the sidebar read (the
-// projects, providers, database pool, SSH servers, Forge accounts and Slack workspaces, which the forms also read; the
-// GitHub accounts are GithubAccountsModel's), the menus the pickers pop up, and the form's pieces: labelled boxes, check
-// rows, select boxes, notes and the tab row.
+// projects, providers, SSH servers, Forge accounts and Slack workspaces, which the forms also read; the GitHub accounts
+// are GithubAccountsModel's), the menus the pickers pop up, and the form's pieces: labelled boxes, check rows, select
+// boxes, notes and the tab row.
 import AppKit
 import Combine
 import SwiftUI
@@ -22,7 +22,6 @@ final class SettingsModel: ObservableObject {
 
     @Published var projects = Section()
     @Published var providers = Section()
-    @Published var servers = Section()
     @Published var ssh = Section()
     @Published var forge = Section()
     @Published var slack = Section()
@@ -34,7 +33,7 @@ final class SettingsModel: ObservableObject {
     private let reader = SettingsListReader()
     private var modeWatch: AnyCancellable?
     /// Open the first row once the list is read (after a delete).
-    private var openFirstProvider = false, openFirstServer = false
+    private var openFirstProvider = false
 
     private init() {
         let center = NotificationCenter.default
@@ -44,10 +43,6 @@ final class SettingsModel: ObservableObject {
         center.addObserver(forName: .settingsProvidersChanged, object: nil, queue: .main) { note in
             let first = note.userInfo?["openFirst"] as? Bool ?? false
             Task { @MainActor in SettingsModel.shared.openFirstProvider = first; SettingsModel.shared.loadProviders() }
-        }
-        center.addObserver(forName: .settingsDBServersChanged, object: nil, queue: .main) { note in
-            let first = note.userInfo?["openFirst"] as? Bool ?? false
-            Task { @MainActor in SettingsModel.shared.openFirstServer = first; SettingsModel.shared.loadServers() }
         }
         center.addObserver(forName: .sshServersChanged, object: nil, queue: .main) { _ in
             Task { @MainActor in SettingsModel.shared.loadSSH() }
@@ -74,12 +69,12 @@ final class SettingsModel: ObservableObject {
     /// The settings page opening: everything is read afresh, as a new settings screen does.
     func start() {
         reader.cancelAll()
-        projects = Section(); providers = Section(); servers = Section(); ssh = Section(); forge = Section(); slack = Section(); mcp = Section(); envoyer = Section(); GithubAccountsModel.shared.reset()
+        projects = Section(); providers = Section(); ssh = Section(); forge = Section(); slack = Section(); mcp = Section(); envoyer = Section(); GithubAccountsModel.shared.reset()
         ordering = false
-        openFirstProvider = false; openFirstServer = false
+        openFirstProvider = false
         refresh()
     }
-    func refresh() { loadProjects(); loadSSH(); loadProviders(); loadServers(); loadForge(); loadSlack(); loadMcp(); loadEnvoyer(); GithubAccountsModel.shared.load() }
+    func refresh() { loadProjects(); loadSSH(); loadProviders(); loadForge(); loadSlack(); loadMcp(); loadEnvoyer(); GithubAccountsModel.shared.load() }
 
     private func load(_ section: ReferenceWritableKeyPath<SettingsModel, Section>, _ call: String, _ listKey: String, done: @escaping () -> Void = {}) {
         reader.read(call, listKey, update: { [weak self] change in if let self { change(&self[keyPath: section]) } }, done: done)
@@ -108,19 +103,11 @@ final class SettingsModel: ObservableObject {
             if self.providers.list.isEmpty { self.newProvider() } else { self.openProvider(0) }
         }
     }
-    func loadServers() {
-        load(\.servers, "settings_db_servers", "servers") { [weak self] in
-            guard let self, self.openFirstServer else { return }
-            self.openFirstServer = false
-            guard !Self.isSettingsScreen(Navigator.shared.root) else { return }
-            if self.servers.list.isEmpty { self.newServer() } else { self.openServer(0) }
-        }
-    }
 
     /// A settings form in the detail pane.
     static func isSettingsScreen(_ screen: Screen) -> Bool {
         switch screen {
-        case .projectSettings, .providerSettings, .dbServerSettings, .sshServerSettings, .forgeAccountSettings, .slackWorkspaceSettings,
+        case .projectSettings, .providerSettings, .sshServerSettings, .forgeAccountSettings, .slackWorkspaceSettings,
              .mcpServerSettings, .envoyerAccountSettings: return true
         case .githubAccountSettings, .mailSettings, .serverSettings, .templatesSettings, .personalConnection, .sharing, .sshMonitoring: return true
         default: return false
@@ -139,11 +126,6 @@ final class SettingsModel: ObservableObject {
         Navigator.shared.show(.providerSettings(row: providers.list[i], defaults: providers.defaults))
     }
     func newProvider() { Navigator.shared.show(.providerSettings(row: nil, defaults: providers.defaults)) }
-    func openServer(_ i: Int) {
-        guard servers.list.indices.contains(i), servers.list[i].isObject else { return }
-        Navigator.shared.show(.dbServerSettings(row: servers.list[i], defaults: servers.defaults))
-    }
-    func newServer() { Navigator.shared.show(.dbServerSettings(row: nil, defaults: servers.defaults)) }
     func openSSH(_ i: Int) {
         guard ssh.list.indices.contains(i), ssh.list[i].isObject else { return }
         Navigator.shared.show(.sshServerSettings(row: ssh.list[i], defaults: ssh.defaults))
@@ -191,9 +173,6 @@ final class SettingsModel: ObservableObject {
             }
         }
     }
-
-    /// The servers in the pool: one open session with a database per server.
-    var poolCapacity: Int { DBServerFormState.poolCapacity(servers.list) }
 }
 
 /// Why the settings behind `call` cannot be shown with this token, or nil when they can.

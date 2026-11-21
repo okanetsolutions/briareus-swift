@@ -291,8 +291,6 @@ struct ProjectSettingsScreen: View {
         case .database:
             field(.dbName)
             field(.dbExt)
-            check(.dbPool)
-            field(.dbRestore)
         case .review:
             HStack(alignment: .top, spacing: 14) {
                 field(.prAuthor).frame(maxWidth: .infinity)
@@ -323,7 +321,7 @@ struct ProjectSettingsScreen: View {
 
     @ViewBuilder private func field(_ f: ProjectField) -> some View {
         if state.offered(f) {
-            SettingsFieldBox(def: f.def, text: model.binding(f), enabled: state.enabled(f), focus: $focus, key: f) { focus = next(after: f) }
+            SettingsFieldBox(def: f.def, text: model.binding(f), focus: $focus, key: f) { focus = next(after: f) }
         }
     }
 
@@ -353,9 +351,9 @@ struct ProjectSettingsScreen: View {
         }
     }
 
-    /// The next box laid out on the open tab and enabled, for Return in a one-line box.
+    /// The next box laid out on the open tab, for Return in a one-line box.
     private func next(after f: ProjectField) -> ProjectField? {
-        let order = ProjectField.allCases.filter { $0.tab == model.tab && $0.def.isTyped && state.offered($0) && state.enabled($0) }
+        let order = ProjectField.allCases.filter { $0.tab == model.tab && $0.def.isTyped && state.offered($0) }
         guard let i = order.firstIndex(of: f), !order.isEmpty else { return f }
         return order[(i + 1) % order.count]
     }

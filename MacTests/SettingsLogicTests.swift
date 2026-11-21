@@ -1,5 +1,5 @@
-// The settings forms' bodies and unsaved-change tracking, as screen_settings.c, screen_provider_settings.c and
-// screen_db_servers.c build them.
+// The settings forms' bodies and unsaved-change tracking, as screen_settings.c and screen_provider_settings.c build
+// them.
 import XCTest
 @testable import BriareusMacCore
 
@@ -147,7 +147,6 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertNotNil(ProjectField.enabled.note(on: false))
         XCTAssertNil(ProjectField.enabled.note(on: true))
         XCTAssertNotNil(ProjectField.isSelf.note(on: false))
-        XCTAssertNil(ProjectField.dbPool.note(on: true))
     }
 
     func testProjectBodyRefusesABadRepoOrBudget() {
@@ -309,21 +308,6 @@ final class SettingsLogicTests: XCTestCase {
         XCTAssertNil(ProviderQuota.accountName(single[0], of: ps[1]))
         XCTAssertEqual(ProviderQuota.login(single[0]).text, "logged in")
         XCTAssertEqual([10, 70, 89.9, 90].map(ProviderQuota.level), [.ok, .close, .close, .spent])
-    }
-
-    func testDBServerPortAndTest() throws {
-        var s = DBServerFormState(row: ["id": 1, "host": "h", "port": 3306, "enabled": true, "password": " p "])
-        XCTAssertEqual(s.text(.port), "3306")
-        s.texts[.port] = "70000"
-        XCTAssertEqual(s.body().failureMessage, "The port must be a whole number from 1 to 65535.")
-        s.texts[.port] = ""
-        let body = try s.body().get()
-        XCTAssertTrue(body["port"].isNull)
-        XCTAssertEqual(body["password"], " p ")
-        XCTAssertEqual(DBServerFormState.testText(["version": "8.0", "databases": 1, "claimedBy": ["title": "Fix"]]),
-                       "Healthy: MySQL 8.0, 1 database · claimed by session Fix")
-        XCTAssertEqual(DBServerFormState.poolText(capacity: 1, total: 3),
-                       "1 server in the pool, so 1 session with a database may be open at once. 2 more are listed but taken out of the pool.")
     }
 }
 

@@ -23,7 +23,6 @@ enum Destination: Hashable, Identifiable {
     /// The settings forms: `row` is the server's record (nil with `defaults` for a new one).
     case projectSettings(row: JSON?, defaults: JSON?)
     case providerSettings(row: JSON?, defaults: JSON?)
-    case dbServerSettings(row: JSON?, defaults: JSON?)
     case sshServerSettings(row: JSON?, defaults: JSON?)
     /// A GitHub account the server uses for its projects; nil for a new one (the list has no defaults).
     case githubAccountSettings(row: JSON?)
@@ -57,7 +56,6 @@ enum Destination: Hashable, Identifiable {
         case .usage: return "usage"
         case .projectSettings(let row, _): return "project-settings:\(row?["id"].int.map(String.init) ?? "new")"
         case .providerSettings(let row, _): return "provider-settings:\(row?["id"].int.map(String.init) ?? "new")"
-        case .dbServerSettings(let row, _): return "db-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .sshServerSettings(let row, _): return "ssh-server:\(row?["id"].int.map(String.init) ?? "new")"
         case .githubAccountSettings(let row): return "github-account:\(row?["id"].int.map(String.init) ?? "new")"
         case .forgeAccountSettings(let row, _): return "forge-account:\(row?["id"].int.map(String.init) ?? "new")"
@@ -89,7 +87,6 @@ enum Destination: Hashable, Identifiable {
         case .usage: UsageEntry()
         case .projectSettings(let row, let defaults): ProjectSettingsScreen(row: row, defaults: defaults)
         case .providerSettings(let row, let defaults): ProviderSettingsScreen(row: row, defaults: defaults)
-        case .dbServerSettings(let row, let defaults): DBServerSettingsScreen(row: row, defaults: defaults)
         case .sshServerSettings(let row, let defaults): SSHServerSettingsScreen(row: row, defaults: defaults)
         case .githubAccountSettings(let row): GithubAccountSettingsScreen(row: row)
         case .forgeAccountSettings(let row, let defaults): ForgeAccountSettingsScreen(row: row, defaults: defaults)

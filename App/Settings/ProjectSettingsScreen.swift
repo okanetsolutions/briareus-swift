@@ -259,7 +259,6 @@ struct ProjectSettingsScreen: View {
             .listRowBackground(Theme.row)
         case .database:
             Section { field(.dbName); field(.dbExt) }.listRowBackground(Theme.row)
-            Section { check(.dbPool); field(.dbRestore) } header: { Text("Database pool") }.listRowBackground(Theme.row)
         case .review:
             Section { field(.prAuthor); field(.roundLimit) }.listRowBackground(Theme.row)
             ProjectReviewRules(state: state, text: model.binding, toggle: model.toggle)
@@ -294,7 +293,7 @@ struct ProjectSettingsScreen: View {
 
     @ViewBuilder private func field(_ f: ProjectField) -> some View {
         if state.offered(f) {
-            SettingsTextRow(def: f.def, text: model.binding(f), enabled: state.enabled(f), focus: $focus, key: f)
+            SettingsTextRow(def: f.def, text: model.binding(f), focus: $focus, key: f)
         }
     }
 
