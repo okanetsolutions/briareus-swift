@@ -106,7 +106,7 @@ enum ProjectField: Int, CaseIterable, Sendable {
         case .label: return SettingsField(key: "label", kind: .text, label: "Label", cue: "shown in the project dropdown")
         case .enabled: return SettingsField(key: "enabled", kind: .bool, label: "Active: sessions can be started on this project")
         case .localDir: return SettingsField(key: "localDir", kind: .text, label: "Local checkout", cue: "/home/you/www/your-checkout",
-            hint: "This machine's own checkout of the repo. A session started in Local mode works directly in it: no clone, no setup steps, no pooled database, and the tree is used exactly as it stands. Leave empty to keep Local mode off for this project.", mono: true)
+            hint: "This machine's own checkout of the repo. A session started in Local mode works directly in it: no clone, no setup steps, no database of its own, and the tree is used exactly as it stands. Leave empty to keep Local mode off for this project.", mono: true)
         case .localLimit: return SettingsField(key: "localSessionLimit", kind: .number, label: "Local sessions at once", cue: "1",
             hint: "How many Local mode sessions may work in the local checkout at the same time, 1 to 10, or 0 for no limit. More wait in the queue until one closes.")
         case .board: return SettingsField(key: "projectBoard", kind: .board, label: "GitHub Projects board", cue: "https://github.com/orgs/acme/projects/1/views/2",

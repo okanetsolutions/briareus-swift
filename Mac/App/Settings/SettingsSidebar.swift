@@ -245,8 +245,9 @@ struct SettingsExplanation: View {
     }
 }
 
-/// A row of the projects or the SSH servers: its dot (`.dot.idle` when on, the plain grey dot when off), its label, and
-/// its repository or address under it. A project row that can move has ↑ and ↓ at the right end of its first line while it is hovered or open.
+/// A row of a settings list (a project, a server, an account): its dot (`.dot.idle` when on, the plain grey dot when
+/// off), its label, and its repository or address under it. A project row that can move has ↑ and ↓ at the right end of
+/// its first line while it is hovered or open.
 struct ItemRow: View {
     /// Which way the row can go now, and what a click on an arrow does with -1 or 1.
     struct Moves {
